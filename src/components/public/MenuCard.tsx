@@ -1,6 +1,5 @@
 'use client'
 
-import Image from 'next/image'
 import { Plus, Minus, ShoppingBag } from 'lucide-react'
 import { cn, formatPrice, getAvailabilityColor, getAvailabilityLabel } from '@/lib/utils'
 import type { MenuItem, CartItem } from '@/lib/types'
@@ -46,12 +45,12 @@ export function MenuCard({
       <div className="relative w-full h-52 bg-sumak-cream-dark overflow-hidden">
         {item.image_url ? (
           <>
-            <Image
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
               src={item.image_url}
               alt={item.name}
-              fill
-              className="menu-card-image"
-              sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw"
+              className="menu-card-image absolute inset-0 w-full h-full object-cover"
+              loading="lazy"
             />
             {/* Gradient overlay (revealed on hover via CSS) */}
             <div className="menu-card-overlay" />
