@@ -1,5 +1,6 @@
 'use client'
 
+import { useState, useEffect } from 'react'
 import { cn, formatPrice } from '@/lib/utils'
 import type { Order, OrderStatus } from '@/lib/types'
 
@@ -72,6 +73,50 @@ function formatDate(isoString: string): string {
   })
 }
 
+function getElapsedMinutes(isoString: string): number {
+  return Math.floor((Date.now() - new Date(isoString).getTime()) / 60000)
+}
+
+function formatElapsed(isoString: string): string {
+  const mins = getElapsedMinutes(isoString)
+  if (mins < 1) return 'ahora'
+  if (mins < 60) return `hace ${mins} min`
+  const h = Math.floor(mins / 60)
+  const m = mins % 60
+  return m > 0 ? `hace ${h}h ${m}min` : `hace ${h}h`
+}
+
+/** Muestra alerta roja si el pedido está pendiente o confirmado y lleva >15 min */
+function isOverdue(order: Order): boolean {
+  return (
+    (order.status === 'pending' || order.status === 'confirmed') &&
+    getElapsedMinutes(order.created_at) > 15
+  )
+}
+
+function ElapsedBadge({ createdAt, overdue }: { createdAt: string; overdue: boolean }) {
+  const [label, setLabel] = useState(() => formatElapsed(createdAt))
+
+  useEffect(() => {
+    setLabel(formatElapsed(createdAt))
+    const id = setInterval(() => setLabel(formatElapsed(createdAt)), 30_000)
+    return () => clearInterval(id)
+  }, [createdAt])
+
+  return (
+    <span
+      className={cn(
+        'text-xs font-semibold px-2 py-0.5 rounded-full',
+        overdue
+          ? 'bg-red-100 text-red-700 border border-red-400 animate-pulse'
+          : 'bg-gray-100 text-gray-500'
+      )}
+    >
+      {label}
+    </span>
+  )
+}
+
 interface OrderCardProps {
   order: Order
   onUpdateStatus: (id: string, status: OrderStatus) => Promise<void>
@@ -82,26 +127,30 @@ function OrderCard({ order, onUpdateStatus, isNew }: OrderCardProps) {
   const config = STATUS_CONFIG[order.status]
   const nextAction = NEXT_ACTION[order.status]
   const orderNum = order.id.slice(0, 6).toUpperCase()
+  const overdue = isOverdue(order)
 
   return (
     <div
       className={cn(
         'bg-white rounded-2xl shadow-card-rest border-2 flex flex-col overflow-hidden transition-shadow hover:shadow-premium',
-        config.borderClass,
+        overdue ? 'border-red-500' : config.borderClass,
         isNew && 'animate-scale-in ring-2 ring-sumak-gold ring-offset-2'
       )}
     >
       {/* Header de comanda */}
-      <div className={cn('px-4 py-3 flex items-center justify-between gap-2', config.headerBg)}>
+      <div className={cn('px-4 py-3 flex items-center justify-between gap-2', overdue ? 'bg-red-50' : config.headerBg)}>
         <div className="flex items-center gap-2">
-          <span className={cn('w-2.5 h-2.5 rounded-full flex-shrink-0', config.dot)} />
+          <span className={cn('w-2.5 h-2.5 rounded-full flex-shrink-0', overdue ? 'bg-red-500 animate-pulse' : config.dot)} />
           <span className="font-serif font-bold text-sumak-brown text-lg tracking-wide">
             #{orderNum}
           </span>
         </div>
-        <span className={cn('text-xs font-bold px-2.5 py-1 rounded-full border', config.badgeClass)}>
-          {config.label}
-        </span>
+        <div className="flex items-center gap-2 flex-wrap justify-end">
+          <ElapsedBadge createdAt={order.created_at} overdue={overdue} />
+          <span className={cn('text-xs font-bold px-2.5 py-1 rounded-full border', config.badgeClass)}>
+            {config.label}
+          </span>
+        </div>
       </div>
 
       {/* Cuerpo */}

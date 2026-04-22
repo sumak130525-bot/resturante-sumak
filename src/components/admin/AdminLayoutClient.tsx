@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
-import { ChefHat, LayoutGrid, ShoppingBag, LogOut, Menu as MenuIcon, X } from 'lucide-react'
+import { ChefHat, LayoutGrid, ShoppingBag, LogOut, Menu as MenuIcon, X, ChevronLeft, ChevronRight } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { User } from '@supabase/supabase-js'
 
@@ -22,56 +22,86 @@ interface SidebarProps {
   active: 'dashboard' | 'menu' | 'orders'
   user: User | null
   onLogout: () => void
+  collapsed: boolean
+  onToggle: () => void
 }
 
-function Sidebar({ active, user, onLogout }: SidebarProps) {
+function Sidebar({ active, user, onLogout, collapsed, onToggle }: SidebarProps) {
   return (
-    <aside className="w-64 bg-sumak-brown text-white flex flex-col h-full">
+    <aside
+      className={cn(
+        'bg-sumak-brown text-white flex flex-col h-full transition-all duration-300 ease-in-out relative',
+        collapsed ? 'w-16' : 'w-64'
+      )}
+    >
       {/* Header */}
-      <div className="p-6 border-b border-white/10">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-sumak-gold rounded-xl flex items-center justify-center font-serif font-bold text-sumak-brown text-lg">
+      <div className={cn('border-b border-white/10 flex items-center', collapsed ? 'p-3 justify-center' : 'p-6')}>
+        {collapsed ? (
+          <div className="w-10 h-10 bg-sumak-gold rounded-xl flex items-center justify-center font-serif font-bold text-sumak-brown text-lg flex-shrink-0">
             S
           </div>
-          <div>
-            <p className="font-serif font-bold text-lg leading-tight">Sumak</p>
-            <p className="text-xs text-amber-300">Panel Admin</p>
+        ) : (
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 bg-sumak-gold rounded-xl flex items-center justify-center font-serif font-bold text-sumak-brown text-lg flex-shrink-0">
+              S
+            </div>
+            <div>
+              <p className="font-serif font-bold text-lg leading-tight">Sumak</p>
+              <p className="text-xs text-amber-300">Panel Admin</p>
+            </div>
           </div>
-        </div>
+        )}
       </div>
 
       {/* Nav */}
-      <nav className="flex-1 p-4 space-y-1">
+      <nav className={cn('flex-1 space-y-1', collapsed ? 'p-2' : 'p-4')}>
         {NAV_ITEMS.map(({ href, label, icon: Icon, key }) => (
           <a
             key={key}
             href={href}
+            title={collapsed ? label : undefined}
             className={cn(
-              'flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all',
+              'flex items-center rounded-xl text-sm font-medium transition-all',
+              collapsed ? 'justify-center p-3' : 'gap-3 px-4 py-3',
               active === key
                 ? 'bg-sumak-gold text-sumak-brown'
                 : 'text-amber-200 hover:bg-white/10 hover:text-white'
             )}
           >
-            <Icon size={18} />
-            {label}
+            <Icon size={18} className="flex-shrink-0" />
+            {!collapsed && label}
           </a>
         ))}
       </nav>
 
       {/* Footer */}
-      <div className="p-4 border-t border-white/10">
-        <div className="text-xs text-amber-400 mb-3 truncate">
-          {user?.email}
-        </div>
+      <div className={cn('border-t border-white/10', collapsed ? 'p-2' : 'p-4')}>
+        {!collapsed && (
+          <div className="text-xs text-amber-400 mb-3 truncate">
+            {user?.email}
+          </div>
+        )}
         <button
           onClick={onLogout}
-          className="flex items-center gap-2 text-sm text-amber-300 hover:text-white transition-colors w-full"
+          title={collapsed ? 'Cerrar sesión' : undefined}
+          className={cn(
+            'flex items-center text-sm text-amber-300 hover:text-white transition-colors w-full',
+            collapsed ? 'justify-center p-1' : 'gap-2'
+          )}
         >
-          <LogOut size={16} />
-          Cerrar sesión
+          <LogOut size={16} className="flex-shrink-0" />
+          {!collapsed && 'Cerrar sesión'}
         </button>
       </div>
+
+      {/* Toggle button (desktop) */}
+      <button
+        onClick={onToggle}
+        className="absolute -right-3 top-1/2 -translate-y-1/2 w-6 h-6 bg-sumak-brown border-2 border-white/20 rounded-full flex items-center justify-center text-white hover:bg-sumak-gold hover:text-sumak-brown hover:border-sumak-gold transition-all z-10"
+        title={collapsed ? 'Expandir sidebar' : 'Colapsar sidebar'}
+      >
+        {collapsed ? <ChevronRight size={12} /> : <ChevronLeft size={12} />}
+      </button>
     </aside>
   )
 }
@@ -79,6 +109,7 @@ function Sidebar({ active, user, onLogout }: SidebarProps) {
 export function AdminLayoutClient({ children, active }: AdminLayoutClientProps) {
   const [user, setUser] = useState<User | null>(null)
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
   const router = useRouter()
 
   useEffect(() => {
@@ -96,7 +127,13 @@ export function AdminLayoutClient({ children, active }: AdminLayoutClientProps) 
     <div className="flex h-screen overflow-hidden">
       {/* Sidebar desktop */}
       <div className="hidden md:flex flex-shrink-0">
-        <Sidebar active={active} user={user} onLogout={handleLogout} />
+        <Sidebar
+          active={active}
+          user={user}
+          onLogout={handleLogout}
+          collapsed={sidebarCollapsed}
+          onToggle={() => setSidebarCollapsed((v) => !v)}
+        />
       </div>
 
       {/* Sidebar mobile overlay */}
@@ -107,7 +144,13 @@ export function AdminLayoutClient({ children, active }: AdminLayoutClientProps) 
             onClick={() => setSidebarOpen(false)}
           />
           <div className="relative flex flex-col w-64">
-            <Sidebar active={active} user={user} onLogout={handleLogout} />
+            <Sidebar
+              active={active}
+              user={user}
+              onLogout={handleLogout}
+              collapsed={false}
+              onToggle={() => setSidebarOpen(false)}
+            />
             <button
               onClick={() => setSidebarOpen(false)}
               className="absolute top-4 right-4 text-white"
