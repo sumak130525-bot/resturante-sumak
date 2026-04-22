@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient, type CookieOptions } from '@supabase/ssr'
 import { cookies } from 'next/headers'
+import { waitUntil } from '@vercel/functions'
 import {
   getLoyverseItems,
   createLoyverseReceipt,
@@ -58,6 +59,83 @@ async function getServiceClient() {
     }
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   ) as any
+}
+
+async function syncLoyverse(
+  orderId: string,
+  customerName: string,
+  notes: string | null,
+  orderItems: OrderItemInput[],
+  menuItems: MenuItemPartial[]
+) {
+  const loyverseToken = process.env.LOYVERSE_ACCESS_TOKEN
+  const loyverseStoreId = process.env.LOYVERSE_STORE_ID
+
+  console.log(`[Loyverse] Iniciando sync para pedido ${orderId}`)
+  console.log(`[Loyverse] Token configurado: ${loyverseToken ? 'SI' : 'NO - FALTA env var LOYVERSE_ACCESS_TOKEN en Vercel'}`)
+  console.log(`[Loyverse] Store ID configurado: ${loyverseStoreId ? loyverseStoreId : 'NO - FALTA env var LOYVERSE_STORE_ID en Vercel (usando fallback hardcoded)'}`)
+
+  if (!loyverseToken) {
+    console.warn('[Loyverse] SKIP: LOYVERSE_ACCESS_TOKEN no está configurado en las variables de entorno de producción.')
+    return
+  }
+
+  const loyverseItems = await getLoyverseItems()
+  console.log(`[Loyverse] Items obtenidos de Loyverse: ${loyverseItems.length}`)
+
+  const storeId = getStoreId()
+  const lineItems = []
+  const unmatchedItems: string[] = []
+
+  for (const oi of orderItems) {
+    const menuItem = menuItems.find((m) => m.id === oi.menu_item_id)
+    if (!menuItem) {
+      console.warn(`[Loyverse] menuItem no encontrado para menu_item_id: ${oi.menu_item_id}`)
+      continue
+    }
+    const match = findVariantByName(loyverseItems, menuItem.name)
+    if (!match) {
+      unmatchedItems.push(menuItem.name)
+      console.warn(`[Loyverse] Sin match en Loyverse para: "${menuItem.name}"`)
+      continue
+    }
+    console.log(`[Loyverse] Match: "${menuItem.name}" → "${match.item.item_name}" (variant: ${match.variant.variant_id})`)
+    lineItems.push({
+      variant_id: match.variant.variant_id,
+      quantity: oi.quantity,
+      price: oi.unit_price,
+      total_money: oi.unit_price * oi.quantity,
+      gross_total_money: oi.unit_price * oi.quantity,
+    })
+  }
+
+  if (unmatchedItems.length > 0) {
+    console.warn(`[Loyverse] Items sin match (no se incluirán en el receipt): ${unmatchedItems.join(', ')}`)
+  }
+
+  if (lineItems.length === 0) {
+    console.warn('[Loyverse] No se generaron line_items: ningún plato del pedido tiene match en Loyverse.')
+    return
+  }
+
+  const receiptTotal = lineItems.reduce((s, l) => s + l.total_money, 0)
+  const receiptPayload = {
+    store_id: storeId,
+    receipt_date: new Date().toISOString(),
+    source: 'ONLINE',
+    note: `Pedido web #${orderId.slice(0, 8)} — ${customerName}${notes ? ` | Nota: ${notes}` : ''}`,
+    total_money: receiptTotal,
+    payments: [
+      {
+        payment_type_id: LOYVERSE_PAYMENT_MERCADOPAGO,
+        money_amount: receiptTotal,
+      },
+    ],
+    line_items: lineItems,
+  }
+  console.log(`[Loyverse] Creando receipt con ${lineItems.length} line_items, total: ${receiptTotal}`)
+  const result = await createLoyverseReceipt(receiptPayload)
+  console.log(`[Loyverse] Receipt creado exitosamente: receipt_number=${result?.receipt_number ?? 'N/A'}`)
 }
 
 export async function POST(request: NextRequest) {
@@ -148,79 +226,19 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Sincronizar con Loyverse POS (fire-and-forget: si falla no bloquea el pedido)
-    try {
-      const loyverseToken = process.env.LOYVERSE_ACCESS_TOKEN
-      const loyverseStoreId = process.env.LOYVERSE_STORE_ID
-
-      console.log(`[Loyverse] Iniciando sync para pedido ${order.id}`)
-      console.log(`[Loyverse] Token configurado: ${loyverseToken ? 'SI' : 'NO - FALTA env var LOYVERSE_ACCESS_TOKEN en Vercel'}`)
-      console.log(`[Loyverse] Store ID configurado: ${loyverseStoreId ? loyverseStoreId : 'NO - FALTA env var LOYVERSE_STORE_ID en Vercel (usando fallback hardcoded)'}`)
-
-      if (!loyverseToken) {
-        console.warn('[Loyverse] SKIP: LOYVERSE_ACCESS_TOKEN no está configurado en las variables de entorno de producción.')
-        console.warn('[Loyverse] Para habilitar la sync, configura LOYVERSE_ACCESS_TOKEN y LOYVERSE_STORE_ID en Vercel > Settings > Environment Variables.')
-      } else {
-        const loyverseItems = await getLoyverseItems()
-        console.log(`[Loyverse] Items obtenidos de Loyverse: ${loyverseItems.length}`)
-
-        const storeId = getStoreId()
-        const lineItems = []
-        const unmatchedItems: string[] = []
-
-        for (const oi of items as OrderItemInput[]) {
-          const menuItem = menuItems?.find((m: MenuItemPartial) => m.id === oi.menu_item_id)
-          if (!menuItem) {
-            console.warn(`[Loyverse] menuItem no encontrado para menu_item_id: ${oi.menu_item_id}`)
-            continue
-          }
-          const match = findVariantByName(loyverseItems, menuItem.name)
-          if (!match) {
-            unmatchedItems.push(menuItem.name)
-            console.warn(`[Loyverse] Sin match en Loyverse para: "${menuItem.name}"`)
-            continue
-          }
-          console.log(`[Loyverse] Match: "${menuItem.name}" → "${match.item.item_name}" (variant: ${match.variant.variant_id})`)
-          lineItems.push({
-            variant_id: match.variant.variant_id,
-            quantity: oi.quantity,
-            price: oi.unit_price,
-            total_money: oi.unit_price * oi.quantity,
-            gross_total_money: oi.unit_price * oi.quantity,
-          })
-        }
-
-        if (unmatchedItems.length > 0) {
-          console.warn(`[Loyverse] Items sin match (no se incluirán en el receipt): ${unmatchedItems.join(', ')}`)
-        }
-
-        if (lineItems.length > 0) {
-          const receiptTotal = lineItems.reduce((s, l) => s + l.total_money, 0)
-          const receiptPayload = {
-            store_id: storeId,
-            receipt_date: new Date().toISOString(),
-            source: 'ONLINE',
-            note: `Pedido web #${order.id.slice(0, 8)} — ${customer_name}${notes ? ` | Nota: ${notes}` : ''}`,
-            total_money: receiptTotal,
-            payments: [
-              {
-                payment_type_id: LOYVERSE_PAYMENT_MERCADOPAGO,
-                money_amount: receiptTotal,
-              },
-            ],
-            line_items: lineItems,
-          }
-          console.log(`[Loyverse] Creando receipt con ${lineItems.length} line_items, total: ${receiptTotal}`)
-          const result = await createLoyverseReceipt(receiptPayload)
-          console.log(`[Loyverse] Receipt creado exitosamente: receipt_number=${result?.receipt_number ?? 'N/A'}`)
-        } else {
-          console.warn('[Loyverse] No se generaron line_items: ningún plato del pedido tiene match en Loyverse.')
-        }
-      }
-    } catch (loyverseErr) {
-      // Solo loguear, no bloquear la respuesta
-      console.error('[Loyverse] Error al sincronizar pedido:', loyverseErr)
-    }
+    // Sincronizar con Loyverse POS usando waitUntil para que no bloquee la respuesta
+    // ni sea cortado por el timeout de la serverless function
+    waitUntil(
+      syncLoyverse(
+        order.id,
+        customer_name,
+        notes ?? null,
+        items as OrderItemInput[],
+        menuItems ?? []
+      ).catch((err) => {
+        console.error('[Loyverse] Error al sincronizar pedido (waitUntil):', err)
+      })
+    )
 
     return NextResponse.json({ success: true, order_id: order.id }, { status: 201 })
   } catch (err: unknown) {
