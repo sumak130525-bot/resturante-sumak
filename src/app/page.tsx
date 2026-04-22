@@ -1,22 +1,29 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, Suspense } from 'react'
+import { useSearchParams } from 'next/navigation'
 import { useMenuRealtime } from '@/hooks/useMenuRealtime'
 import { MenuGrid } from '@/components/public/MenuGrid'
 import { CategoryTabs } from '@/components/public/CategoryTabs'
 import { CartDrawer } from '@/components/public/CartDrawer'
 import { PublicHeader } from '@/components/public/PublicHeader'
+import { WhatsAppFAB } from '@/components/public/WhatsAppFAB'
+import { WhatsAppBanner } from '@/components/public/WhatsAppBanner'
 import { ChevronDown, Utensils, Wifi } from 'lucide-react'
 import type { MenuItem, CartItem } from '@/lib/types'
 import { cn } from '@/lib/utils'
 
-export default function Home() {
+function HomeContent() {
   const { menuItems, categories, loading } = useMenuRealtime()
   const [activeCategory, setActiveCategory] = useState('all')
   const [cart, setCart] = useState<CartItem[]>([])
   const [cartOpen, setCartOpen] = useState(false)
 
+  const searchParams = useSearchParams()
+  const mesa = searchParams.get('mesa')
+
   const totalItems = cart.reduce((s, c) => s + c.quantity, 0)
+  const totalPrice = cart.reduce((s, c) => s + c.menu_item.price * c.quantity, 0)
 
   const handleAdd = useCallback((item: MenuItem) => {
     setCart((prev) => {
@@ -51,6 +58,20 @@ export default function Home() {
         onCartOpen={() => setCartOpen(true)}
         isLive={!loading}
       />
+
+      {/* ════════════════════════════════════════
+          WHATSAPP BANNER
+          ════════════════════════════════════════ */}
+      <WhatsAppBanner />
+
+      {/* ════════════════════════════════════════
+          MESA BADGE (si viene con ?mesa=N)
+          ════════════════════════════════════════ */}
+      {mesa && (
+        <div className="bg-sumak-gold/20 border-b border-sumak-gold/30 py-2 px-4 text-center text-sm font-semibold text-sumak-brown">
+          🪑 Mesa {mesa} — Tu pedido será enviado a tu mesa
+        </div>
+      )}
 
       {/* ════════════════════════════════════════
           HERO SECTION
@@ -233,7 +254,19 @@ export default function Home() {
         onAdd={handleAdd}
         onRemove={handleRemove}
         onClear={handleClear}
+        mesa={mesa}
       />
+
+      {/* WhatsApp FAB */}
+      <WhatsAppFAB cart={cart} total={totalPrice} mesa={mesa} />
     </>
+  )
+}
+
+export default function Home() {
+  return (
+    <Suspense fallback={null}>
+      <HomeContent />
+    </Suspense>
   )
 }

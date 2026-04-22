@@ -10,9 +10,10 @@ interface OrderFormProps {
   total: number
   onBack: () => void
   onSuccess: () => void
+  mesa?: string | null
 }
 
-export function OrderForm({ cart, total, onBack, onSuccess }: OrderFormProps) {
+export function OrderForm({ cart, total, onBack, onSuccess, mesa }: OrderFormProps) {
   const [name, setName] = useState('')
   const [phone, setPhone] = useState('')
   const [notes, setNotes] = useState('')
@@ -36,7 +37,7 @@ export function OrderForm({ cart, total, onBack, onSuccess }: OrderFormProps) {
         body: JSON.stringify({
           customer_name: name.trim(),
           customer_phone: phone.trim() || null,
-          notes: notes.trim() || null,
+          notes: notes.trim() ? `[Mesa ${mesa}] ${notes.trim()}` : mesa ? `[Mesa ${mesa}]` : null,
           items: cart.map((c) => ({
             menu_item_id: c.menu_item.id,
             quantity: c.quantity,
