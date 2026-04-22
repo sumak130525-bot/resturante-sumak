@@ -1,0 +1,10 @@
+.env.local
+.env
+node_modules/
+.next/
+out/
+*.log
+_check_env.bat
+_deploy*.bat
+*.tmp
+*.temp
