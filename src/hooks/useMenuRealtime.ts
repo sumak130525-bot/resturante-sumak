@@ -10,58 +10,80 @@ export function useMenuRealtime() {
   const [loading, setLoading] = useState(true)
 
   const fetchMenu = useCallback(async () => {
-    const supabase = createClient()
+    try {
+      const supabase = createClient()
 
-    const [itemsRes, catsRes] = await Promise.all([
-      supabase
-        .from('menu_items')
-        .select('*, categories(*)')
-        .eq('active', true)
-        .order('name'),
-      supabase
-        .from('categories')
-        .select('*')
-        .order('order_pos'),
-    ])
+      const [itemsRes, catsRes] = await Promise.all([
+        supabase
+          .from('menu_items')
+          .select('*, categories(*)')
+          .eq('active', true)
+          .order('name'),
+        supabase
+          .from('categories')
+          .select('*')
+          .order('order_pos'),
+      ])
 
-    if (itemsRes.data) setMenuItems(itemsRes.data as MenuItem[])
-    if (catsRes.data) setCategories(catsRes.data)
-    setLoading(false)
+      if (itemsRes.data) setMenuItems(itemsRes.data as MenuItem[])
+      if (catsRes.data) setCategories(catsRes.data)
+    } catch (err) {
+      console.error('[useMenuRealtime] fetchMenu error:', err)
+    } finally {
+      setLoading(false)
+    }
   }, [])
 
   useEffect(() => {
     fetchMenu()
 
-    const supabase = createClient()
+    let channel: ReturnType<ReturnType<typeof createClient>['channel']> | null = null
 
-    // Suscripción a cambios en menu_items (especialmente available)
-    const channel = supabase
-      .channel('menu-realtime')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'menu_items' },
-        (payload) => {
-          if (payload.eventType === 'UPDATE') {
-            setMenuItems((prev) =>
-              prev.map((item) =>
-                item.id === payload.new.id
-                  ? { ...item, ...payload.new }
-                  : item
+    try {
+      const supabase = createClient()
+
+      // Suscripción a cambios en menu_items (especialmente available)
+      channel = supabase
+        .channel('menu-realtime')
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'menu_items' },
+          (payload) => {
+            if (payload.eventType === 'UPDATE') {
+              setMenuItems((prev) =>
+                prev.map((item) =>
+                  item.id === payload.new.id
+                    ? { ...item, ...payload.new }
+                    : item
+                )
               )
-            )
-          } else if (payload.eventType === 'INSERT') {
-            setMenuItems((prev) => [...prev, payload.new as MenuItem])
-          } else if (payload.eventType === 'DELETE') {
-            setMenuItems((prev) =>
-              prev.filter((item) => item.id !== payload.old.id)
-            )
+            } else if (payload.eventType === 'INSERT') {
+              setMenuItems((prev) => [...prev, payload.new as MenuItem])
+            } else if (payload.eventType === 'DELETE') {
+              setMenuItems((prev) =>
+                prev.filter((item) => item.id !== payload.old.id)
+              )
+            }
           }
-        }
-      )
-      .subscribe()
+        )
+        .subscribe((status, err) => {
+          if (err) {
+            console.error('[useMenuRealtime] realtime subscribe error:', err)
+          }
+        })
+    } catch (err) {
+      console.error('[useMenuRealtime] realtime setup error:', err)
+    }
 
     return () => {
-      supabase.removeChannel(channel)
+      if (channel) {
+        try {
+          const supabase = createClient()
+          supabase.removeChannel(channel)
+        } catch {
+          // ignore cleanup errors
+        }
+      }
     }
   }, [fetchMenu])
 

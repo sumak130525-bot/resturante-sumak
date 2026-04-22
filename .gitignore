@@ -6,5 +6,6 @@ out/
 *.log
 _check_env.bat
 _deploy*.bat
+_step*.bat
 *.tmp
 *.temp

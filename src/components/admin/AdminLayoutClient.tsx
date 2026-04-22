@@ -18,23 +18,14 @@ const NAV_ITEMS = [
   { href: '/admin/orders', label: 'Pedidos', icon: ShoppingBag, key: 'orders' as const },
 ]
 
-export function AdminLayoutClient({ children, active }: AdminLayoutClientProps) {
-  const [user, setUser] = useState<User | null>(null)
-  const [sidebarOpen, setSidebarOpen] = useState(false)
-  const router = useRouter()
+interface SidebarProps {
+  active: 'dashboard' | 'menu' | 'orders'
+  user: User | null
+  onLogout: () => void
+}
 
-  useEffect(() => {
-    const supabase = createClient()
-    supabase.auth.getUser().then(({ data }) => setUser(data.user))
-  }, [])
-
-  const handleLogout = async () => {
-    const supabase = createClient()
-    await supabase.auth.signOut()
-    router.push('/admin/login')
-  }
-
-  const Sidebar = () => (
+function Sidebar({ active, user, onLogout }: SidebarProps) {
+  return (
     <aside className="w-64 bg-sumak-brown text-white flex flex-col h-full">
       {/* Header */}
       <div className="p-6 border-b border-white/10">
@@ -74,7 +65,7 @@ export function AdminLayoutClient({ children, active }: AdminLayoutClientProps) 
           {user?.email}
         </div>
         <button
-          onClick={handleLogout}
+          onClick={onLogout}
           className="flex items-center gap-2 text-sm text-amber-300 hover:text-white transition-colors w-full"
         >
           <LogOut size={16} />
@@ -83,12 +74,29 @@ export function AdminLayoutClient({ children, active }: AdminLayoutClientProps) 
       </div>
     </aside>
   )
+}
+
+export function AdminLayoutClient({ children, active }: AdminLayoutClientProps) {
+  const [user, setUser] = useState<User | null>(null)
+  const [sidebarOpen, setSidebarOpen] = useState(false)
+  const router = useRouter()
+
+  useEffect(() => {
+    const supabase = createClient()
+    supabase.auth.getUser().then(({ data }) => setUser(data.user))
+  }, [])
+
+  const handleLogout = async () => {
+    const supabase = createClient()
+    await supabase.auth.signOut()
+    router.push('/admin/login')
+  }
 
   return (
     <div className="flex h-screen overflow-hidden">
       {/* Sidebar desktop */}
       <div className="hidden md:flex flex-shrink-0">
-        <Sidebar />
+        <Sidebar active={active} user={user} onLogout={handleLogout} />
       </div>
 
       {/* Sidebar mobile overlay */}
@@ -99,7 +107,7 @@ export function AdminLayoutClient({ children, active }: AdminLayoutClientProps) 
             onClick={() => setSidebarOpen(false)}
           />
           <div className="relative flex flex-col w-64">
-            <Sidebar />
+            <Sidebar active={active} user={user} onLogout={handleLogout} />
             <button
               onClick={() => setSidebarOpen(false)}
               className="absolute top-4 right-4 text-white"

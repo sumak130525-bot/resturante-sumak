@@ -26,6 +26,7 @@ export function PublicHeader({ cartCount, onCartOpen, isLive }: PublicHeaderProp
     if (cartCount > prevCount) {
       setBadgePop(true)
       const t = setTimeout(() => setBadgePop(false), 500)
+      setPrevCount(cartCount)
       return () => clearTimeout(t)
     }
     setPrevCount(cartCount)
