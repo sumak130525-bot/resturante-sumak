@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { getLoyverseItems, getLoyverseStores, getStoreId } from '@/lib/loyverse'
+import { getLoyverseItems, getLoyverseStores, getStoreId, findVariantByName } from '@/lib/loyverse'
 import { createServerClient, type CookieOptions } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 
@@ -40,17 +40,13 @@ export async function GET() {
       .select('id, name, price')
       .eq('active', true)
 
-    // Calcular mapeo
-    const normalize = (s: string) => s.toLowerCase().trim().replace(/\s+/g, ' ')
+    // Calcular mapeo usando la misma función que usa orders/route.ts
     const mapped: string[] = []
     const unmapped: string[] = []
 
     for (const mi of menuItems ?? []) {
-      const target = normalize(mi.name)
-      const found = loyverseItems.some((li: { item_name: string }) =>
-        normalize(li.item_name).includes(target) || target.includes(normalize(li.item_name))
-      )
-      if (found) mapped.push(mi.name)
+      const match = findVariantByName(loyverseItems, mi.name)
+      if (match) mapped.push(mi.name)
       else unmapped.push(mi.name)
     }
 

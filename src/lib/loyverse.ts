@@ -116,13 +116,23 @@ export async function createLoyverseReceipt(receipt: LoyverseReceiptInput) {
 /**
  * Busca el variant_id de un item de Loyverse por nombre (case-insensitive, normalizado).
  * Los items de Loyverse suelen incluir precio en el nombre, ej: "Silpancho $9.000"
- * Esta función hace matching parcial para tolerar esa diferencia.
+ * Esta función hace matching parcial tolerando tildes, espacios extras y precio en el nombre.
  */
 export function findVariantByName(
   items: LoyverseItem[],
   name: string
 ): { item: LoyverseItem; variant: LoyverseVariant } | null {
-  const normalize = (s: string) => s.toLowerCase().trim().replace(/\s+/g, ' ')
+  // Normaliza: minúsculas, sin tildes (NFD → quitar diacríticos), sin precio ($...), espacios colapsados
+  const normalize = (s: string) =>
+    s
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, '') // quitar diacríticos
+      .toLowerCase()
+      .replace(/\$[\d.,\s]*/g, '') // quitar precios tipo "$9.000"
+      .replace(/[^a-z0-9\s]/g, ' ') // quitar símbolos restantes
+      .replace(/\s+/g, ' ')
+      .trim()
+
   const target = normalize(name)
 
   for (const item of items) {
