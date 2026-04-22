@@ -5,6 +5,12 @@
 
 const LOYVERSE_API = 'https://api.loyverse.com/v1.0'
 
+// IDs de medios de pago de Loyverse (obtenidos via GET /payment_types)
+// Mercadopago: 9d78eb67-7116-455f-ae9d-f6d51876cbcc
+// Efectivo:    c5424f95-0f13-4d00-b964-2fa6ddfbb49c
+export const LOYVERSE_PAYMENT_MERCADOPAGO = '9d78eb67-7116-455f-ae9d-f6d51876cbcc'
+export const LOYVERSE_PAYMENT_EFECTIVO    = 'c5424f95-0f13-4d00-b964-2fa6ddfbb49c'
+
 function getToken(): string {
   const token = process.env.LOYVERSE_ACCESS_TOKEN
   if (!token) throw new Error('LOYVERSE_ACCESS_TOKEN no configurado')
@@ -12,7 +18,11 @@ function getToken(): string {
 }
 
 export function getStoreId(): string {
-  return process.env.LOYVERSE_STORE_ID ?? 'ca14eb24-6ad6-40d2-80b1-87df568c4ecc'
+  const id = process.env.LOYVERSE_STORE_ID
+  if (!id) {
+    console.warn('[Loyverse] LOYVERSE_STORE_ID no configurado, usando valor hardcoded')
+  }
+  return id ?? 'ca14eb24-6ad6-40d2-80b1-87df568c4ecc'
 }
 
 async function loyverseFetch(path: string, options?: RequestInit) {
@@ -65,7 +75,8 @@ export type LoyverseReceiptInput = {
   source?: string
   note?: string
   total_money: number
-  payments?: LoyverseReceiptPayment[]
+  /** Requerido por la API de Loyverse - sin payments el POST devuelve 400 */
+  payments: LoyverseReceiptPayment[]
   line_items: LoyverseReceiptLineItem[]
 }
 
@@ -90,6 +101,11 @@ export async function getLoyverseStores() {
   return data.stores ?? []
 }
 
+export async function getLoyversePaymentTypes() {
+  const data = await loyverseFetch('/payment_types')
+  return data.payment_types ?? []
+}
+
 export async function createLoyverseReceipt(receipt: LoyverseReceiptInput) {
   return loyverseFetch('/receipts', {
     method: 'POST',
@@ -99,6 +115,8 @@ export async function createLoyverseReceipt(receipt: LoyverseReceiptInput) {
 
 /**
  * Busca el variant_id de un item de Loyverse por nombre (case-insensitive, normalizado).
+ * Los items de Loyverse suelen incluir precio en el nombre, ej: "Silpancho $9.000"
+ * Esta función hace matching parcial para tolerar esa diferencia.
  */
 export function findVariantByName(
   items: LoyverseItem[],
@@ -108,7 +126,8 @@ export function findVariantByName(
   const target = normalize(name)
 
   for (const item of items) {
-    if (normalize(item.item_name).includes(target) || target.includes(normalize(item.item_name))) {
+    const itemNorm = normalize(item.item_name)
+    if (itemNorm.includes(target) || target.includes(itemNorm)) {
       const variant = item.variants[0]
       if (variant) return { item, variant }
     }

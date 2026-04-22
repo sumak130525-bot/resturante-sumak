@@ -6,6 +6,7 @@ import {
   createLoyverseReceipt,
   findVariantByName,
   getStoreId,
+  LOYVERSE_PAYMENT_MERCADOPAGO,
 } from '@/lib/loyverse'
 
 type OrderItemRow = {
@@ -112,12 +113,19 @@ export async function POST(request: NextRequest) {
       ? new Date(order.created_at).toISOString()
       : new Date().toISOString()
 
+    const receiptTotal = lineItems.reduce((s, l) => s + l.total_money, 0)
     const receipt = await createLoyverseReceipt({
       store_id: storeId,
       receipt_date: receiptDate,
       source: 'ONLINE',
       note: `Pedido web #${order.id.slice(0, 8)} — ${order.customer_name}${order.notes ? ` | Nota: ${order.notes}` : ''}`,
-      total_money: lineItems.reduce((s, l) => s + l.total_money, 0),
+      total_money: receiptTotal,
+      payments: [
+        {
+          payment_type_id: LOYVERSE_PAYMENT_MERCADOPAGO,
+          money_amount: receiptTotal,
+        },
+      ],
       line_items: lineItems,
     })
 
