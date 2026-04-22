@@ -3,13 +3,13 @@
 import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
-import { ChefHat, LayoutGrid, ShoppingBag, LogOut, Menu as MenuIcon, X, ChevronLeft, ChevronRight, QrCode } from 'lucide-react'
+import { ChefHat, LayoutGrid, ShoppingBag, LogOut, Menu as MenuIcon, X, ChevronLeft, ChevronRight, QrCode, Store } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { User } from '@supabase/supabase-js'
 
 interface AdminLayoutClientProps {
   children: React.ReactNode
-  active: 'dashboard' | 'menu' | 'orders' | 'qr'
+  active: 'dashboard' | 'menu' | 'orders' | 'qr' | 'loyverse'
 }
 
 const NAV_ITEMS = [
@@ -17,10 +17,11 @@ const NAV_ITEMS = [
   { href: '/admin/menu', label: 'Menú', icon: ChefHat, key: 'menu' as const },
   { href: '/admin/orders', label: 'Pedidos', icon: ShoppingBag, key: 'orders' as const },
   { href: '/admin/qr', label: 'Códigos QR', icon: QrCode, key: 'qr' as const },
+  { href: '/admin/loyverse', label: 'Loyverse', icon: Store, key: 'loyverse' as const },
 ]
 
 interface SidebarProps {
-  active: 'dashboard' | 'menu' | 'orders' | 'qr'
+  active: 'dashboard' | 'menu' | 'orders' | 'qr' | 'loyverse'
   user: User | null
   onLogout: () => void
   collapsed: boolean

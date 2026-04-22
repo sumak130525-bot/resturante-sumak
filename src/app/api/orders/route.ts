@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient, type CookieOptions } from '@supabase/ssr'
 import { cookies } from 'next/headers'
+import { getLoyverseItems, createLoyverseReceipt, findVariantByName, getStoreId } from '@/lib/loyverse'
 
 type OrderItemInput = {
   menu_item_id: string
@@ -139,6 +140,43 @@ export async function POST(request: NextRequest) {
           .update({ available: menuItem.available - orderItem.quantity })
           .eq('id', orderItem.menu_item_id)
       }
+    }
+
+    // Sincronizar con Loyverse POS (fire-and-forget: si falla no bloquea el pedido)
+    try {
+      if (process.env.LOYVERSE_ACCESS_TOKEN) {
+        const loyverseItems = await getLoyverseItems()
+        const storeId = getStoreId()
+        const lineItems = []
+
+        for (const oi of items as OrderItemInput[]) {
+          const menuItem = menuItems?.find((m: MenuItemPartial) => m.id === oi.menu_item_id)
+          if (!menuItem) continue
+          const match = findVariantByName(loyverseItems, menuItem.name)
+          if (!match) continue
+          lineItems.push({
+            variant_id: match.variant.variant_id,
+            quantity: oi.quantity,
+            price: oi.unit_price,
+            total_money: oi.unit_price * oi.quantity,
+            gross_total_money: oi.unit_price * oi.quantity,
+          })
+        }
+
+        if (lineItems.length > 0) {
+          await createLoyverseReceipt({
+            store_id: storeId,
+            receipt_date: new Date().toISOString(),
+            source: 'ONLINE',
+            note: `Pedido web #${order.id.slice(0, 8)} — ${customer_name}${notes ? ` | Nota: ${notes}` : ''}`,
+            total_money: lineItems.reduce((s, l) => s + l.total_money, 0),
+            line_items: lineItems,
+          })
+        }
+      }
+    } catch (loyverseErr) {
+      // Solo loguear, no bloquear la respuesta
+      console.error('[Loyverse] Error al sincronizar pedido:', loyverseErr)
     }
 
     return NextResponse.json({ success: true, order_id: order.id }, { status: 201 })
