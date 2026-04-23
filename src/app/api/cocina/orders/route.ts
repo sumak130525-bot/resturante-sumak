@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server'
 import { createServerClient, type CookieOptions } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 
+export const dynamic = 'force-dynamic'
+
 // ─── Tipos unificados para el KDS ────────────────────────────────────────────
 
 export type KdsItem = {
@@ -140,13 +142,14 @@ type LoyverseItem = {
 /**
  * Obtiene el Set de item_ids que pertenecen a la categoría Bebidas.
  * Los line_items del receipt NO tienen category_id; el category_id está en /v1.0/items.
+ * Pagina correctamente usando el cursor devuelto por la API hasta agotar todos los items.
  */
 async function getBeverageItemIds(token: string): Promise<Set<string>> {
   try {
     // 1. Obtener categorías para confirmar/expandir el id de Bebidas
     const catRes = await fetch('https://api.loyverse.com/v1.0/categories?limit=250', {
       headers: { Authorization: `Bearer ${token}` },
-      next: { revalidate: 300 },
+      cache: 'no-store',
     })
     const beverageCatIds = new Set<string>([BEBIDAS_CATEGORY_ID])
     if (catRes.ok) {
@@ -157,21 +160,39 @@ async function getBeverageItemIds(token: string): Promise<Set<string>> {
         .forEach((c) => beverageCatIds.add(c.id))
     }
 
-    // 2. Obtener todos los items y filtrar los que pertenecen a categoría Bebidas
-    const itemRes = await fetch('https://api.loyverse.com/v1.0/items?limit=250', {
-      headers: { Authorization: `Bearer ${token}` },
-      next: { revalidate: 300 }, // cachear 5 minutos
-    })
-    if (!itemRes.ok) return new Set()
-
-    const itemData = await itemRes.json()
-    const items: LoyverseItem[] = itemData.items ?? []
+    // 2. Obtener TODOS los items paginando con cursor hasta que no haya más páginas
     const beverageItemIds = new Set<string>()
-    for (const item of items) {
-      if (item.category_id && beverageCatIds.has(item.category_id)) {
-        beverageItemIds.add(item.id)
+    let cursor: string | undefined = undefined
+    let totalFetched = 0
+
+    do {
+      const url: string = cursor
+        ? `https://api.loyverse.com/v1.0/items?limit=250&cursor=${encodeURIComponent(cursor)}`
+        : 'https://api.loyverse.com/v1.0/items?limit=250'
+
+      const itemRes: Response = await fetch(url, {
+        headers: { Authorization: `Bearer ${token}` },
+        cache: 'no-store',
+      })
+      if (!itemRes.ok) break
+
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const itemData: any = await itemRes.json()
+      const items: LoyverseItem[] = itemData.items ?? []
+      totalFetched += items.length
+
+      for (const item of items) {
+        if (item.category_id && beverageCatIds.has(item.category_id)) {
+          beverageItemIds.add(item.id)
+        }
       }
-    }
+
+      // Continuar si hay cursor para la siguiente página
+      cursor = itemData.cursor ?? undefined
+    } while (cursor)
+
+    console.log(`[Cocina] Beverage item IDs encontrados: ${beverageItemIds.size} de ${totalFetched} items totales`)
+
     return beverageItemIds
   } catch {
     return new Set()
