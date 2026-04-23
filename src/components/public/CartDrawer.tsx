@@ -50,7 +50,7 @@ export function CartDrawer({
         quantity: c.quantity,
         unit_price: c.menu_item.price,
       }))
-      await fetch('/api/orders', {
+      const res = await fetch('/api/orders', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -61,8 +61,13 @@ export function CartDrawer({
           channel: 'whatsapp',
         }),
       })
-    } catch {
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}))
+        console.error('[WhatsApp order] POST /api/orders failed:', res.status, err)
+      }
+    } catch (err) {
       // Si falla el registro, igual abrimos WhatsApp
+      console.error('[WhatsApp order] fetch error:', err)
     } finally {
       setWhatsappLoading(false)
       setShowWhatsAppForm(false)

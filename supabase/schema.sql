@@ -36,6 +36,8 @@ CREATE TABLE IF NOT EXISTS public.orders (
                  CHECK (status IN ('pending','confirmed','ready','delivered','cancelled')),
   total          int  NOT NULL CHECK (total >= 0),
   notes          text,
+  channel        text NOT NULL DEFAULT 'web'
+                 CHECK (channel IN ('web','whatsapp')),
   created_at     timestamptz DEFAULT now()
 );
 
