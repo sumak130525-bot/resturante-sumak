@@ -22,39 +22,23 @@ type KdsOrder = {
   total: number
   notes: string | null
   created_at: string
-  // Campos extra Loyverse (LOCAL)
   orderNumber?: string
   diningOption?: string
   paymentMethod?: string
-  // Campos extra WEB
   tableNumber?: string
 }
 
 type FilterSource = 'ALL' | 'WEB' | 'LOCAL'
-type FilterStatus = 'ALL' | 'pending' | 'confirmed' | 'ready'
+type ActiveTab = 'cocina' | 'entregados'
 
 // ─── Colores por estado ───────────────────────────────────────────────────────
 
-const STATUS_COLORS: Record<string, { border: string; badge: string; label: string }> = {
-  pending:   { border: 'border-yellow-400', badge: 'bg-yellow-400 text-yellow-900',  label: 'Pendiente'  },
-  confirmed: { border: 'border-blue-400',   badge: 'bg-blue-400 text-blue-900',      label: 'Confirmado' },
-  ready:     { border: 'border-green-400',  badge: 'bg-green-400 text-green-900',    label: 'Listo'      },
-  delivered: { border: 'border-gray-500',   badge: 'bg-gray-500 text-white',         label: 'Entregado'  },
-  cancelled: { border: 'border-red-600',    badge: 'bg-red-600 text-white',          label: 'Cancelado'  },
-}
-
-const STATUS_TRANSITIONS: Record<string, string | null> = {
-  pending:   'confirmed',
-  confirmed: 'ready',
-  ready:     'delivered',
-  delivered: null,
-  cancelled: null,
-}
-
-const STATUS_BTN_LABELS: Record<string, string> = {
-  pending:   'Confirmar',
-  confirmed: 'Listo',
-  ready:     'Entregado',
+const STATUS_COLORS: Record<string, { border: string; badge: string; label: string; headerBg: string }> = {
+  pending:   { border: 'border-yellow-400', badge: 'bg-yellow-400 text-yellow-900',  label: 'Pendiente',  headerBg: 'bg-yellow-500'  },
+  confirmed: { border: 'border-blue-400',   badge: 'bg-blue-400 text-blue-900',      label: 'Confirmado', headerBg: 'bg-blue-600'    },
+  ready:     { border: 'border-green-400',  badge: 'bg-green-400 text-green-900',    label: 'Listo',      headerBg: 'bg-green-600'   },
+  delivered: { border: 'border-gray-500',   badge: 'bg-gray-500 text-white',         label: 'Entregado',  headerBg: 'bg-gray-600'    },
+  cancelled: { border: 'border-red-600',    badge: 'bg-red-600 text-white',          label: 'Cancelado',  headerBg: 'bg-red-700'     },
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -74,19 +58,28 @@ function elapsedColor(created_at: string): string {
   return 'text-red-400'
 }
 
+function getOrderLabel(order: KdsOrder): string {
+  if (order.source === 'LOCAL' && order.orderNumber) return order.orderNumber
+  if (order.source === 'WEB' && order.tableNumber) return `MESA ${order.tableNumber}`
+  if (order.source === 'WEB') return order.customer
+  return order.number
+}
+
 // ─── Componente Card ──────────────────────────────────────────────────────────
 
 function OrderCard({
   order,
-  onStatusChange,
+  onDeliver,
+  onRecover,
+  isDelivered,
 }: {
   order: KdsOrder
-  onStatusChange: (id: string, newStatus: string) => void
+  onDeliver?: (id: string, source: 'WEB' | 'LOCAL') => void
+  onRecover?: (id: string) => void
+  isDelivered?: boolean
 }) {
   const sc = STATUS_COLORS[order.status] ?? STATUS_COLORS.pending
-  const nextStatus = STATUS_TRANSITIONS[order.status]
 
-  // Etiqueta de dining option (LOCAL)
   const diningBadge = order.diningOption
     ? {
         label: order.diningOption,
@@ -96,122 +89,116 @@ function OrderCard({
       }
     : null
 
+  const orderLabel = getOrderLabel(order)
+
   return (
     <div
-      className={`relative flex flex-col bg-gray-900 rounded-2xl border-2 ${sc.border} p-4 gap-3 shadow-xl`}
+      className={`relative flex flex-col bg-gray-900 rounded-2xl border-2 ${sc.border} shadow-xl overflow-hidden`}
     >
-      {/* Header */}
-      <div className="flex items-start justify-between gap-2">
-        <div className="flex flex-col gap-1 min-w-0">
-          <div className="flex items-center gap-2 flex-wrap">
-            <span
-              className={`text-xs font-bold px-2 py-0.5 rounded-full shrink-0 ${
-                order.source === 'WEB'
-                  ? 'bg-purple-600 text-white'
-                  : 'bg-orange-500 text-white'
-              }`}
-            >
-              {order.source}
-            </span>
-            <span className="text-white font-bold text-lg leading-none">
-              {order.number}
-            </span>
-            <span className={`text-sm font-semibold ${sc.badge} px-2 py-0.5 rounded-full`}>
-              {sc.label}
-            </span>
-          </div>
-
-          {/* ── Número de mesa / cliente GRANDE (lo que busca cocina) ── */}
-          {order.source === 'LOCAL' && order.orderNumber && (
-            <div className="text-white font-black text-2xl leading-tight tracking-wide mt-1">
-              {order.orderNumber}
+      {/* ── Cabecera con número de mesa GRANDE (estilo KDS Loyverse) ── */}
+      <div className={`${sc.headerBg} px-4 pt-4 pb-3`}>
+        {/* Número de orden grande y llamativo */}
+        <div className="flex items-start justify-between gap-2">
+          <div className="flex-1 min-w-0">
+            <div className="text-white font-black text-5xl leading-none tracking-tight drop-shadow-lg">
+              {orderLabel}
             </div>
-          )}
-          {order.source === 'WEB' && (
-            <div className="flex flex-col gap-0.5 mt-1">
-              {order.tableNumber && (
-                <div className="text-white font-black text-2xl leading-tight tracking-wide">
-                  MESA {order.tableNumber}
-                </div>
-              )}
-              <div className="text-gray-300 font-bold text-base leading-tight truncate max-w-[200px]">
+            {/* Sub-info: cliente si es WEB con mesa */}
+            {order.source === 'WEB' && order.tableNumber && (
+              <div className="text-white/80 font-semibold text-sm mt-1 truncate">
                 {order.customer}
               </div>
+            )}
+          </div>
+          {/* Tiempo transcurrido */}
+          <div className={`text-right text-sm font-mono font-bold shrink-0 ${elapsedColor(order.created_at)} bg-black/30 rounded-lg px-2 py-1`}>
+            {elapsed(order.created_at)}
+            <div className="text-white/50 text-xs font-normal">
+              {new Date(order.created_at).toLocaleTimeString('es-CO', {
+                hour: '2-digit',
+                minute: '2-digit',
+              })}
             </div>
-          )}
-
-          {/* Badges: dining option + forma de pago */}
-          <div className="flex flex-wrap gap-1 mt-0.5">
-            {diningBadge && (
-              <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${diningBadge.cls}`}>
-                {diningBadge.label}
-              </span>
-            )}
-            {order.paymentMethod && (
-              <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-gray-700 text-gray-200">
-                {order.paymentMethod}
-              </span>
-            )}
           </div>
         </div>
 
-        {/* Tiempo */}
-        <div className={`text-right text-sm font-mono font-bold shrink-0 ${elapsedColor(order.created_at)}`}>
-          {elapsed(order.created_at)}
-          <div className="text-gray-500 text-xs font-normal">
-            {new Date(order.created_at).toLocaleTimeString('es-CO', {
-              hour: '2-digit',
-              minute: '2-digit',
-            })}
-          </div>
+        {/* Badges: origen, estado, dining option, pago */}
+        <div className="flex flex-wrap gap-1.5 mt-2">
+          <span
+            className={`text-xs font-bold px-2 py-0.5 rounded-full ${
+              order.source === 'WEB'
+                ? 'bg-purple-900/80 text-purple-200'
+                : 'bg-orange-900/80 text-orange-200'
+            }`}
+          >
+            {order.source}
+          </span>
+          <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-black/30 text-white/80">
+            {order.number}
+          </span>
+          {diningBadge && (
+            <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${diningBadge.cls}`}>
+              {diningBadge.label}
+            </span>
+          )}
+          {order.paymentMethod && (
+            <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-black/30 text-white/70">
+              {order.paymentMethod}
+            </span>
+          )}
         </div>
       </div>
 
-      {/* Items */}
-      <ul className="flex flex-col gap-2 border-t border-gray-700 pt-2">
-        {order.items.map((item, i) => (
-          <li key={i} className="flex items-start gap-2 text-white">
-            <span className="text-2xl font-black text-yellow-400 leading-none w-8 shrink-0">
-              {item.quantity}×
-            </span>
-            <div className="flex flex-col min-w-0">
-              <span className="text-base font-semibold leading-tight">{item.name}</span>
-              {item.modifiers && item.modifiers.length > 0 && (
-                <span className="text-xs text-cyan-300 leading-snug mt-0.5">
-                  {item.modifiers.join(' · ')}
-                </span>
-              )}
-            </div>
-          </li>
-        ))}
-      </ul>
+      {/* ── Items ── */}
+      <div className="flex-1 px-4 py-3 flex flex-col gap-3">
+        <ul className="flex flex-col gap-2">
+          {order.items.map((item, i) => (
+            <li key={i} className="flex items-start gap-2 text-white">
+              <span className="text-2xl font-black text-yellow-400 leading-none w-8 shrink-0">
+                {item.quantity}×
+              </span>
+              <div className="flex flex-col min-w-0">
+                <span className="text-base font-semibold leading-tight">{item.name}</span>
+                {item.modifiers && item.modifiers.length > 0 && (
+                  <span className="text-xs text-cyan-300 leading-snug mt-0.5">
+                    {item.modifiers.join(' · ')}
+                  </span>
+                )}
+              </div>
+            </li>
+          ))}
+        </ul>
 
-      {/* Notas */}
-      {order.notes && (
-        <p className="text-xs text-yellow-300 italic border-t border-gray-700 pt-2">
-          Nota: {order.notes}
-        </p>
-      )}
+        {/* Notas */}
+        {order.notes && (
+          <p className="text-xs text-yellow-300 italic border-t border-gray-700 pt-2">
+            Nota: {order.notes}
+          </p>
+        )}
+      </div>
 
-      {/* Botón de estado (solo pedidos WEB) */}
-      {order.source === 'WEB' && nextStatus && (
-        <button
-          onClick={() => onStatusChange(order.id, nextStatus)}
-          className={`mt-1 w-full py-3 rounded-xl text-base font-bold transition-all active:scale-95 ${
-            order.status === 'pending'
-              ? 'bg-yellow-400 text-yellow-900 hover:bg-yellow-300'
-              : order.status === 'confirmed'
-              ? 'bg-blue-500 text-white hover:bg-blue-400'
-              : 'bg-green-500 text-white hover:bg-green-400'
-          }`}
-        >
-          {STATUS_BTN_LABELS[order.status] ?? 'Avanzar'}
-        </button>
-      )}
-
-      {order.source === 'LOCAL' && (
-        <p className="text-center text-xs text-gray-500 mt-1">Gestionar desde POS</p>
-      )}
+      {/* ── Botón de acción abajo ── */}
+      <div className="px-4 pb-4">
+        {isDelivered ? (
+          onRecover && (
+            <button
+              onClick={() => onRecover(order.id)}
+              className="w-full py-3 rounded-xl text-base font-bold bg-gray-700 text-gray-200 hover:bg-gray-600 active:scale-95 transition-all"
+            >
+              ↩ Recuperar
+            </button>
+          )
+        ) : (
+          onDeliver && (
+            <button
+              onClick={() => onDeliver(order.id, order.source)}
+              className="w-full py-4 rounded-xl text-lg font-black bg-green-500 text-white hover:bg-green-400 active:scale-95 transition-all shadow-lg shadow-green-900/40 tracking-wide"
+            >
+              ENTREGADO
+            </button>
+          )
+        )}
+      </div>
     </div>
   )
 }
@@ -220,9 +207,10 @@ function OrderCard({
 
 export default function CocinaPage() {
   const [orders, setOrders] = useState<KdsOrder[]>([])
+  const [deliveredOrders, setDeliveredOrders] = useState<KdsOrder[]>([])
   const [loading, setLoading] = useState(true)
   const [filterSource, setFilterSource] = useState<FilterSource>('ALL')
-  const [filterStatus, setFilterStatus] = useState<FilterStatus>('ALL')
+  const [activeTab, setActiveTab] = useState<ActiveTab>('cocina')
   const [lastCount, setLastCount] = useState(0)
   const audioRef = useRef<AudioContext | null>(null)
   const prevIdsRef = useRef<Set<string>>(new Set())
@@ -232,34 +220,32 @@ export default function CocinaPage() {
     try {
       const ctx = audioRef.current ?? new AudioContext()
       audioRef.current = ctx
-
       const osc = ctx.createOscillator()
       const gain = ctx.createGain()
       osc.connect(gain)
       gain.connect(ctx.destination)
-
       osc.type = 'sine'
       osc.frequency.setValueAtTime(880, ctx.currentTime)
       osc.frequency.exponentialRampToValueAtTime(440, ctx.currentTime + 0.3)
       gain.gain.setValueAtTime(0.6, ctx.currentTime)
       gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.5)
-
       osc.start(ctx.currentTime)
       osc.stop(ctx.currentTime + 0.5)
     } catch {
-      // AudioContext puede fallar si no hay interacción previa; ignorar
+      // ignorar
     }
   }, [])
 
-  // ── Fetch combinado (Loyverse + Supabase vía API route) ────────────────────
+  // ── Fetch ──────────────────────────────────────────────────────────────────
   const fetchOrders = useCallback(async () => {
     try {
       const res = await fetch('/api/cocina/orders', { cache: 'no-store' })
       if (!res.ok) return
       const data: KdsOrder[] = await res.json()
+
+      // Solo los no entregados van al estado activo
       setOrders(data)
 
-      // Detectar nuevos pedidos para sonido
       const newIds = new Set(data.map((o) => o.id))
       const incoming = data.filter((o) => !prevIdsRef.current.has(o.id))
       if (prevIdsRef.current.size > 0 && incoming.length > 0) {
@@ -274,56 +260,78 @@ export default function CocinaPage() {
     }
   }, [playBeep])
 
-  // ── Auto-refresh cada 15 segundos (captura cambios de Loyverse) ────────────
   useEffect(() => {
     fetchOrders()
     const interval = setInterval(fetchOrders, 15_000)
     return () => clearInterval(interval)
   }, [fetchOrders])
 
-  // ── Supabase Realtime para pedidos WEB en tiempo real ──────────────────────
+  // ── Supabase Realtime ──────────────────────────────────────────────────────
   useEffect(() => {
     const supabase = createClient()
     const channel = supabase
       .channel('cocina-orders-realtime')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'orders' },
-        () => {
-          // Re-fetch para obtener datos completos incluyendo items
-          fetchOrders()
-        }
-      )
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, () => {
+        fetchOrders()
+      })
       .subscribe()
-
-    return () => {
-      supabase.removeChannel(channel)
-    }
+    return () => { supabase.removeChannel(channel) }
   }, [fetchOrders])
 
-  // ── Cambiar estado de pedido WEB ───────────────────────────────────────────
-  const handleStatusChange = async (id: string, newStatus: string) => {
-    // Actualizar optimistamente en UI
-    setOrders((prev) =>
-      prev.map((o) => (o.id === id ? { ...o, status: newStatus } : o))
-    )
+  // ── Marcar como ENTREGADO ──────────────────────────────────────────────────
+  const handleDeliver = useCallback(async (id: string, source: 'WEB' | 'LOCAL') => {
+    // Encontrar el pedido
+    const order = orders.find((o) => o.id === id)
+    if (!order) return
 
-    try {
-      await fetch('/api/admin/orders', {
+    // Moverlo al historial local inmediatamente
+    const deliveredOrder = { ...order, status: 'delivered' }
+    setOrders((prev) => prev.filter((o) => o.id !== id))
+    setDeliveredOrders((prev) => [deliveredOrder, ...prev])
+
+    // Si es WEB, actualizar en Supabase
+    if (source === 'WEB') {
+      try {
+        await fetch('/api/admin/orders', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id, status: 'delivered' }),
+        })
+      } catch {
+        // Si falla, revertir
+        setDeliveredOrders((prev) => prev.filter((o) => o.id !== id))
+        setOrders((prev) => [order, ...prev])
+      }
+    }
+    // Para LOCAL: solo se oculta de la vista (no se toca Loyverse)
+  }, [orders])
+
+  // ── Recuperar pedido desde historial ──────────────────────────────────────
+  const handleRecover = useCallback((id: string) => {
+    const order = deliveredOrders.find((o) => o.id === id)
+    if (!order) return
+    const recoveredOrder = { ...order, status: order.source === 'WEB' ? 'ready' : 'confirmed' }
+    setDeliveredOrders((prev) => prev.filter((o) => o.id !== id))
+    setOrders((prev) => [recoveredOrder, ...prev])
+
+    // Si es WEB, actualizar en Supabase
+    if (order.source === 'WEB') {
+      fetch('/api/admin/orders', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id, status: newStatus }),
-      })
-    } catch {
-      // Revertir si falla — el próximo fetch lo corregirá
-      fetchOrders()
+        body: JSON.stringify({ id, status: 'ready' }),
+      }).catch(() => {})
     }
-  }
+  }, [deliveredOrders])
 
   // ── Filtros ────────────────────────────────────────────────────────────────
-  const filtered = orders.filter((o) => {
+  const activeOrders = orders.filter((o) => {
     if (filterSource !== 'ALL' && o.source !== filterSource) return false
-    if (filterStatus !== 'ALL' && o.status !== filterStatus) return false
+    return true
+  })
+
+  const filteredDelivered = deliveredOrders.filter((o) => {
+    if (filterSource !== 'ALL' && o.source !== filterSource) return false
     return true
   })
 
@@ -340,17 +348,22 @@ export default function CocinaPage() {
           <div>
             <h1 className="text-xl font-black leading-none">COCINA</h1>
             <p className="text-gray-400 text-xs">
-              {filtered.length} pedidos visibles
-              {pendingCount > 0 && (
-                <span className="ml-2 bg-yellow-400 text-yellow-900 px-2 py-0.5 rounded-full text-xs font-bold">
-                  {pendingCount} pendientes
-                </span>
+              {activeTab === 'cocina' ? (
+                <>
+                  {activeOrders.length} pedidos activos
+                  {pendingCount > 0 && (
+                    <span className="ml-2 bg-yellow-400 text-yellow-900 px-2 py-0.5 rounded-full text-xs font-bold">
+                      {pendingCount} pendientes
+                    </span>
+                  )}
+                </>
+              ) : (
+                <>{filteredDelivered.length} entregados hoy</>
               )}
             </p>
           </div>
         </div>
 
-        {/* Indicador de actividad */}
         <div className="flex items-center gap-2 text-xs text-gray-500">
           {lastCount > 0 && (
             <span
@@ -365,79 +378,112 @@ export default function CocinaPage() {
         </div>
       </header>
 
-      {/* ── Filtros ── */}
-      <div className="flex flex-wrap items-center gap-2 px-4 py-2 bg-gray-900 border-b border-gray-800 shrink-0">
-        {/* Origen */}
-        <div className="flex gap-1 bg-gray-800 rounded-xl p-1">
-          {(['ALL', 'WEB', 'LOCAL'] as FilterSource[]).map((s) => (
-            <button
-              key={s}
-              onClick={() => setFilterSource(s)}
-              className={`px-3 py-1 rounded-lg text-sm font-bold transition-all ${
-                filterSource === s
-                  ? 'bg-white text-gray-900'
-                  : 'text-gray-400 hover:text-white'
-              }`}
-            >
-              {s === 'ALL' ? 'Todos' : s}
-            </button>
-          ))}
+      {/* ── Tabs principales + Filtro de origen ── */}
+      <div className="flex items-center justify-between px-4 py-2 bg-gray-900 border-b border-gray-800 shrink-0 gap-3">
+        {/* Tabs */}
+        <div className="flex bg-gray-800 rounded-xl p-1 gap-1">
+          <button
+            onClick={() => setActiveTab('cocina')}
+            className={`px-4 py-2 rounded-lg text-sm font-bold transition-all flex items-center gap-1.5 ${
+              activeTab === 'cocina'
+                ? 'bg-white text-gray-900'
+                : 'text-gray-400 hover:text-white'
+            }`}
+          >
+            En cocina
+            {orders.length > 0 && (
+              <span className={`text-xs px-1.5 py-0.5 rounded-full font-black ${activeTab === 'cocina' ? 'bg-gray-900 text-white' : 'bg-gray-600 text-gray-200'}`}>
+                {orders.length}
+              </span>
+            )}
+          </button>
+          <button
+            onClick={() => setActiveTab('entregados')}
+            className={`px-4 py-2 rounded-lg text-sm font-bold transition-all flex items-center gap-1.5 ${
+              activeTab === 'entregados'
+                ? 'bg-white text-gray-900'
+                : 'text-gray-400 hover:text-white'
+            }`}
+          >
+            Entregados
+            {deliveredOrders.length > 0 && (
+              <span className={`text-xs px-1.5 py-0.5 rounded-full font-black ${activeTab === 'entregados' ? 'bg-gray-900 text-white' : 'bg-green-700 text-green-100'}`}>
+                {deliveredOrders.length}
+              </span>
+            )}
+          </button>
         </div>
 
-        {/* Estado */}
-        <div className="flex gap-1 bg-gray-800 rounded-xl p-1 flex-wrap">
-          {(
-            [
-              { value: 'ALL',       label: 'Todos'     },
-              { value: 'pending',   label: 'Pendientes' },
-              { value: 'confirmed', label: 'Confirmados' },
-              { value: 'ready',     label: 'Listos'     },
-            ] as { value: FilterStatus; label: string }[]
-          ).map(({ value, label }) => (
-            <button
-              key={value}
-              onClick={() => setFilterStatus(value)}
-              className={`px-3 py-1 rounded-lg text-sm font-bold transition-all ${
-                filterStatus === value
-                  ? 'bg-white text-gray-900'
-                  : 'text-gray-400 hover:text-white'
-              }`}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-
-        <button
-          onClick={() => { fetchOrders() }}
-          className="ml-auto px-3 py-1 bg-gray-700 hover:bg-gray-600 rounded-lg text-sm font-bold transition-all"
-        >
-          ↻ Refrescar
-        </button>
-      </div>
-
-      {/* ── Grid de pedidos ── */}
-      <main className="flex-1 overflow-y-auto p-4">
-        {loading ? (
-          <div className="flex items-center justify-center h-full">
-            <div className="text-gray-400 text-xl animate-pulse">Cargando pedidos...</div>
-          </div>
-        ) : filtered.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-full gap-4 text-gray-600">
-            <span className="text-6xl">🍽️</span>
-            <p className="text-xl font-semibold">Sin pedidos activos</p>
-            <p className="text-sm">Los nuevos pedidos aparecen automáticamente</p>
-          </div>
-        ) : (
-          <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-            {filtered.map((order) => (
-              <OrderCard
-                key={order.id}
-                order={order}
-                onStatusChange={handleStatusChange}
-              />
+        {/* Filtro origen + Refrescar */}
+        <div className="flex items-center gap-2">
+          <div className="flex gap-1 bg-gray-800 rounded-xl p-1">
+            {(['ALL', 'WEB', 'LOCAL'] as FilterSource[]).map((s) => (
+              <button
+                key={s}
+                onClick={() => setFilterSource(s)}
+                className={`px-3 py-1 rounded-lg text-sm font-bold transition-all ${
+                  filterSource === s
+                    ? 'bg-white text-gray-900'
+                    : 'text-gray-400 hover:text-white'
+                }`}
+              >
+                {s === 'ALL' ? 'Todos' : s}
+              </button>
             ))}
           </div>
+          <button
+            onClick={fetchOrders}
+            className="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 rounded-lg text-sm font-bold transition-all"
+          >
+            ↻
+          </button>
+        </div>
+      </div>
+
+      {/* ── Contenido principal ── */}
+      <main className="flex-1 overflow-y-auto p-4">
+        {activeTab === 'cocina' ? (
+          loading ? (
+            <div className="flex items-center justify-center h-full">
+              <div className="text-gray-400 text-xl animate-pulse">Cargando pedidos...</div>
+            </div>
+          ) : activeOrders.length === 0 ? (
+            <div className="flex flex-col items-center justify-center h-full gap-4 text-gray-600">
+              <span className="text-6xl">🍽️</span>
+              <p className="text-xl font-semibold">Sin pedidos activos</p>
+              <p className="text-sm">Los nuevos pedidos aparecen automáticamente</p>
+            </div>
+          ) : (
+            <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+              {activeOrders.map((order) => (
+                <OrderCard
+                  key={order.id}
+                  order={order}
+                  onDeliver={handleDeliver}
+                />
+              ))}
+            </div>
+          )
+        ) : (
+          // ── Tab Entregados ──
+          filteredDelivered.length === 0 ? (
+            <div className="flex flex-col items-center justify-center h-full gap-4 text-gray-600">
+              <span className="text-6xl">✅</span>
+              <p className="text-xl font-semibold">Sin pedidos entregados aún</p>
+              <p className="text-sm">Los pedidos marcados como entregados aparecen aquí</p>
+            </div>
+          ) : (
+            <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+              {filteredDelivered.map((order) => (
+                <OrderCard
+                  key={order.id}
+                  order={order}
+                  onRecover={handleRecover}
+                  isDelivered
+                />
+              ))}
+            </div>
+          )
         )}
       </main>
     </div>
