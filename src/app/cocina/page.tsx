@@ -236,6 +236,8 @@ export default function CocinaPage() {
   const [lastCount, setLastCount] = useState(0)
   const audioRef = useRef<AudioContext | null>(null)
   const prevIdsRef = useRef<Set<string>>(new Set())
+  // IDs de pedidos marcados como entregados localmente — evita que vuelvan al hacer fetch
+  const dismissedIdsRef = useRef<Set<string>>(new Set())
 
   // ── Sonido de notificación ──────────────────────────────────────────────────
   const playBeep = useCallback(() => {
@@ -263,9 +265,11 @@ export default function CocinaPage() {
     try {
       const res = await fetch('/api/cocina/orders', { cache: 'no-store' })
       if (!res.ok) return
-      const data: KdsOrder[] = await res.json()
+      const raw: KdsOrder[] = await res.json()
 
-      // Solo los no entregados van al estado activo
+      // Excluir pedidos ya marcados como entregados localmente
+      const data = raw.filter((o) => !dismissedIdsRef.current.has(o.id))
+
       setOrders(data)
 
       const newIds = new Set(data.map((o) => o.id))
@@ -306,6 +310,9 @@ export default function CocinaPage() {
     const order = orders.find((o) => o.id === id)
     if (!order) return
 
+    // Agregar a dismissedIds para que no vuelva en futuros fetches
+    dismissedIdsRef.current.add(id)
+
     // Moverlo al historial local inmediatamente
     const deliveredOrder = { ...order, status: 'delivered' }
     setOrders((prev) => prev.filter((o) => o.id !== id))
@@ -314,24 +321,30 @@ export default function CocinaPage() {
     // Si es WEB, actualizar en Supabase
     if (source === 'WEB') {
       try {
-        await fetch('/api/admin/orders', {
+        const res = await fetch('/api/admin/orders', {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ id, status: 'delivered' }),
         })
+        if (!res.ok) throw new Error('PUT failed')
       } catch {
-        // Si falla, revertir
+        // Si falla, revertir: quitar de dismissed y restaurar en activos
+        dismissedIdsRef.current.delete(id)
         setDeliveredOrders((prev) => prev.filter((o) => o.id !== id))
         setOrders((prev) => [order, ...prev])
       }
     }
-    // Para LOCAL: solo se oculta de la vista (no se toca Loyverse)
+    // Para LOCAL: dismissedIds es la única forma de ocultarlo (Loyverse no se modifica)
   }, [orders])
 
   // ── Recuperar pedido desde historial ──────────────────────────────────────
   const handleRecover = useCallback((id: string) => {
     const order = deliveredOrders.find((o) => o.id === id)
     if (!order) return
+
+    // Quitar de dismissedIds para que el fetch lo vuelva a incluir
+    dismissedIdsRef.current.delete(id)
+
     const recoveredOrder = { ...order, status: order.source === 'WEB' ? 'ready' : 'confirmed' }
     setDeliveredOrders((prev) => prev.filter((o) => o.id !== id))
     setOrders((prev) => [recoveredOrder, ...prev])
