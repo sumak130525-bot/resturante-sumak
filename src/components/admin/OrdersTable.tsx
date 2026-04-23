@@ -147,6 +147,15 @@ function OrderCard({ order, onUpdateStatus, isNew }: OrderCardProps) {
         </div>
         <div className="flex items-center gap-2 flex-wrap justify-end">
           <ElapsedBadge createdAt={order.created_at} overdue={overdue} />
+          {order.channel === 'whatsapp' ? (
+            <span className="text-xs font-bold px-2.5 py-1 rounded-full border bg-[#dcfce7] text-[#16a34a] border-[#86efac]">
+              WHATSAPP
+            </span>
+          ) : (
+            <span className="text-xs font-bold px-2.5 py-1 rounded-full border bg-purple-50 text-purple-700 border-purple-300">
+              WEB
+            </span>
+          )}
           <span className={cn('text-xs font-bold px-2.5 py-1 rounded-full border', config.badgeClass)}>
             {config.label}
           </span>

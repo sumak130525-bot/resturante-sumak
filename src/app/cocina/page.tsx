@@ -73,6 +73,7 @@ type KdsOrder = {
   total: number
   notes: string | null
   created_at: string
+  channel?: 'web' | 'whatsapp'
   orderNumber?: string
   diningOption?: string
   paymentMethod?: string
@@ -208,12 +209,14 @@ function OrderCard({
         <div className="flex flex-wrap gap-1 mt-1">
           <span
             className={`text-xs font-bold px-2 py-0.5 rounded-full ${
-              order.source === 'WEB'
+              order.source === 'WEB' && order.channel === 'whatsapp'
+                ? 'bg-[#25D366]/20 text-[#25D366]'
+                : order.source === 'WEB'
                 ? 'bg-purple-900/80 text-purple-200'
                 : 'bg-orange-900/80 text-orange-200'
             }`}
           >
-            {order.source}
+            {order.source === 'WEB' && order.channel === 'whatsapp' ? 'WHATSAPP' : order.source}
           </span>
           <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-black/30 text-white/80">
             {order.number}

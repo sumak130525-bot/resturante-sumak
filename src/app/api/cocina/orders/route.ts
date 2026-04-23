@@ -23,6 +23,7 @@ export type KdsOrder = {
   total: number
   notes: string | null
   created_at: string
+  channel?: 'web' | 'whatsapp'
   // Campos extra Loyverse (LOCAL)
   orderNumber?: string      // campo 'order' del receipt (ej: 'MESA 8')
   diningOption?: string     // campo 'dining_option' (ej: 'Comer dentro')
@@ -68,6 +69,7 @@ async function getWebOrders(): Promise<KdsOrder[]> {
     number: `W-${String(idx + 1).padStart(3, '0')}`,
     customer: o.customer_name,
     status: o.status,
+    channel: (o.channel === 'whatsapp' ? 'whatsapp' : 'web') as 'web' | 'whatsapp',
     tableNumber: o.table_number ?? o.mesa ?? null,
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     items: (o.order_items ?? []).map((i: any) => ({

@@ -141,7 +141,7 @@ async function syncLoyverse(
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
-    const { customer_name, customer_phone, notes, items } = body
+    const { customer_name, customer_phone, notes, items, channel } = body
 
     if (!customer_name || !items || !Array.isArray(items) || items.length === 0) {
       return NextResponse.json(
@@ -194,6 +194,7 @@ export async function POST(request: NextRequest) {
         notes: notes || null,
         total,
         status: 'pending',
+        channel: channel === 'whatsapp' ? 'whatsapp' : 'web',
       })
       .select()
       .single() as { data: { id: string } | null; error: { message: string } | null }

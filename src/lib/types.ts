@@ -28,6 +28,7 @@ export type Order = {
   total: number
   notes: string | null
   created_at: string
+  channel?: 'web' | 'whatsapp'
   order_items?: OrderItem[]
 }
 
@@ -74,6 +75,7 @@ type OrderRow = {
   total: number
   notes: string | null
   created_at: string
+  channel: string | null
 }
 
 type OrderItemRow = {
