@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { ChevronLeft, CheckCircle, Loader2, Send, Receipt, CreditCard } from 'lucide-react'
+import { ChevronLeft, Loader2, Receipt, CreditCard } from 'lucide-react'
 import { formatPrice, cn } from '@/lib/utils'
 import type { CartItem } from '@/lib/types'
 
@@ -13,17 +13,14 @@ interface OrderFormProps {
   mesa?: string | null
 }
 
-export function OrderForm({ cart, total, onBack, onSuccess, mesa }: OrderFormProps) {
+export function OrderForm({ cart, total, onBack, mesa }: OrderFormProps) {
   const [name, setName] = useState('')
   const [phone, setPhone] = useState('')
   const [notes, setNotes] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [done, setDone] = useState(false)
-  const [orderId, setOrderId] = useState<string | null>(null)
-  const [paymentLoading, setPaymentLoading] = useState(false)
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handlePagar = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!name.trim()) {
       setError('Por favor ingresa tu nombre.')
@@ -33,108 +30,50 @@ export function OrderForm({ cart, total, onBack, onSuccess, mesa }: OrderFormPro
     setLoading(true)
 
     try {
-      const res = await fetch('/api/orders', {
+      const notesValue = notes.trim()
+        ? mesa
+          ? `[Mesa ${mesa}] ${notes.trim()}`
+          : notes.trim()
+        : mesa
+        ? `[Mesa ${mesa}]`
+        : null
+
+      const items = cart.map((c) => ({
+        menu_item_id: c.menu_item.id,
+        quantity: c.quantity,
+        unit_price: c.menu_item.price,
+        title: c.menu_item.name,
+      }))
+
+      const res = await fetch('/api/payments/create-preference', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           customer_name: name.trim(),
           customer_phone: phone.trim() || null,
-          notes: notes.trim() ? `[Mesa ${mesa}] ${notes.trim()}` : mesa ? `[Mesa ${mesa}]` : null,
-          items: cart.map((c) => ({
-            menu_item_id: c.menu_item.id,
-            quantity: c.quantity,
-            unit_price: c.menu_item.price,
-          })),
+          notes: notesValue,
+          mesa: mesa ?? null,
+          channel: 'web',
+          items,
         }),
       })
 
-      if (!res.ok) {
-        const data = await res.json()
-        throw new Error(data.error ?? 'Error al crear el pedido')
-      }
-
       const data = await res.json()
-      setOrderId(data.order_id ?? null)
-      setDone(true)
-      setTimeout(() => onSuccess(), 2500)
+      if (!res.ok) throw new Error(data.error ?? 'Error al crear preferencia de pago')
+
+      if (data.init_point) {
+        window.location.href = data.init_point
+      } else {
+        throw new Error('No se recibió link de pago')
+      }
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Error desconocido')
-    } finally {
       setLoading(false)
     }
   }
 
-  /* ── Success state ── */
-  const handlePagarMercadoPago = async () => {
-    if (!orderId || paymentLoading) return
-    setPaymentLoading(true)
-    try {
-      const res = await fetch('/api/payments/create-preference', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ order_id: orderId }),
-      })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error ?? 'Error al crear preferencia')
-      if (data.init_point) {
-        window.location.href = data.init_point
-      }
-    } catch (err) {
-      console.error('[MercadoPago] Error:', err)
-    } finally {
-      setPaymentLoading(false)
-    }
-  }
-
-  if (done) {
-    return (
-      <div className="flex-1 flex flex-col items-center justify-center gap-5 p-8 text-center animate-scale-in">
-        <div className="w-20 h-20 rounded-full bg-emerald-100 flex items-center justify-center">
-          <CheckCircle size={44} className="text-emerald-500" strokeWidth={1.5} />
-        </div>
-        <div>
-          <h3 className="font-serif text-2xl font-bold text-sumak-brown mb-2">
-            ¡Pedido recibido!
-          </h3>
-          <p className="text-sumak-brown-light text-sm leading-relaxed max-w-xs mx-auto">
-            Tu pedido fue registrado. Completá el pago para que el equipo lo empiece a preparar.
-          </p>
-        </div>
-        {orderId && (
-          <button
-            onClick={handlePagarMercadoPago}
-            disabled={paymentLoading}
-            className={cn(
-              'w-full max-w-xs flex items-center justify-center gap-2.5',
-              'bg-[#009ee3] text-white font-bold',
-              'py-3.5 px-6 rounded-pill text-base',
-              'transition-all duration-300',
-              'hover:bg-[#0085c3] hover:scale-[1.02]',
-              'active:scale-[0.98]',
-              paymentLoading && 'opacity-70 cursor-not-allowed'
-            )}
-          >
-            {paymentLoading ? (
-              <>
-                <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                Redirigiendo…
-              </>
-            ) : (
-              <>
-                <CreditCard size={18} />
-                Pagar con MercadoPago
-              </>
-            )}
-          </button>
-        )}
-        <div className="w-16 h-0.5 bg-gradient-to-r from-transparent via-sumak-gold to-transparent rounded-full" />
-        <p className="text-xs text-sumak-brown-light/60">Cerrando en un momento…</p>
-      </div>
-    )
-  }
-
   return (
-    <form onSubmit={handleSubmit} className="flex-1 flex flex-col overflow-hidden animate-fade-in">
+    <form onSubmit={handlePagar} className="flex-1 flex flex-col overflow-hidden animate-fade-in">
       {/* Scrollable body */}
       <div className="flex-1 overflow-y-auto px-5 py-4 space-y-5">
         {/* Back link */}
@@ -235,19 +174,23 @@ export function OrderForm({ cart, total, onBack, onSuccess, mesa }: OrderFormPro
           disabled={loading}
           className={cn(
             'w-full flex items-center justify-center gap-2.5',
-            'btn-primary py-4 text-base rounded-pill',
-            loading && 'opacity-80'
+            'bg-[#009ee3] text-white font-bold',
+            'py-4 text-base rounded-pill',
+            'transition-all duration-300',
+            'hover:bg-[#0085c3] hover:scale-[1.02]',
+            'active:scale-[0.98]',
+            loading && 'opacity-80 cursor-not-allowed'
           )}
         >
           {loading ? (
             <>
               <Loader2 size={18} className="animate-spin" />
-              Enviando pedido…
+              Redirigiendo a MercadoPago…
             </>
           ) : (
             <>
-              <Send size={16} />
-              Enviar pedido
+              <CreditCard size={18} />
+              Pagar con MercadoPago
             </>
           )}
         </button>

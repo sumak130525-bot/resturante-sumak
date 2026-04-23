@@ -50,43 +50,30 @@ export function CartDrawer({
         menu_item_id: c.menu_item.id,
         quantity: c.quantity,
         unit_price: c.menu_item.price,
+        title: c.menu_item.name,
       }))
-      const res = await fetch('/api/orders', {
+      const res = await fetch('/api/payments/create-preference', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           customer_name: waName.trim() || 'Cliente WhatsApp',
           customer_phone: waPhone.trim() || null,
           notes: mesa ? `Mesa: ${mesa}` : null,
-          items,
+          mesa: mesa ?? null,
           channel: 'whatsapp',
+          items,
         }),
       })
       if (res.ok) {
-        const orderData = await res.json().catch(() => ({}))
-        const orderId = orderData.order_id
-        if (orderId) {
-          try {
-            const prefRes = await fetch('/api/payments/create-preference', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ order_id: orderId }),
-            })
-            if (prefRes.ok) {
-              const prefData = await prefRes.json()
-              paymentLink = prefData.init_point ?? null
-            }
-          } catch (prefErr) {
-            console.error('[WhatsApp order] Error creando preferencia MP:', prefErr)
-          }
-        }
+        const prefData = await res.json().catch(() => ({}))
+        paymentLink = prefData.init_point ?? null
       } else {
         const err = await res.json().catch(() => ({}))
-        console.error('[WhatsApp order] POST /api/orders failed:', res.status, err)
+        console.error('[WhatsApp] Error creando preferencia MP:', res.status, err)
       }
     } catch (err) {
-      // Si falla el registro, igual abrimos WhatsApp
-      console.error('[WhatsApp order] fetch error:', err)
+      // Si falla la preferencia, igual abrimos WhatsApp sin link de pago
+      console.error('[WhatsApp] fetch error:', err)
     } finally {
       setWhatsappLoading(false)
       setShowWhatsAppForm(false)

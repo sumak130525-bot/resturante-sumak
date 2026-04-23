@@ -1,54 +1,39 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { MercadoPagoConfig, Preference } from 'mercadopago'
-import { createServerClient, type CookieOptions } from '@supabase/ssr'
-import { cookies } from 'next/headers'
 
 const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL ?? 'https://resturante-sumak.vercel.app'
 
-async function getServiceClient() {
-  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
-  if (!serviceKey) return null
-  const cookieStore = await cookies()
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    serviceKey,
-    {
-      cookies: {
-        getAll() { return cookieStore.getAll() },
-        setAll(cookiesToSet: { name: string; value: string; options: CookieOptions }[]) {
-          try { cookiesToSet.forEach(({ name, value, options }) => cookieStore.set(name, value, options)) } catch {}
-        },
-      },
-    }
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  ) as any
-}
-
-async function getAnonClient() {
-  const cookieStore = await cookies()
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        getAll() { return cookieStore.getAll() },
-        setAll(cookiesToSet: { name: string; value: string; options: CookieOptions }[]) {
-          try { cookiesToSet.forEach(({ name, value, options }) => cookieStore.set(name, value, options)) } catch {}
-        },
-      },
-    }
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  ) as any
+type OrderItemInput = {
+  menu_item_id: string
+  quantity: number
+  unit_price: number
+  title?: string
 }
 
 export async function POST(request: NextRequest) {
   try {
-    const { order_id } = await request.json()
+    const body = await request.json()
+    const {
+      items,
+      customer_name,
+      customer_phone,
+      notes,
+      mesa,
+      channel,
+    }: {
+      items: OrderItemInput[]
+      customer_name: string
+      customer_phone?: string | null
+      notes?: string | null
+      mesa?: string | null
+      channel?: 'web' | 'whatsapp'
+    } = body
 
-    if (!order_id) {
-      return NextResponse.json({ error: 'order_id requerido' }, { status: 400 })
+    if (!customer_name || !items || !Array.isArray(items) || items.length === 0) {
+      return NextResponse.json(
+        { error: 'Datos incompletos: se requiere customer_name e items' },
+        { status: 400 }
+      )
     }
 
     const accessToken = process.env.MERCADOPAGO_ACCESS_TOKEN
@@ -56,37 +41,17 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'MercadoPago no configurado' }, { status: 500 })
     }
 
-    const supabase = (await getServiceClient()) ?? (await getAnonClient())
-
-    // Fetch order + items
-    const { data: order, error: orderError } = await supabase
-      .from('orders')
-      .select('id, customer_name, total')
-      .eq('id', order_id)
-      .single()
-
-    if (orderError || !order) {
-      return NextResponse.json({ error: 'Pedido no encontrado' }, { status: 404 })
-    }
-
-    const { data: orderItems, error: itemsError } = await supabase
-      .from('order_items')
-      .select('quantity, unit_price, menu_items(name)')
-      .eq('order_id', order_id)
-
-    if (itemsError || !orderItems || orderItems.length === 0) {
-      return NextResponse.json({ error: 'Items del pedido no encontrados' }, { status: 404 })
-    }
-
     // Build MercadoPago preference items
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const mpItems = orderItems.map((oi: any) => ({
-      id: order_id,
-      title: oi.menu_items?.name ?? 'Producto',
-      quantity: oi.quantity,
-      unit_price: Math.round(oi.unit_price),
+    const mpItems = items.map((item) => ({
+      id: item.menu_item_id,
+      title: item.title ?? 'Producto',
+      quantity: item.quantity,
+      unit_price: Math.round(item.unit_price),
       currency_id: 'ARS',
     }))
+
+    // Use a temporary external_reference UUID; the real order will be created by the webhook
+    const tempRef = `pre_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`
 
     const mp = new MercadoPagoConfig({ accessToken })
     const preference = new Preference(mp)
@@ -95,15 +60,28 @@ export async function POST(request: NextRequest) {
       body: {
         items: mpItems,
         back_urls: {
-          success: `${BASE_URL}/pedido/estado?order_id=${order_id}&status=approved`,
-          failure: `${BASE_URL}/pedido/estado?order_id=${order_id}&status=failure`,
-          pending: `${BASE_URL}/pedido/estado?order_id=${order_id}&status=pending`,
+          success: `${BASE_URL}/pedido/estado?status=approved`,
+          failure: `${BASE_URL}/pedido/estado?status=failure`,
+          pending: `${BASE_URL}/pedido/estado?status=pending`,
         },
         auto_return: 'approved',
-        external_reference: order_id,
+        external_reference: tempRef,
         notification_url: `${BASE_URL}/api/payments/webhook`,
         payer: {
-          name: order.customer_name,
+          name: customer_name,
+        },
+        // Store order data in metadata so the webhook can create the real order
+        metadata: {
+          customer_name,
+          customer_phone: customer_phone ?? null,
+          notes: notes ?? null,
+          mesa: mesa ?? null,
+          channel: channel ?? 'web',
+          items: items.map((i) => ({
+            menu_item_id: i.menu_item_id,
+            quantity: i.quantity,
+            unit_price: i.unit_price,
+          })),
         },
       },
     })
