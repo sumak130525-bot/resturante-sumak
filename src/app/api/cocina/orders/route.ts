@@ -8,6 +8,7 @@ export type KdsItem = {
   name: string
   quantity: number
   price: number
+  modifiers?: string[]
 }
 
 export type KdsOrder = {
@@ -20,6 +21,12 @@ export type KdsOrder = {
   total: number
   notes: string | null
   created_at: string
+  // Campos extra Loyverse (LOCAL)
+  orderNumber?: string      // campo 'order' del receipt (ej: 'MESA 8')
+  diningOption?: string     // campo 'dining_option' (ej: 'Comer dentro')
+  paymentMethod?: string    // payments[0].name (ej: 'Efectivo')
+  // Campos extra WEB
+  tableNumber?: string      // mesa del pedido web (del parámetro ?mesa=)
 }
 
 // ─── Supabase ─────────────────────────────────────────────────────────────────
@@ -59,6 +66,7 @@ async function getWebOrders(): Promise<KdsOrder[]> {
     number: `W-${String(idx + 1).padStart(3, '0')}`,
     customer: o.customer_name,
     status: o.status,
+    tableNumber: o.table_number ?? o.mesa ?? null,
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     items: (o.order_items ?? []).map((i: any) => ({
       name: i.menu_items?.name ?? 'Ítem',
@@ -73,11 +81,22 @@ async function getWebOrders(): Promise<KdsOrder[]> {
 
 // ─── Loyverse ─────────────────────────────────────────────────────────────────
 
+type LoyverseLineModifier = {
+  name?: string
+  option?: string
+}
+
 type LoyverseLineItem = {
   item_name?: string
   variant_name?: string
   quantity: number
   price: number
+  line_modifiers?: LoyverseLineModifier[]
+}
+
+type LoyversePayment = {
+  name?: string
+  [key: string]: unknown
 }
 
 type LoyverseReceipt = {
@@ -86,6 +105,9 @@ type LoyverseReceipt = {
   source?: string
   total_money: number
   note?: string
+  order?: string
+  dining_option?: string
+  payments?: LoyversePayment[]
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   line_items?: LoyverseLineItem[]
   [key: string]: unknown
@@ -119,13 +141,24 @@ async function getLocalOrders(): Promise<KdsOrder[]> {
       id: `loyverse-${r.receipt_number}`,
       source: 'LOCAL' as const,
       number: `L-${r.receipt_number ?? String(idx + 1).padStart(3, '0')}`,
-      customer: 'Mesa / POS',
+      customer: r.order ?? 'Mesa / POS',
       status: 'confirmed',
-      items: (r.line_items ?? []).map((li) => ({
-        name: li.item_name ?? li.variant_name ?? 'Ítem',
-        quantity: li.quantity,
-        price: li.price,
-      })),
+      // Campos detallados Loyverse
+      orderNumber: r.order ?? undefined,
+      diningOption: r.dining_option ?? undefined,
+      paymentMethod: r.payments?.[0]?.name ?? undefined,
+      items: (r.line_items ?? []).map((li) => {
+        // Construir lista de modificadores como strings legibles
+        const modifiers = (li.line_modifiers ?? [])
+          .map((m) => [m.name, m.option].filter(Boolean).join(': '))
+          .filter(Boolean)
+        return {
+          name: li.item_name ?? li.variant_name ?? 'Ítem',
+          quantity: li.quantity,
+          price: li.price,
+          modifiers: modifiers.length > 0 ? modifiers : undefined,
+        }
+      }),
       total: r.total_money,
       notes: r.note ?? null,
       created_at: r.receipt_date,

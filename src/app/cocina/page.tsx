@@ -9,6 +9,7 @@ type KdsItem = {
   name: string
   quantity: number
   price: number
+  modifiers?: string[]
 }
 
 type KdsOrder = {
@@ -21,6 +22,12 @@ type KdsOrder = {
   total: number
   notes: string | null
   created_at: string
+  // Campos extra Loyverse (LOCAL)
+  orderNumber?: string
+  diningOption?: string
+  paymentMethod?: string
+  // Campos extra WEB
+  tableNumber?: string
 }
 
 type FilterSource = 'ALL' | 'WEB' | 'LOCAL'
@@ -79,16 +86,26 @@ function OrderCard({
   const sc = STATUS_COLORS[order.status] ?? STATUS_COLORS.pending
   const nextStatus = STATUS_TRANSITIONS[order.status]
 
+  // Etiqueta de dining option (LOCAL)
+  const diningBadge = order.diningOption
+    ? {
+        label: order.diningOption,
+        cls: order.diningOption.toLowerCase().includes('llevar')
+          ? 'bg-red-600 text-white'
+          : 'bg-green-600 text-white',
+      }
+    : null
+
   return (
     <div
       className={`relative flex flex-col bg-gray-900 rounded-2xl border-2 ${sc.border} p-4 gap-3 shadow-xl`}
     >
       {/* Header */}
       <div className="flex items-start justify-between gap-2">
-        <div className="flex flex-col gap-1">
+        <div className="flex flex-col gap-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
             <span
-              className={`text-xs font-bold px-2 py-0.5 rounded-full ${
+              className={`text-xs font-bold px-2 py-0.5 rounded-full shrink-0 ${
                 order.source === 'WEB'
                   ? 'bg-purple-600 text-white'
                   : 'bg-orange-500 text-white'
@@ -103,11 +120,43 @@ function OrderCard({
               {sc.label}
             </span>
           </div>
-          <span className="text-gray-400 text-sm truncate max-w-[180px]">{order.customer}</span>
+
+          {/* ── Número de mesa / cliente GRANDE (lo que busca cocina) ── */}
+          {order.source === 'LOCAL' && order.orderNumber && (
+            <div className="text-white font-black text-2xl leading-tight tracking-wide mt-1">
+              {order.orderNumber}
+            </div>
+          )}
+          {order.source === 'WEB' && (
+            <div className="flex flex-col gap-0.5 mt-1">
+              {order.tableNumber && (
+                <div className="text-white font-black text-2xl leading-tight tracking-wide">
+                  MESA {order.tableNumber}
+                </div>
+              )}
+              <div className="text-gray-300 font-bold text-base leading-tight truncate max-w-[200px]">
+                {order.customer}
+              </div>
+            </div>
+          )}
+
+          {/* Badges: dining option + forma de pago */}
+          <div className="flex flex-wrap gap-1 mt-0.5">
+            {diningBadge && (
+              <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${diningBadge.cls}`}>
+                {diningBadge.label}
+              </span>
+            )}
+            {order.paymentMethod && (
+              <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-gray-700 text-gray-200">
+                {order.paymentMethod}
+              </span>
+            )}
+          </div>
         </div>
 
         {/* Tiempo */}
-        <div className={`text-right text-sm font-mono font-bold ${elapsedColor(order.created_at)}`}>
+        <div className={`text-right text-sm font-mono font-bold shrink-0 ${elapsedColor(order.created_at)}`}>
           {elapsed(order.created_at)}
           <div className="text-gray-500 text-xs font-normal">
             {new Date(order.created_at).toLocaleTimeString('es-CO', {
@@ -119,13 +168,20 @@ function OrderCard({
       </div>
 
       {/* Items */}
-      <ul className="flex flex-col gap-1 border-t border-gray-700 pt-2">
+      <ul className="flex flex-col gap-2 border-t border-gray-700 pt-2">
         {order.items.map((item, i) => (
-          <li key={i} className="flex items-baseline justify-between gap-2 text-white">
+          <li key={i} className="flex items-start gap-2 text-white">
             <span className="text-2xl font-black text-yellow-400 leading-none w-8 shrink-0">
               {item.quantity}×
             </span>
-            <span className="flex-1 text-base font-semibold leading-tight">{item.name}</span>
+            <div className="flex flex-col min-w-0">
+              <span className="text-base font-semibold leading-tight">{item.name}</span>
+              {item.modifiers && item.modifiers.length > 0 && (
+                <span className="text-xs text-cyan-300 leading-snug mt-0.5">
+                  {item.modifiers.join(' · ')}
+                </span>
+              )}
+            </div>
           </li>
         ))}
       </ul>
