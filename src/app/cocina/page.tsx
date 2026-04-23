@@ -1,0 +1,389 @@
+'use client'
+
+import { useEffect, useRef, useState, useCallback } from 'react'
+import { createClient } from '@/lib/supabase/client'
+
+// ─── Tipos ────────────────────────────────────────────────────────────────────
+
+type KdsItem = {
+  name: string
+  quantity: number
+  price: number
+}
+
+type KdsOrder = {
+  id: string
+  source: 'WEB' | 'LOCAL'
+  number: string
+  customer: string
+  status: string
+  items: KdsItem[]
+  total: number
+  notes: string | null
+  created_at: string
+}
+
+type FilterSource = 'ALL' | 'WEB' | 'LOCAL'
+type FilterStatus = 'ALL' | 'pending' | 'confirmed' | 'ready'
+
+// ─── Colores por estado ───────────────────────────────────────────────────────
+
+const STATUS_COLORS: Record<string, { border: string; badge: string; label: string }> = {
+  pending:   { border: 'border-yellow-400', badge: 'bg-yellow-400 text-yellow-900',  label: 'Pendiente'  },
+  confirmed: { border: 'border-blue-400',   badge: 'bg-blue-400 text-blue-900',      label: 'Confirmado' },
+  ready:     { border: 'border-green-400',  badge: 'bg-green-400 text-green-900',    label: 'Listo'      },
+  delivered: { border: 'border-gray-500',   badge: 'bg-gray-500 text-white',         label: 'Entregado'  },
+  cancelled: { border: 'border-red-600',    badge: 'bg-red-600 text-white',          label: 'Cancelado'  },
+}
+
+const STATUS_TRANSITIONS: Record<string, string | null> = {
+  pending:   'confirmed',
+  confirmed: 'ready',
+  ready:     'delivered',
+  delivered: null,
+  cancelled: null,
+}
+
+const STATUS_BTN_LABELS: Record<string, string> = {
+  pending:   'Confirmar',
+  confirmed: 'Listo',
+  ready:     'Entregado',
+}
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function elapsed(created_at: string): string {
+  const diff = Math.floor((Date.now() - new Date(created_at).getTime()) / 1000)
+  if (diff < 60) return `${diff}s`
+  const m = Math.floor(diff / 60)
+  if (m < 60) return `${m}min`
+  return `${Math.floor(m / 60)}h ${m % 60}min`
+}
+
+function elapsedColor(created_at: string): string {
+  const mins = (Date.now() - new Date(created_at).getTime()) / 60000
+  if (mins < 10) return 'text-green-400'
+  if (mins < 20) return 'text-yellow-400'
+  return 'text-red-400'
+}
+
+// ─── Componente Card ──────────────────────────────────────────────────────────
+
+function OrderCard({
+  order,
+  onStatusChange,
+}: {
+  order: KdsOrder
+  onStatusChange: (id: string, newStatus: string) => void
+}) {
+  const sc = STATUS_COLORS[order.status] ?? STATUS_COLORS.pending
+  const nextStatus = STATUS_TRANSITIONS[order.status]
+
+  return (
+    <div
+      className={`relative flex flex-col bg-gray-900 rounded-2xl border-2 ${sc.border} p-4 gap-3 shadow-xl`}
+    >
+      {/* Header */}
+      <div className="flex items-start justify-between gap-2">
+        <div className="flex flex-col gap-1">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span
+              className={`text-xs font-bold px-2 py-0.5 rounded-full ${
+                order.source === 'WEB'
+                  ? 'bg-purple-600 text-white'
+                  : 'bg-orange-500 text-white'
+              }`}
+            >
+              {order.source}
+            </span>
+            <span className="text-white font-bold text-lg leading-none">
+              {order.number}
+            </span>
+            <span className={`text-sm font-semibold ${sc.badge} px-2 py-0.5 rounded-full`}>
+              {sc.label}
+            </span>
+          </div>
+          <span className="text-gray-400 text-sm truncate max-w-[180px]">{order.customer}</span>
+        </div>
+
+        {/* Tiempo */}
+        <div className={`text-right text-sm font-mono font-bold ${elapsedColor(order.created_at)}`}>
+          {elapsed(order.created_at)}
+          <div className="text-gray-500 text-xs font-normal">
+            {new Date(order.created_at).toLocaleTimeString('es-CO', {
+              hour: '2-digit',
+              minute: '2-digit',
+            })}
+          </div>
+        </div>
+      </div>
+
+      {/* Items */}
+      <ul className="flex flex-col gap-1 border-t border-gray-700 pt-2">
+        {order.items.map((item, i) => (
+          <li key={i} className="flex items-baseline justify-between gap-2 text-white">
+            <span className="text-2xl font-black text-yellow-400 leading-none w-8 shrink-0">
+              {item.quantity}×
+            </span>
+            <span className="flex-1 text-base font-semibold leading-tight">{item.name}</span>
+          </li>
+        ))}
+      </ul>
+
+      {/* Notas */}
+      {order.notes && (
+        <p className="text-xs text-yellow-300 italic border-t border-gray-700 pt-2">
+          Nota: {order.notes}
+        </p>
+      )}
+
+      {/* Botón de estado (solo pedidos WEB) */}
+      {order.source === 'WEB' && nextStatus && (
+        <button
+          onClick={() => onStatusChange(order.id, nextStatus)}
+          className={`mt-1 w-full py-3 rounded-xl text-base font-bold transition-all active:scale-95 ${
+            order.status === 'pending'
+              ? 'bg-yellow-400 text-yellow-900 hover:bg-yellow-300'
+              : order.status === 'confirmed'
+              ? 'bg-blue-500 text-white hover:bg-blue-400'
+              : 'bg-green-500 text-white hover:bg-green-400'
+          }`}
+        >
+          {STATUS_BTN_LABELS[order.status] ?? 'Avanzar'}
+        </button>
+      )}
+
+      {order.source === 'LOCAL' && (
+        <p className="text-center text-xs text-gray-500 mt-1">Gestionar desde POS</p>
+      )}
+    </div>
+  )
+}
+
+// ─── Página principal ─────────────────────────────────────────────────────────
+
+export default function CocinaPage() {
+  const [orders, setOrders] = useState<KdsOrder[]>([])
+  const [loading, setLoading] = useState(true)
+  const [filterSource, setFilterSource] = useState<FilterSource>('ALL')
+  const [filterStatus, setFilterStatus] = useState<FilterStatus>('ALL')
+  const [lastCount, setLastCount] = useState(0)
+  const audioRef = useRef<AudioContext | null>(null)
+  const prevIdsRef = useRef<Set<string>>(new Set())
+
+  // ── Sonido de notificación ──────────────────────────────────────────────────
+  const playBeep = useCallback(() => {
+    try {
+      const ctx = audioRef.current ?? new AudioContext()
+      audioRef.current = ctx
+
+      const osc = ctx.createOscillator()
+      const gain = ctx.createGain()
+      osc.connect(gain)
+      gain.connect(ctx.destination)
+
+      osc.type = 'sine'
+      osc.frequency.setValueAtTime(880, ctx.currentTime)
+      osc.frequency.exponentialRampToValueAtTime(440, ctx.currentTime + 0.3)
+      gain.gain.setValueAtTime(0.6, ctx.currentTime)
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.5)
+
+      osc.start(ctx.currentTime)
+      osc.stop(ctx.currentTime + 0.5)
+    } catch {
+      // AudioContext puede fallar si no hay interacción previa; ignorar
+    }
+  }, [])
+
+  // ── Fetch combinado (Loyverse + Supabase vía API route) ────────────────────
+  const fetchOrders = useCallback(async () => {
+    try {
+      const res = await fetch('/api/cocina/orders', { cache: 'no-store' })
+      if (!res.ok) return
+      const data: KdsOrder[] = await res.json()
+      setOrders(data)
+
+      // Detectar nuevos pedidos para sonido
+      const newIds = new Set(data.map((o) => o.id))
+      const incoming = data.filter((o) => !prevIdsRef.current.has(o.id))
+      if (prevIdsRef.current.size > 0 && incoming.length > 0) {
+        playBeep()
+        setLastCount((c) => c + incoming.length)
+      }
+      prevIdsRef.current = newIds
+    } catch {
+      // silencioso
+    } finally {
+      setLoading(false)
+    }
+  }, [playBeep])
+
+  // ── Auto-refresh cada 15 segundos (captura cambios de Loyverse) ────────────
+  useEffect(() => {
+    fetchOrders()
+    const interval = setInterval(fetchOrders, 15_000)
+    return () => clearInterval(interval)
+  }, [fetchOrders])
+
+  // ── Supabase Realtime para pedidos WEB en tiempo real ──────────────────────
+  useEffect(() => {
+    const supabase = createClient()
+    const channel = supabase
+      .channel('cocina-orders-realtime')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'orders' },
+        () => {
+          // Re-fetch para obtener datos completos incluyendo items
+          fetchOrders()
+        }
+      )
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [fetchOrders])
+
+  // ── Cambiar estado de pedido WEB ───────────────────────────────────────────
+  const handleStatusChange = async (id: string, newStatus: string) => {
+    // Actualizar optimistamente en UI
+    setOrders((prev) =>
+      prev.map((o) => (o.id === id ? { ...o, status: newStatus } : o))
+    )
+
+    try {
+      await fetch('/api/admin/orders', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, status: newStatus }),
+      })
+    } catch {
+      // Revertir si falla — el próximo fetch lo corregirá
+      fetchOrders()
+    }
+  }
+
+  // ── Filtros ────────────────────────────────────────────────────────────────
+  const filtered = orders.filter((o) => {
+    if (filterSource !== 'ALL' && o.source !== filterSource) return false
+    if (filterStatus !== 'ALL' && o.status !== filterStatus) return false
+    return true
+  })
+
+  const pendingCount = orders.filter((o) => o.status === 'pending').length
+
+  // ─────────────────────────────────────────────────────────────────────────────
+
+  return (
+    <div className="min-h-screen bg-gray-950 text-white flex flex-col select-none">
+      {/* ── Barra superior ── */}
+      <header className="flex items-center justify-between px-4 py-3 bg-gray-900 border-b border-gray-800 shrink-0">
+        <div className="flex items-center gap-3">
+          <span className="text-2xl">🍳</span>
+          <div>
+            <h1 className="text-xl font-black leading-none">COCINA</h1>
+            <p className="text-gray-400 text-xs">
+              {filtered.length} pedidos visibles
+              {pendingCount > 0 && (
+                <span className="ml-2 bg-yellow-400 text-yellow-900 px-2 py-0.5 rounded-full text-xs font-bold">
+                  {pendingCount} pendientes
+                </span>
+              )}
+            </p>
+          </div>
+        </div>
+
+        {/* Indicador de actividad */}
+        <div className="flex items-center gap-2 text-xs text-gray-500">
+          {lastCount > 0 && (
+            <span
+              className="bg-purple-700 text-white px-2 py-1 rounded-full text-xs font-bold cursor-pointer"
+              onClick={() => setLastCount(0)}
+            >
+              +{lastCount} nuevos
+            </span>
+          )}
+          <span>Actualiza cada 15s</span>
+          <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
+        </div>
+      </header>
+
+      {/* ── Filtros ── */}
+      <div className="flex flex-wrap items-center gap-2 px-4 py-2 bg-gray-900 border-b border-gray-800 shrink-0">
+        {/* Origen */}
+        <div className="flex gap-1 bg-gray-800 rounded-xl p-1">
+          {(['ALL', 'WEB', 'LOCAL'] as FilterSource[]).map((s) => (
+            <button
+              key={s}
+              onClick={() => setFilterSource(s)}
+              className={`px-3 py-1 rounded-lg text-sm font-bold transition-all ${
+                filterSource === s
+                  ? 'bg-white text-gray-900'
+                  : 'text-gray-400 hover:text-white'
+              }`}
+            >
+              {s === 'ALL' ? 'Todos' : s}
+            </button>
+          ))}
+        </div>
+
+        {/* Estado */}
+        <div className="flex gap-1 bg-gray-800 rounded-xl p-1 flex-wrap">
+          {(
+            [
+              { value: 'ALL',       label: 'Todos'     },
+              { value: 'pending',   label: 'Pendientes' },
+              { value: 'confirmed', label: 'Confirmados' },
+              { value: 'ready',     label: 'Listos'     },
+            ] as { value: FilterStatus; label: string }[]
+          ).map(({ value, label }) => (
+            <button
+              key={value}
+              onClick={() => setFilterStatus(value)}
+              className={`px-3 py-1 rounded-lg text-sm font-bold transition-all ${
+                filterStatus === value
+                  ? 'bg-white text-gray-900'
+                  : 'text-gray-400 hover:text-white'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
+        <button
+          onClick={() => { fetchOrders() }}
+          className="ml-auto px-3 py-1 bg-gray-700 hover:bg-gray-600 rounded-lg text-sm font-bold transition-all"
+        >
+          ↻ Refrescar
+        </button>
+      </div>
+
+      {/* ── Grid de pedidos ── */}
+      <main className="flex-1 overflow-y-auto p-4">
+        {loading ? (
+          <div className="flex items-center justify-center h-full">
+            <div className="text-gray-400 text-xl animate-pulse">Cargando pedidos...</div>
+          </div>
+        ) : filtered.length === 0 ? (
+          <div className="flex flex-col items-center justify-center h-full gap-4 text-gray-600">
+            <span className="text-6xl">🍽️</span>
+            <p className="text-xl font-semibold">Sin pedidos activos</p>
+            <p className="text-sm">Los nuevos pedidos aparecen automáticamente</p>
+          </div>
+        ) : (
+          <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            {filtered.map((order) => (
+              <OrderCard
+                key={order.id}
+                order={order}
+                onStatusChange={handleStatusChange}
+              />
+            ))}
+          </div>
+        )}
+      </main>
+    </div>
+  )
+}
