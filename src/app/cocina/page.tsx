@@ -78,6 +78,9 @@ function OrderCard({
   onRecover?: (id: string) => void
   isDelivered?: boolean
 }) {
+  const [singleClicked, setSingleClicked] = useState(false)
+  const singleClickTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
   const sc = STATUS_COLORS[order.status] ?? STATUS_COLORS.pending
 
   const diningBadge = order.diningOption
@@ -91,16 +94,46 @@ function OrderCard({
 
   const orderLabel = getOrderLabel(order)
 
+  const handleHeaderClick = () => {
+    if (isDelivered || !onDeliver) return
+    if (singleClickTimer.current) clearTimeout(singleClickTimer.current)
+    setSingleClicked(true)
+    singleClickTimer.current = setTimeout(() => {
+      setSingleClicked(false)
+    }, 1200)
+  }
+
+  const handleHeaderDoubleClick = () => {
+    if (isDelivered || !onDeliver) return
+    if (singleClickTimer.current) clearTimeout(singleClickTimer.current)
+    setSingleClicked(false)
+    onDeliver(order.id, order.source)
+  }
+
   return (
     <div
       className={`relative flex flex-col bg-gray-900 rounded-2xl border-2 ${sc.border} shadow-xl overflow-hidden`}
     >
-      {/* ── Cabecera con número de mesa GRANDE (estilo KDS Loyverse) ── */}
-      <div className={`${sc.headerBg} px-4 pt-4 pb-3`}>
-        {/* Número de orden grande y llamativo */}
+      {/* ── Cabecera: doble click para entregar ── */}
+      <div
+        className={`${sc.headerBg} px-4 pt-4 pb-3 transition-opacity duration-150 ${
+          !isDelivered && onDeliver ? 'cursor-pointer select-none' : ''
+        } ${singleClicked ? 'opacity-70' : 'opacity-100'}`}
+        onClick={handleHeaderClick}
+        onDoubleClick={handleHeaderDoubleClick}
+        title={!isDelivered && onDeliver ? 'Doble click para entregar' : undefined}
+      >
+        {/* Tooltip de primer click */}
+        {singleClicked && (
+          <div className="absolute top-2 left-1/2 -translate-x-1/2 z-10 bg-black/80 text-white text-xs font-semibold px-3 py-1 rounded-full whitespace-nowrap pointer-events-none">
+            Doble click para entregar
+          </div>
+        )}
+
+        {/* Número de orden */}
         <div className="flex items-start justify-between gap-2">
           <div className="flex-1 min-w-0">
-            <div className="text-white font-black text-5xl leading-none tracking-tight drop-shadow-lg">
+            <div className="text-white font-black text-3xl leading-none tracking-tight drop-shadow-lg">
               {orderLabel}
             </div>
             {/* Sub-info: cliente si es WEB con mesa */}
@@ -177,28 +210,17 @@ function OrderCard({
         )}
       </div>
 
-      {/* ── Botón de acción abajo ── */}
-      <div className="px-4 pb-4">
-        {isDelivered ? (
-          onRecover && (
-            <button
-              onClick={() => onRecover(order.id)}
-              className="w-full py-3 rounded-xl text-base font-bold bg-gray-700 text-gray-200 hover:bg-gray-600 active:scale-95 transition-all"
-            >
-              ↩ Recuperar
-            </button>
-          )
-        ) : (
-          onDeliver && (
-            <button
-              onClick={() => onDeliver(order.id, order.source)}
-              className="w-full py-4 rounded-xl text-lg font-black bg-green-500 text-white hover:bg-green-400 active:scale-95 transition-all shadow-lg shadow-green-900/40 tracking-wide"
-            >
-              ENTREGADO
-            </button>
-          )
-        )}
-      </div>
+      {/* ── Botón Recuperar (solo en tab Entregados) ── */}
+      {isDelivered && onRecover && (
+        <div className="px-4 pb-4">
+          <button
+            onClick={() => onRecover(order.id)}
+            className="w-full py-3 rounded-xl text-base font-bold bg-gray-700 text-gray-200 hover:bg-gray-600 active:scale-95 transition-all"
+          >
+            ↩ Recuperar
+          </button>
+        </div>
+      )}
     </div>
   )
 }
