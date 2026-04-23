@@ -91,6 +91,7 @@ type LoyverseLineItem = {
   variant_name?: string
   quantity: number
   price: number
+  category_id?: string
   line_modifiers?: LoyverseLineModifier[]
 }
 
@@ -113,6 +114,38 @@ type LoyverseReceipt = {
   [key: string]: unknown
 }
 
+type LoyverseCategory = {
+  id: string
+  name: string
+  [key: string]: unknown
+}
+
+// Palabras clave para identificar la categoría de bebidas
+const BEBIDAS_KEYWORDS = ['bebida', 'bebidas', 'drink', 'drinks', 'jugo', 'jugos', 'refresco', 'refrescos', 'café', 'cafe', 'agua', 'soda', 'gaseosa']
+
+function isBeverageCategoryName(name: string): boolean {
+  const lower = name.toLowerCase()
+  return BEBIDAS_KEYWORDS.some((kw) => lower.includes(kw))
+}
+
+async function getBeverageCategoryIds(token: string): Promise<Set<string>> {
+  try {
+    const res = await fetch('https://api.loyverse.com/v1.0/categories?limit=250', {
+      headers: { Authorization: `Bearer ${token}` },
+      next: { revalidate: 300 }, // cachear 5 minutos
+    })
+    if (!res.ok) return new Set()
+    const data = await res.json()
+    const categories: LoyverseCategory[] = data.categories ?? []
+    const ids = categories
+      .filter((c) => isBeverageCategoryName(c.name))
+      .map((c) => c.id)
+    return new Set(ids)
+  } catch {
+    return new Set()
+  }
+}
+
 async function getLocalOrders(): Promise<KdsOrder[]> {
   const token = process.env.LOYVERSE_ACCESS_TOKEN
   const storeId = process.env.LOYVERSE_STORE_ID ?? 'ca14eb24-6ad6-40d2-80b1-87df568c4ecc'
@@ -123,46 +156,69 @@ async function getLocalOrders(): Promise<KdsOrder[]> {
   const since = new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString()
 
   try {
-    const url = `https://api.loyverse.com/v1.0/receipts?store_id=${storeId}&created_at_min=${encodeURIComponent(since)}&limit=50`
-    const res = await fetch(url, {
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-      },
-      next: { revalidate: 0 },
-    })
+    // Obtener IDs de categorías de bebidas en paralelo con los receipts
+    const [receiptsRes, beverageIds] = await Promise.all([
+      fetch(
+        `https://api.loyverse.com/v1.0/receipts?store_id=${storeId}&created_at_min=${encodeURIComponent(since)}&limit=50`,
+        {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+          next: { revalidate: 0 },
+        }
+      ),
+      getBeverageCategoryIds(token),
+    ])
 
-    if (!res.ok) return []
+    if (!receiptsRes.ok) return []
 
-    const data = await res.json()
+    const data = await receiptsRes.json()
     const receipts: LoyverseReceipt[] = data.receipts ?? []
 
-    return receipts.map((r, idx) => ({
-      id: `loyverse-${r.receipt_number}`,
-      source: 'LOCAL' as const,
-      number: `L-${r.receipt_number ?? String(idx + 1).padStart(3, '0')}`,
-      customer: r.order ?? 'Mesa / POS',
-      status: 'confirmed',
-      // Campos detallados Loyverse
-      orderNumber: r.order ?? undefined,
-      diningOption: r.dining_option ?? undefined,
-      paymentMethod: r.payments?.[0]?.name ?? undefined,
-      items: (r.line_items ?? []).map((li) => {
-        // Construir lista de modificadores como strings legibles
-        const modifiers = (li.line_modifiers ?? [])
-          .map((m) => [m.name, m.option].filter(Boolean).join(': '))
-          .filter(Boolean)
-        return {
-          name: li.item_name ?? li.variant_name ?? 'Ítem',
-          quantity: li.quantity,
-          price: li.price,
-          modifiers: modifiers.length > 0 ? modifiers : undefined,
-        }
-      }),
-      total: r.total_money,
-      notes: r.note ?? null,
-      created_at: r.receipt_date,
-    }))
+    const orders: KdsOrder[] = []
+
+    for (let idx = 0; idx < receipts.length; idx++) {
+      const r = receipts[idx]
+
+      // Filtrar line_items que sean bebidas (por category_id)
+      const allItems = r.line_items ?? []
+      const kitchenItems = beverageIds.size > 0
+        ? allItems.filter((li) => !li.category_id || !beverageIds.has(li.category_id))
+        : allItems
+
+      // Si todos los items son bebidas, omitir el pedido
+      if (kitchenItems.length === 0) continue
+
+      orders.push({
+        id: `loyverse-${r.receipt_number}`,
+        source: 'LOCAL' as const,
+        number: `L-${r.receipt_number ?? String(idx + 1).padStart(3, '0')}`,
+        customer: r.order ?? 'Mesa / POS',
+        status: 'confirmed',
+        // Campos detallados Loyverse
+        orderNumber: r.order ?? undefined,
+        diningOption: r.dining_option ?? undefined,
+        paymentMethod: r.payments?.[0]?.name ?? undefined,
+        items: kitchenItems.map((li) => {
+          // Construir lista de modificadores como strings legibles
+          const modifiers = (li.line_modifiers ?? [])
+            .map((m) => [m.name, m.option].filter(Boolean).join(': '))
+            .filter(Boolean)
+          return {
+            name: li.item_name ?? li.variant_name ?? 'Ítem',
+            quantity: li.quantity,
+            price: li.price,
+            modifiers: modifiers.length > 0 ? modifiers : undefined,
+          }
+        }),
+        total: r.total_money,
+        notes: r.note ?? null,
+        created_at: r.receipt_date,
+      })
+    }
+
+    return orders
   } catch {
     return []
   }

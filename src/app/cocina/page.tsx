@@ -3,6 +3,57 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 
+// ─── LocalStorage helpers para dismissed IDs ─────────────────────────────────
+
+const LS_KEY = 'sumak-cocina-dismissed'
+const MAX_AGE_MS = 24 * 60 * 60 * 1000 // 24 horas
+
+type DismissedEntry = { id: string; timestamp: number }
+
+function loadDismissed(): Set<string> {
+  try {
+    const raw = localStorage.getItem(LS_KEY)
+    if (!raw) return new Set()
+    const entries: DismissedEntry[] = JSON.parse(raw)
+    const now = Date.now()
+    // Filtrar entradas con más de 24h
+    const valid = entries.filter((e) => now - e.timestamp < MAX_AGE_MS)
+    // Si hubo limpieza, guardar ya depurado
+    if (valid.length !== entries.length) saveDismissed(valid)
+    return new Set(valid.map((e) => e.id))
+  } catch {
+    return new Set()
+  }
+}
+
+function saveDismissed(entries: DismissedEntry[]) {
+  try {
+    localStorage.setItem(LS_KEY, JSON.stringify(entries))
+  } catch {
+    // silencioso (modo privado, quota, etc.)
+  }
+}
+
+function addDismissed(id: string) {
+  try {
+    const raw = localStorage.getItem(LS_KEY)
+    const entries: DismissedEntry[] = raw ? JSON.parse(raw) : []
+    const now = Date.now()
+    const clean = entries.filter((e) => now - e.timestamp < MAX_AGE_MS && e.id !== id)
+    clean.push({ id, timestamp: now })
+    saveDismissed(clean)
+  } catch {}
+}
+
+function removeDismissed(id: string) {
+  try {
+    const raw = localStorage.getItem(LS_KEY)
+    if (!raw) return
+    const entries: DismissedEntry[] = JSON.parse(raw)
+    saveDismissed(entries.filter((e) => e.id !== id))
+  } catch {}
+}
+
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
 type KdsItem = {
@@ -235,8 +286,13 @@ export default function CocinaPage() {
   const [lastCount, setLastCount] = useState(0)
   const audioRef = useRef<AudioContext | null>(null)
   const prevIdsRef = useRef<Set<string>>(new Set())
-  // IDs de pedidos marcados como entregados localmente — evita que vuelvan al hacer fetch
+  // IDs de pedidos marcados como entregados — persiste en localStorage
   const dismissedIdsRef = useRef<Set<string>>(new Set())
+
+  // Cargar dismissedIds desde localStorage al montar
+  useEffect(() => {
+    dismissedIdsRef.current = loadDismissed()
+  }, [])
 
   // ── Sonido de notificación ──────────────────────────────────────────────────
   const playBeep = useCallback(() => {
@@ -311,6 +367,7 @@ export default function CocinaPage() {
 
     // Agregar a dismissedIds para que no vuelva en futuros fetches
     dismissedIdsRef.current.add(id)
+    addDismissed(id)
 
     // Moverlo al historial local inmediatamente
     const deliveredOrder = { ...order, status: 'delivered' }
@@ -329,6 +386,7 @@ export default function CocinaPage() {
       } catch {
         // Si falla, revertir: quitar de dismissed y restaurar en activos
         dismissedIdsRef.current.delete(id)
+        removeDismissed(id)
         setDeliveredOrders((prev) => prev.filter((o) => o.id !== id))
         setOrders((prev) => [order, ...prev])
       }
@@ -343,6 +401,7 @@ export default function CocinaPage() {
 
     // Quitar de dismissedIds para que el fetch lo vuelva a incluir
     dismissedIdsRef.current.delete(id)
+    removeDismissed(id)
 
     const recoveredOrder = { ...order, status: order.source === 'WEB' ? 'ready' : 'confirmed' }
     setDeliveredOrders((prev) => prev.filter((o) => o.id !== id))
