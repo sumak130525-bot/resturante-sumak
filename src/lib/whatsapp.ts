@@ -6,11 +6,12 @@ export const WHATSAPP_NUMBER = process.env.NEXT_PUBLIC_WHATSAPP_NUMBER ?? '54911
 
 /**
  * Construye la URL de wa.me con el mensaje pre-armado del pedido.
- * @param cart  Items del carrito
- * @param total Total calculado
- * @param mesa  Numero de mesa opcional
+ * @param cart        Items del carrito
+ * @param total       Total calculado
+ * @param mesa        Numero de mesa opcional
+ * @param paymentLink Link de pago MercadoPago opcional
  */
-export function buildWhatsAppURL(cart: CartItem[], total: number, mesa?: string | null): string {
+export function buildWhatsAppURL(cart: CartItem[], total: number, mesa?: string | null, paymentLink?: string | null): string {
   const lines: string[] = []
 
   lines.push('Hola! Quiero hacer un pedido de Sumak 🍽️')
@@ -29,6 +30,11 @@ export function buildWhatsAppURL(cart: CartItem[], total: number, mesa?: string 
 
   lines.push('')
   lines.push(`*Total: ${formatPrice(total)}*`)
+
+  if (paymentLink) {
+    lines.push('')
+    lines.push(`💳 *Pagá online:* ${paymentLink}`)
+  }
 
   const text = lines.join('\n')
   return `https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(text)}`

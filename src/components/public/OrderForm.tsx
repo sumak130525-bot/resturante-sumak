@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { ChevronLeft, CheckCircle, Loader2, Send, Receipt } from 'lucide-react'
+import { ChevronLeft, CheckCircle, Loader2, Send, Receipt, CreditCard } from 'lucide-react'
 import { formatPrice, cn } from '@/lib/utils'
 import type { CartItem } from '@/lib/types'
 
@@ -20,6 +20,8 @@ export function OrderForm({ cart, total, onBack, onSuccess, mesa }: OrderFormPro
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [done, setDone] = useState(false)
+  const [orderId, setOrderId] = useState<string | null>(null)
+  const [paymentLoading, setPaymentLoading] = useState(false)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -51,6 +53,8 @@ export function OrderForm({ cart, total, onBack, onSuccess, mesa }: OrderFormPro
         throw new Error(data.error ?? 'Error al crear el pedido')
       }
 
+      const data = await res.json()
+      setOrderId(data.order_id ?? null)
       setDone(true)
       setTimeout(() => onSuccess(), 2500)
     } catch (err: unknown) {
@@ -61,6 +65,27 @@ export function OrderForm({ cart, total, onBack, onSuccess, mesa }: OrderFormPro
   }
 
   /* ── Success state ── */
+  const handlePagarMercadoPago = async () => {
+    if (!orderId || paymentLoading) return
+    setPaymentLoading(true)
+    try {
+      const res = await fetch('/api/payments/create-preference', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ order_id: orderId }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error ?? 'Error al crear preferencia')
+      if (data.init_point) {
+        window.location.href = data.init_point
+      }
+    } catch (err) {
+      console.error('[MercadoPago] Error:', err)
+    } finally {
+      setPaymentLoading(false)
+    }
+  }
+
   if (done) {
     return (
       <div className="flex-1 flex flex-col items-center justify-center gap-5 p-8 text-center animate-scale-in">
@@ -72,9 +97,36 @@ export function OrderForm({ cart, total, onBack, onSuccess, mesa }: OrderFormPro
             ¡Pedido recibido!
           </h3>
           <p className="text-sumak-brown-light text-sm leading-relaxed max-w-xs mx-auto">
-            Tu pedido fue enviado con éxito. Nuestro equipo lo está preparando con amor.
+            Tu pedido fue registrado. Completá el pago para que el equipo lo empiece a preparar.
           </p>
         </div>
+        {orderId && (
+          <button
+            onClick={handlePagarMercadoPago}
+            disabled={paymentLoading}
+            className={cn(
+              'w-full max-w-xs flex items-center justify-center gap-2.5',
+              'bg-[#009ee3] text-white font-bold',
+              'py-3.5 px-6 rounded-pill text-base',
+              'transition-all duration-300',
+              'hover:bg-[#0085c3] hover:scale-[1.02]',
+              'active:scale-[0.98]',
+              paymentLoading && 'opacity-70 cursor-not-allowed'
+            )}
+          >
+            {paymentLoading ? (
+              <>
+                <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                Redirigiendo…
+              </>
+            ) : (
+              <>
+                <CreditCard size={18} />
+                Pagar con MercadoPago
+              </>
+            )}
+          </button>
+        )}
         <div className="w-16 h-0.5 bg-gradient-to-r from-transparent via-sumak-gold to-transparent rounded-full" />
         <p className="text-xs text-sumak-brown-light/60">Cerrando en un momento…</p>
       </div>

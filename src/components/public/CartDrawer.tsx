@@ -44,6 +44,7 @@ export function CartDrawer({
   const handleWhatsApp = async () => {
     if (whatsappLoading) return
     setWhatsappLoading(true)
+    let paymentLink: string | null = null
     try {
       const items = cart.map((c) => ({
         menu_item_id: c.menu_item.id,
@@ -61,7 +62,25 @@ export function CartDrawer({
           channel: 'whatsapp',
         }),
       })
-      if (!res.ok) {
+      if (res.ok) {
+        const orderData = await res.json().catch(() => ({}))
+        const orderId = orderData.order_id
+        if (orderId) {
+          try {
+            const prefRes = await fetch('/api/payments/create-preference', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ order_id: orderId }),
+            })
+            if (prefRes.ok) {
+              const prefData = await prefRes.json()
+              paymentLink = prefData.init_point ?? null
+            }
+          } catch (prefErr) {
+            console.error('[WhatsApp order] Error creando preferencia MP:', prefErr)
+          }
+        }
+      } else {
         const err = await res.json().catch(() => ({}))
         console.error('[WhatsApp order] POST /api/orders failed:', res.status, err)
       }
@@ -73,7 +92,7 @@ export function CartDrawer({
       setShowWhatsAppForm(false)
       setWaName('')
       setWaPhone('')
-      window.open(buildWhatsAppURL(cart, total, mesa), '_blank', 'noopener,noreferrer')
+      window.open(buildWhatsAppURL(cart, total, mesa, paymentLink), '_blank', 'noopener,noreferrer')
     }
   }
 
