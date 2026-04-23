@@ -116,7 +116,7 @@ function OrderCard({
     >
       {/* ── Cabecera: doble click para entregar ── */}
       <div
-        className={`${sc.headerBg} px-4 pt-4 pb-3 transition-opacity duration-150 ${
+        className={`${sc.headerBg} px-3 py-2 transition-opacity duration-150 ${
           !isDelivered && onDeliver ? 'cursor-pointer select-none' : ''
         } ${singleClicked ? 'opacity-70' : 'opacity-100'}`}
         onClick={handleHeaderClick}
@@ -130,33 +130,31 @@ function OrderCard({
           </div>
         )}
 
-        {/* Número de orden */}
-        <div className="flex items-start justify-between gap-2">
-          <div className="flex-1 min-w-0">
-            <div className="text-white font-black text-3xl leading-none tracking-tight drop-shadow-lg">
+        {/* Fila 1: Mesa/Orden + Tiempo */}
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="text-white font-black text-2xl leading-none tracking-tight drop-shadow-lg truncate">
               {orderLabel}
-            </div>
-            {/* Sub-info: cliente si es WEB con mesa */}
+            </span>
             {order.source === 'WEB' && order.tableNumber && (
-              <div className="text-white/80 font-semibold text-sm mt-1 truncate">
+              <span className="text-white/70 font-semibold text-xs truncate hidden sm:inline">
                 {order.customer}
-              </div>
+              </span>
             )}
           </div>
-          {/* Tiempo transcurrido */}
-          <div className={`text-right text-sm font-mono font-bold shrink-0 ${elapsedColor(order.created_at)} bg-black/30 rounded-lg px-2 py-1`}>
-            {elapsed(order.created_at)}
-            <div className="text-white/50 text-xs font-normal">
+          <div className={`flex items-center gap-1 text-sm font-mono font-bold shrink-0 ${elapsedColor(order.created_at)} bg-black/30 rounded-lg px-2 py-0.5`}>
+            <span>{elapsed(order.created_at)}</span>
+            <span className="text-white/50 text-xs font-normal">
               {new Date(order.created_at).toLocaleTimeString('es-CO', {
                 hour: '2-digit',
                 minute: '2-digit',
               })}
-            </div>
+            </span>
           </div>
         </div>
 
-        {/* Badges: origen, estado, dining option, pago */}
-        <div className="flex flex-wrap gap-1.5 mt-2">
+        {/* Fila 2: Badges compactos */}
+        <div className="flex flex-wrap gap-1 mt-1">
           <span
             className={`text-xs font-bold px-2 py-0.5 rounded-full ${
               order.source === 'WEB'
@@ -231,6 +229,7 @@ export default function CocinaPage() {
   const [orders, setOrders] = useState<KdsOrder[]>([])
   const [deliveredOrders, setDeliveredOrders] = useState<KdsOrder[]>([])
   const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
   const [filterSource, setFilterSource] = useState<FilterSource>('ALL')
   const [activeTab, setActiveTab] = useState<ActiveTab>('cocina')
   const [lastCount, setLastCount] = useState(0)
@@ -467,10 +466,16 @@ export default function CocinaPage() {
             ))}
           </div>
           <button
-            onClick={fetchOrders}
-            className="px-3 py-1.5 bg-gray-700 hover:bg-gray-600 rounded-lg text-sm font-bold transition-all"
+            onClick={async () => {
+              setRefreshing(true)
+              await fetchOrders()
+              setRefreshing(false)
+            }}
+            disabled={refreshing}
+            className={`px-3 py-1.5 bg-gray-700 hover:bg-gray-600 rounded-lg text-sm font-bold transition-all ${refreshing ? 'opacity-60' : ''}`}
+            title="Refrescar pedidos"
           >
-            ↻
+            <span className={refreshing ? 'inline-block animate-spin' : 'inline-block'}>↻</span>
           </button>
         </div>
       </div>
