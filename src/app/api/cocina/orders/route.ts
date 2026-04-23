@@ -87,11 +87,11 @@ type LoyverseLineModifier = {
 }
 
 type LoyverseLineItem = {
+  item_id?: string
   item_name?: string
   variant_name?: string
   quantity: number
   price: number
-  category_id?: string
   line_modifiers?: LoyverseLineModifier[]
 }
 
@@ -120,7 +120,10 @@ type LoyverseCategory = {
   [key: string]: unknown
 }
 
-// Palabras clave para identificar la categoría de bebidas
+// Categoria fija de Bebidas en Loyverse
+const BEBIDAS_CATEGORY_ID = 'd028b97d-7bc9-4628-9e29-d60ff0faaa8b'
+
+// Palabras clave de fallback para identificar la categoría de bebidas por nombre
 const BEBIDAS_KEYWORDS = ['bebida', 'bebidas', 'drink', 'drinks', 'jugo', 'jugos', 'refresco', 'refrescos', 'café', 'cafe', 'agua', 'soda', 'gaseosa']
 
 function isBeverageCategoryName(name: string): boolean {
@@ -128,19 +131,48 @@ function isBeverageCategoryName(name: string): boolean {
   return BEBIDAS_KEYWORDS.some((kw) => lower.includes(kw))
 }
 
-async function getBeverageCategoryIds(token: string): Promise<Set<string>> {
+type LoyverseItem = {
+  id: string
+  category_id?: string | null
+  [key: string]: unknown
+}
+
+/**
+ * Obtiene el Set de item_ids que pertenecen a la categoría Bebidas.
+ * Los line_items del receipt NO tienen category_id; el category_id está en /v1.0/items.
+ */
+async function getBeverageItemIds(token: string): Promise<Set<string>> {
   try {
-    const res = await fetch('https://api.loyverse.com/v1.0/categories?limit=250', {
+    // 1. Obtener categorías para confirmar/expandir el id de Bebidas
+    const catRes = await fetch('https://api.loyverse.com/v1.0/categories?limit=250', {
+      headers: { Authorization: `Bearer ${token}` },
+      next: { revalidate: 300 },
+    })
+    const beverageCatIds = new Set<string>([BEBIDAS_CATEGORY_ID])
+    if (catRes.ok) {
+      const catData = await catRes.json()
+      const categories: LoyverseCategory[] = catData.categories ?? []
+      categories
+        .filter((c) => isBeverageCategoryName(c.name) || c.id === BEBIDAS_CATEGORY_ID)
+        .forEach((c) => beverageCatIds.add(c.id))
+    }
+
+    // 2. Obtener todos los items y filtrar los que pertenecen a categoría Bebidas
+    const itemRes = await fetch('https://api.loyverse.com/v1.0/items?limit=250', {
       headers: { Authorization: `Bearer ${token}` },
       next: { revalidate: 300 }, // cachear 5 minutos
     })
-    if (!res.ok) return new Set()
-    const data = await res.json()
-    const categories: LoyverseCategory[] = data.categories ?? []
-    const ids = categories
-      .filter((c) => isBeverageCategoryName(c.name))
-      .map((c) => c.id)
-    return new Set(ids)
+    if (!itemRes.ok) return new Set()
+
+    const itemData = await itemRes.json()
+    const items: LoyverseItem[] = itemData.items ?? []
+    const beverageItemIds = new Set<string>()
+    for (const item of items) {
+      if (item.category_id && beverageCatIds.has(item.category_id)) {
+        beverageItemIds.add(item.id)
+      }
+    }
+    return beverageItemIds
   } catch {
     return new Set()
   }
@@ -156,8 +188,8 @@ async function getLocalOrders(): Promise<KdsOrder[]> {
   const since = new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString()
 
   try {
-    // Obtener IDs de categorías de bebidas en paralelo con los receipts
-    const [receiptsRes, beverageIds] = await Promise.all([
+    // Obtener IDs de items de bebidas en paralelo con los receipts
+    const [receiptsRes, beverageItemIds] = await Promise.all([
       fetch(
         `https://api.loyverse.com/v1.0/receipts?store_id=${storeId}&created_at_min=${encodeURIComponent(since)}&limit=50`,
         {
@@ -168,7 +200,7 @@ async function getLocalOrders(): Promise<KdsOrder[]> {
           next: { revalidate: 0 },
         }
       ),
-      getBeverageCategoryIds(token),
+      getBeverageItemIds(token),
     ])
 
     if (!receiptsRes.ok) return []
@@ -181,10 +213,10 @@ async function getLocalOrders(): Promise<KdsOrder[]> {
     for (let idx = 0; idx < receipts.length; idx++) {
       const r = receipts[idx]
 
-      // Filtrar line_items que sean bebidas (por category_id)
+      // Filtrar line_items que sean bebidas (por item_id, ya que category_id está en /items, no en line_items)
       const allItems = r.line_items ?? []
-      const kitchenItems = beverageIds.size > 0
-        ? allItems.filter((li) => !li.category_id || !beverageIds.has(li.category_id))
+      const kitchenItems = beverageItemIds.size > 0
+        ? allItems.filter((li) => !li.item_id || !beverageItemIds.has(li.item_id))
         : allItems
 
       // Si todos los items son bebidas, omitir el pedido

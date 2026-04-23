@@ -284,14 +284,18 @@ export default function CocinaPage() {
   const [filterSource, setFilterSource] = useState<FilterSource>('ALL')
   const [activeTab, setActiveTab] = useState<ActiveTab>('cocina')
   const [lastCount, setLastCount] = useState(0)
+  // Flag para garantizar que localStorage se leyó antes del primer fetch
+  const [dismissedLoaded, setDismissedLoaded] = useState(false)
   const audioRef = useRef<AudioContext | null>(null)
   const prevIdsRef = useRef<Set<string>>(new Set())
   // IDs de pedidos marcados como entregados — persiste en localStorage
   const dismissedIdsRef = useRef<Set<string>>(new Set())
 
-  // Cargar dismissedIds desde localStorage al montar
+  // Cargar dismissedIds desde localStorage al montar (solo en cliente)
   useEffect(() => {
     dismissedIdsRef.current = loadDismissed()
+    console.log('[cocina] dismissedIds cargados:', Array.from(dismissedIdsRef.current))
+    setDismissedLoaded(true)
   }, [])
 
   // ── Sonido de notificación ──────────────────────────────────────────────────
@@ -342,10 +346,11 @@ export default function CocinaPage() {
   }, [playBeep])
 
   useEffect(() => {
+    if (!dismissedLoaded) return
     fetchOrders()
     const interval = setInterval(fetchOrders, 15_000)
     return () => clearInterval(interval)
-  }, [fetchOrders])
+  }, [fetchOrders, dismissedLoaded])
 
   // ── Supabase Realtime ──────────────────────────────────────────────────────
   useEffect(() => {
