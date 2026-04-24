@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { X, Trash2, ShoppingBag, ArrowRight, Sparkles, Phone, User, MessageSquare } from 'lucide-react'
 import { cn, formatPrice } from '@/lib/utils'
 import { buildWhatsAppURL } from '@/lib/whatsapp'
-import { useTranslation } from '@/lib/i18n'
+import { useTranslation, getItemName } from '@/lib/i18n'
 import type { CartItem, MenuItem } from '@/lib/types'
 import { OrderForm } from './OrderForm'
 
@@ -27,7 +27,7 @@ export function CartDrawer({
   onClear,
   mesa,
 }: CartDrawerProps) {
-  const { t } = useTranslation()
+  const { t, locale } = useTranslation()
   const [showOrderForm, setShowOrderForm] = useState(false)
   const [showWhatsAppForm, setShowWhatsAppForm] = useState(false)
   const [waName, setWaName] = useState('')
@@ -174,7 +174,7 @@ export function CartDrawer({
                   {/* Left: info */}
                   <div className="flex-1 min-w-0">
                     <p className="font-semibold text-sumak-brown text-sm leading-snug truncate">
-                      {menu_item.name}
+                      {getItemName(menu_item, locale)}
                     </p>
                     <p className="text-xs text-sumak-brown-light mt-0.5">
                       {formatPrice(menu_item.price)} × {quantity}

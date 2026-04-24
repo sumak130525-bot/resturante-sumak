@@ -408,3 +408,27 @@ export function useTranslation() {
   if (!ctx) throw new Error('useTranslation must be used inside LanguageProvider')
   return ctx
 }
+
+// ─── Item locale helpers ───────────────────────────────────────────────────────
+
+type LocalisableItem = {
+  name: string
+  description: string | null
+  name_en?: string | null
+  name_qu?: string | null
+  description_es?: string | null
+  description_en?: string | null
+  description_qu?: string | null
+}
+
+export function getItemName(item: LocalisableItem, locale: Locale): string {
+  if (locale === 'en') return item.name_en ?? item.name
+  if (locale === 'qu') return item.name_qu ?? item.name
+  return item.name
+}
+
+export function getItemDescription(item: LocalisableItem, locale: Locale): string | null {
+  if (locale === 'en') return item.description_en ?? item.description_es ?? item.description
+  if (locale === 'qu') return item.description_qu ?? item.description_es ?? item.description
+  return item.description_es ?? item.description
+}

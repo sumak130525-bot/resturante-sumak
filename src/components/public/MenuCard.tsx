@@ -2,7 +2,7 @@
 
 import { Plus, Minus, ShoppingBag } from 'lucide-react'
 import { cn, formatPrice, getAvailabilityColor } from '@/lib/utils'
-import { useTranslation } from '@/lib/i18n'
+import { useTranslation, getItemName, getItemDescription } from '@/lib/i18n'
 import type { MenuItem, CartItem } from '@/lib/types'
 
 const CATEGORY_EMOJI: Record<string, string> = {
@@ -30,10 +30,12 @@ export function MenuCard({
   categorySlug,
   index = 0,
 }: MenuCardProps) {
-  const { t } = useTranslation()
+  const { t, locale } = useTranslation()
   const quantity = cartItem?.quantity ?? 0
   const isUnavailable = item.available === 0
   const emoji = categorySlug ? (CATEGORY_EMOJI[categorySlug] ?? '🍴') : '🍴'
+  const displayName = getItemName(item, locale)
+  const displayDescription = getItemDescription(item, locale)
 
   function availabilityLabel(available: number): string {
     if (available === 0) return t('soldOut')
@@ -56,7 +58,7 @@ export function MenuCard({
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src={item.image_url}
-              alt={item.name}
+              alt={displayName}
               className="menu-card-image absolute inset-0 w-full h-full object-cover"
               loading="lazy"
             />
@@ -98,13 +100,13 @@ export function MenuCard({
       <div className="flex flex-col flex-1 p-5 gap-3">
         {/* Name */}
         <h3 className="font-serif font-semibold text-[1.05rem] text-sumak-brown leading-snug tracking-tight">
-          {item.name}
+          {displayName}
         </h3>
 
         {/* Description */}
-        {item.description && (
+        {displayDescription && (
           <p className="text-sm text-sumak-brown-light leading-relaxed flex-1 line-clamp-2">
-            {item.description}
+            {displayDescription}
           </p>
         )}
 

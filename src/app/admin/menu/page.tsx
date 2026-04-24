@@ -86,7 +86,7 @@ export default function AdminMenuPage() {
               Actualizar
             </button>
             <button
-              onClick={() => setEditItem({ id: '', category_id: categories[0]?.id ?? '', name: '', description: null, price: 0, image_url: null, available: 0, active: true, created_at: '' })}
+              onClick={() => setEditItem({ id: '', category_id: categories[0]?.id ?? '', name: '', description: null, name_en: null, name_qu: null, description_es: null, description_en: null, description_qu: null, price: 0, image_url: null, available: 0, active: true, created_at: '' })}
               className="btn-primary flex items-center gap-2 text-sm"
             >
               <Plus size={16} />

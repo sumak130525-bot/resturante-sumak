@@ -3,7 +3,7 @@
 import { useState } from 'react'
 import { ChevronLeft, Loader2, Receipt, CreditCard } from 'lucide-react'
 import { formatPrice, cn } from '@/lib/utils'
-import { useTranslation } from '@/lib/i18n'
+import { useTranslation, getItemName } from '@/lib/i18n'
 import type { CartItem } from '@/lib/types'
 
 interface OrderFormProps {
@@ -15,7 +15,7 @@ interface OrderFormProps {
 }
 
 export function OrderForm({ cart, total, onBack, mesa }: OrderFormProps) {
-  const { t } = useTranslation()
+  const { t, locale } = useTranslation()
   const [name, setName] = useState('')
   const [phone, setPhone] = useState('')
   const [notes, setNotes] = useState('')
@@ -99,7 +99,7 @@ export function OrderForm({ cart, total, onBack, mesa }: OrderFormProps) {
           {cart.map(({ menu_item, quantity }) => (
             <div key={menu_item.id} className="flex justify-between text-sm text-white/80">
               <span className="truncate flex-1 mr-3">
-                {menu_item.name}{' '}
+                {getItemName(menu_item, locale)}{' '}
                 <span className="text-white/50">× {quantity}</span>
               </span>
               <span className="font-medium shrink-0">

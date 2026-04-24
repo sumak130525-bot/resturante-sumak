@@ -10,6 +10,11 @@ export type MenuItem = {
   category_id: string
   name: string
   description: string | null
+  name_en: string | null
+  name_qu: string | null
+  description_es: string | null
+  description_en: string | null
+  description_qu: string | null
   price: number
   image_url: string | null
   available: number
@@ -60,6 +65,11 @@ type MenuItemRow = {
   category_id: string
   name: string
   description: string | null
+  name_en: string | null
+  name_qu: string | null
+  description_es: string | null
+  description_en: string | null
+  description_qu: string | null
   price: number
   image_url: string | null
   available: number
