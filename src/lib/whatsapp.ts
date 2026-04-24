@@ -10,8 +10,9 @@ export const WHATSAPP_NUMBER = process.env.NEXT_PUBLIC_WHATSAPP_NUMBER ?? '54911
  * @param total       Total calculado
  * @param mesa        Numero de mesa opcional
  * @param paymentLink Link de pago MercadoPago opcional
+ * @param note        Nota adicional del cliente opcional
  */
-export function buildWhatsAppURL(cart: CartItem[], total: number, mesa?: string | null, paymentLink?: string | null): string {
+export function buildWhatsAppURL(cart: CartItem[], total: number, mesa?: string | null, paymentLink?: string | null, note?: string | null): string {
   const lines: string[] = []
 
   lines.push('Hola! Quiero hacer un pedido de Sumak 🍽️')
@@ -34,6 +35,11 @@ export function buildWhatsAppURL(cart: CartItem[], total: number, mesa?: string 
   if (paymentLink) {
     lines.push('')
     lines.push(`💳 *Pagá online:* ${paymentLink}`)
+  }
+
+  if (note) {
+    lines.push('')
+    lines.push(`📝 *Nota:* ${note}`)
   }
 
   const text = lines.join('\n')

@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { X, Trash2, ShoppingBag, ArrowRight, Sparkles, Phone, User } from 'lucide-react'
+import { X, Trash2, ShoppingBag, ArrowRight, Sparkles, Phone, User, MessageSquare } from 'lucide-react'
 import { cn, formatPrice } from '@/lib/utils'
 import { buildWhatsAppURL } from '@/lib/whatsapp'
 import type { CartItem, MenuItem } from '@/lib/types'
@@ -30,6 +30,7 @@ export function CartDrawer({
   const [showWhatsAppForm, setShowWhatsAppForm] = useState(false)
   const [waName, setWaName] = useState('')
   const [waPhone, setWaPhone] = useState('')
+  const [waNote, setWaNote] = useState('')
   const [whatsappLoading, setWhatsappLoading] = useState(false)
 
   const total = cart.reduce((s, c) => s + c.menu_item.price * c.quantity, 0)
@@ -52,13 +53,20 @@ export function CartDrawer({
         unit_price: c.menu_item.price,
         title: c.menu_item.name,
       }))
+      const notesValue = waNote.trim()
+        ? mesa
+          ? `[Mesa ${mesa}] ${waNote.trim()}`
+          : waNote.trim()
+        : mesa
+        ? `Mesa: ${mesa}`
+        : null
       const res = await fetch('/api/payments/create-preference', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           customer_name: waName.trim() || 'Cliente WhatsApp',
           customer_phone: waPhone.trim() || null,
-          notes: mesa ? `Mesa: ${mesa}` : null,
+          notes: notesValue,
           mesa: mesa ?? null,
           channel: 'whatsapp',
           items,
@@ -77,9 +85,11 @@ export function CartDrawer({
     } finally {
       setWhatsappLoading(false)
       setShowWhatsAppForm(false)
+      const note = waNote.trim() || null
       setWaName('')
       setWaPhone('')
-      window.open(buildWhatsAppURL(cart, total, mesa, paymentLink), '_blank', 'noopener,noreferrer')
+      setWaNote('')
+      window.open(buildWhatsAppURL(cart, total, mesa, paymentLink, note), '_blank', 'noopener,noreferrer')
     }
   }
 
@@ -263,10 +273,22 @@ export function CartDrawer({
                     />
                   </div>
 
+                  {/* Campo nota */}
+                  <div className="relative">
+                    <MessageSquare size={14} className="absolute left-3 top-3 text-sumak-brown-light pointer-events-none" />
+                    <textarea
+                      placeholder="Nota (opcional): sin cebolla, extra llajua…"
+                      value={waNote}
+                      onChange={(e) => setWaNote(e.target.value)}
+                      rows={2}
+                      className="w-full pl-8 pr-3 py-2.5 text-sm rounded-xl border border-sumak-cream-dark bg-white text-sumak-brown placeholder:text-sumak-brown-light/60 focus:outline-none focus:ring-2 focus:ring-[#25D366]/50 focus:border-[#25D366] resize-none"
+                    />
+                  </div>
+
                   {/* Botones */}
                   <div className="flex gap-2 pt-1">
                     <button
-                      onClick={() => { setShowWhatsAppForm(false); setWaName(''); setWaPhone('') }}
+                      onClick={() => { setShowWhatsAppForm(false); setWaName(''); setWaPhone(''); setWaNote('') }}
                       className="flex-1 py-2 rounded-xl text-sm font-semibold text-sumak-brown-light border border-sumak-cream-dark bg-white hover:bg-sumak-cream-dark transition-colors"
                     >
                       Cancelar
