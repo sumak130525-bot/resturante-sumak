@@ -105,56 +105,137 @@ function saveSound(s: SoundOption) {
   } catch {}
 }
 
-async function playSound(ctx: AudioContext, sound: SoundOption) {
-  if (sound === 'silent') return
-  if (ctx.state === 'suspended') await ctx.resume()
+// ── WAV synthesis helpers ──────────────────────────────────────────────────────
 
-  const now = ctx.currentTime
+/**
+ * Renders audio frames using Web Audio API OfflineAudioContext into a WAV
+ * data URI. Falls back gracefully if unavailable.
+ */
+async function renderToWavDataUri(
+  buildGraph: (ctx: OfflineAudioContext) => void,
+  durationSec: number,
+  sampleRate = 44100
+): Promise<string | null> {
+  try {
+    const offlineCtx = new OfflineAudioContext(1, Math.ceil(sampleRate * durationSec), sampleRate)
+    buildGraph(offlineCtx)
+    const buffer = await offlineCtx.startRendering()
+    const samples = buffer.getChannelData(0)
+
+    // PCM 16-bit WAV
+    const numSamples = samples.length
+    const byteLength = 44 + numSamples * 2
+    const arrayBuffer = new ArrayBuffer(byteLength)
+    const view = new DataView(arrayBuffer)
+
+    const writeStr = (offset: number, str: string) => {
+      for (let i = 0; i < str.length; i++) view.setUint8(offset + i, str.charCodeAt(i))
+    }
+    writeStr(0, 'RIFF')
+    view.setUint32(4, byteLength - 8, true)
+    writeStr(8, 'WAVE')
+    writeStr(12, 'fmt ')
+    view.setUint32(16, 16, true)
+    view.setUint16(20, 1, true)       // PCM
+    view.setUint16(22, 1, true)       // mono
+    view.setUint32(24, sampleRate, true)
+    view.setUint32(28, sampleRate * 2, true)
+    view.setUint16(32, 2, true)
+    view.setUint16(34, 16, true)
+    writeStr(36, 'data')
+    view.setUint32(40, numSamples * 2, true)
+    for (let i = 0; i < numSamples; i++) {
+      const s = Math.max(-1, Math.min(1, samples[i]))
+      view.setInt16(44 + i * 2, s * 0x7fff, true)
+    }
+
+    const bytes = new Uint8Array(arrayBuffer)
+    let binary = ''
+    for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i])
+    return `data:audio/wav;base64,${btoa(binary)}`
+  } catch {
+    return null
+  }
+}
+
+// Cache so we only render each sound once per session
+const wavCache: Partial<Record<SoundOption, string>> = {}
+
+async function getWavDataUri(sound: SoundOption): Promise<string | null> {
+  if (wavCache[sound]) return wavCache[sound]!
+
+  const sampleRate = 44100
 
   if (sound === 'beep') {
-    // 880→440Hz descendente
-    const osc = ctx.createOscillator()
-    const gain = ctx.createGain()
-    osc.connect(gain)
-    gain.connect(ctx.destination)
-    osc.type = 'sine'
-    osc.frequency.setValueAtTime(880, now)
-    osc.frequency.exponentialRampToValueAtTime(440, now + 0.5)
-    gain.gain.setValueAtTime(1.0, now)
-    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.8)
-    osc.start(now)
-    osc.stop(now + 0.8)
-  } else if (sound === 'bell') {
-    // Dos tonos cortos: 660Hz luego 880Hz
-    const makeNote = (freq: number, start: number) => {
+    const uri = await renderToWavDataUri((ctx) => {
       const osc = ctx.createOscillator()
       const gain = ctx.createGain()
       osc.connect(gain)
       gain.connect(ctx.destination)
       osc.type = 'sine'
-      osc.frequency.setValueAtTime(freq, start)
-      gain.gain.setValueAtTime(1.0, start)
-      gain.gain.exponentialRampToValueAtTime(0.001, start + 0.4)
-      osc.start(start)
-      osc.stop(start + 0.4)
-    }
-    makeNote(660, now)
-    makeNote(880, now + 0.45)
+      osc.frequency.setValueAtTime(880, 0)
+      osc.frequency.exponentialRampToValueAtTime(440, 0.5)
+      gain.gain.setValueAtTime(1.0, 0)
+      gain.gain.exponentialRampToValueAtTime(0.001, 0.8)
+      osc.start(0)
+      osc.stop(0.8)
+    }, 0.85, sampleRate)
+    if (uri) wavCache[sound] = uri
+    return uri
+
+  } else if (sound === 'bell') {
+    const uri = await renderToWavDataUri((ctx) => {
+      const makeNote = (freq: number, start: number) => {
+        const osc = ctx.createOscillator()
+        const gain = ctx.createGain()
+        osc.connect(gain)
+        gain.connect(ctx.destination)
+        osc.type = 'sine'
+        osc.frequency.setValueAtTime(freq, start)
+        gain.gain.setValueAtTime(1.0, start)
+        gain.gain.exponentialRampToValueAtTime(0.001, start + 0.4)
+        osc.start(start)
+        osc.stop(start + 0.4)
+      }
+      makeNote(660, 0)
+      makeNote(880, 0.45)
+    }, 0.9, sampleRate)
+    if (uri) wavCache[sound] = uri
+    return uri
+
   } else if (sound === 'alert') {
-    // Tres beeps rápidos a 800Hz
-    for (let i = 0; i < 3; i++) {
-      const t = now + i * 0.22
-      const osc = ctx.createOscillator()
-      const gain = ctx.createGain()
-      osc.connect(gain)
-      gain.connect(ctx.destination)
-      osc.type = 'square'
-      osc.frequency.setValueAtTime(800, t)
-      gain.gain.setValueAtTime(0.7, t)
-      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.18)
-      osc.start(t)
-      osc.stop(t + 0.18)
-    }
+    const uri = await renderToWavDataUri((ctx) => {
+      for (let i = 0; i < 3; i++) {
+        const t = i * 0.22
+        const osc = ctx.createOscillator()
+        const gain = ctx.createGain()
+        osc.connect(gain)
+        gain.connect(ctx.destination)
+        osc.type = 'square'
+        osc.frequency.setValueAtTime(800, t)
+        gain.gain.setValueAtTime(0.7, t)
+        gain.gain.exponentialRampToValueAtTime(0.001, t + 0.18)
+        osc.start(t)
+        osc.stop(t + 0.18)
+      }
+    }, 0.7, sampleRate)
+    if (uri) wavCache[sound] = uri
+    return uri
+  }
+
+  return null
+}
+
+async function playSound(sound: SoundOption): Promise<void> {
+  if (sound === 'silent') return
+  try {
+    const uri = await getWavDataUri(sound)
+    if (!uri) return
+    const audio = new Audio(uri)
+    audio.volume = 1.0
+    await audio.play()
+  } catch {
+    // Silently ignore: browser may block autoplay on very first load before any interaction
   }
 }
 
@@ -505,7 +586,6 @@ export default function CocinaPage() {
   const [lastCount, setLastCount] = useState(0)
   const [dismissedLoaded, setDismissedLoaded] = useState(false)
   const [soundOption, setSoundOption] = useState<SoundOption>('beep')
-  const audioRef = useRef<AudioContext | null>(null)
   const prevIdsRef = useRef<Set<string>>(new Set())
   const dismissedIdsRef = useRef<Set<string>>(new Set())
   // Ref para leer el sonido actual dentro de callbacks sin stale closure
@@ -524,36 +604,15 @@ export default function CocinaPage() {
     soundOptionRef.current = s
     setSoundOption(s)
     saveSound(s)
-    // Reproducir preview del sonido seleccionado (también activa el AudioContext)
+    // Reproducir preview del sonido seleccionado
     if (s !== 'silent') {
-      try {
-        const ctx = audioRef.current ?? new AudioContext()
-        audioRef.current = ctx
-        await playSound(ctx, s)
-      } catch {}
+      await playSound(s)
     }
-  }, [])
-
-  // ── Resume AudioContext en cualquier click del usuario ──────────────────────
-  useEffect(() => {
-    const resumeCtx = () => {
-      if (audioRef.current && audioRef.current.state === 'suspended') {
-        audioRef.current.resume().catch(() => {})
-      }
-    }
-    document.addEventListener('click', resumeCtx)
-    return () => document.removeEventListener('click', resumeCtx)
   }, [])
 
   // ── Sonido de notificación ──────────────────────────────────────────────────
   const playBeep = useCallback(async () => {
-    const sound = soundOptionRef.current
-    if (sound === 'silent') return
-    try {
-      const ctx = audioRef.current ?? new AudioContext()
-      audioRef.current = ctx
-      await playSound(ctx, sound)
-    } catch {}
+    await playSound(soundOptionRef.current)
   }, [])
 
   // ── Fetch ──────────────────────────────────────────────────────────────────
@@ -570,7 +629,7 @@ export default function CocinaPage() {
       const newIds = new Set(data.map((o) => o.id))
       const incoming = data.filter((o) => !prevIdsRef.current.has(o.id))
       if (prevIdsRef.current.size > 0 && incoming.length > 0) {
-        playBeep()
+        await playBeep()
         setLastCount((c) => c + incoming.length)
       }
       prevIdsRef.current = newIds
