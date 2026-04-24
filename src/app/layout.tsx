@@ -3,7 +3,7 @@ import Script from 'next/script'
 import './globals.css'
 import { Providers } from '@/components/Providers'
 
-const OG_IMAGE = 'https://restaurante-sumak.vercel.app/api/og'
+const OG_IMAGE = 'https://restaurante-sumak.vercel.app/logo-sumak-dark.jpg'
 const SITE_URL = 'https://restaurante-sumak.vercel.app'
 
 export const metadata: Metadata = {
@@ -20,9 +20,9 @@ export const metadata: Metadata = {
     images: [
       {
         url: OG_IMAGE,
-        width: 1200,
-        height: 630,
-        alt: 'Pique Macho — Restaurante Sumak',
+        width: 1024,
+        height: 1024,
+        alt: 'Restaurante Sumak — Comida Boliviana & Andina',
       },
     ],
   },
