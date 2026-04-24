@@ -610,37 +610,41 @@ export default function CocinaPage() {
   const dismissedIdsRef = useRef<Set<string>>(new Set())
   // Ref para leer el sonido actual dentro de callbacks sin stale closure
   const soundOptionRef = useRef<SoundOption>('beep')
-  // Audio element persistente — se desbloquea en el primer click del usuario
-  const audioElRef = useRef<HTMLAudioElement | null>(null)
+  // AudioContext persistente — se desbloquea en el primer click
+  const audioCtxRef = useRef<AudioContext | null>(null)
   const audioUnlockedRef = useRef(false)
 
-  // Montar Audio element persistente
+  // Desbloquear AudioContext en cualquier interacción del usuario
   useEffect(() => {
-    const el = new Audio()
-    el.volume = 1.0
-    audioElRef.current = el
+    const unlock = async () => {
+      try {
+        if (!audioCtxRef.current) {
+          audioCtxRef.current = new AudioContext()
+        }
+        const ctx = audioCtxRef.current
+        if (ctx.state === 'suspended') {
+          await ctx.resume()
+        }
+        if (!audioUnlockedRef.current) {
+          // Reproducir un buffer silencioso para desbloquear completamente
+          const buf = ctx.createBuffer(1, 1, 22050)
+          const src = ctx.createBufferSource()
+          src.buffer = buf
+          src.connect(ctx.destination)
+          src.start(0)
+          audioUnlockedRef.current = true
+          console.log('[cocina] AudioContext desbloqueado')
+        }
+      } catch (err) {
+        console.warn('[cocina] AudioContext unlock error:', err)
+      }
+    }
+    document.addEventListener('click', unlock)
+    document.addEventListener('touchstart', unlock)
     return () => {
-      el.src = ''
-      audioElRef.current = null
+      document.removeEventListener('click', unlock)
+      document.removeEventListener('touchstart', unlock)
     }
-  }, [])
-
-  // Desbloquear el Audio element en el primer click del usuario
-  useEffect(() => {
-    const unlock = () => {
-      if (audioUnlockedRef.current) return
-      if (!audioElRef.current) return
-      audioUnlockedRef.current = true
-      const el = audioElRef.current
-      el.src = SILENT_WAV_URI
-      el.play().catch((err) => {
-        console.warn('[cocina] Audio unlock failed:', err)
-        audioUnlockedRef.current = false
-      })
-      console.log('[cocina] Audio element desbloqueado en primer click')
-    }
-    document.addEventListener('click', unlock, { once: false })
-    return () => document.removeEventListener('click', unlock)
   }, [])
 
   // Cargar dismissedIds y preferencia de sonido desde localStorage al montar
@@ -652,26 +656,61 @@ export default function CocinaPage() {
     setDismissedLoaded(true)
   }, [])
 
-  // Función central de reproducción usando el Audio element persistente
+  // Función central de reproducción usando AudioContext
   const playSoundWithRef = useCallback(async (sound: SoundOption): Promise<void> => {
     if (sound === 'silent') return
     console.log('[cocina] playSound llamado, sound:', sound, 'unlocked:', audioUnlockedRef.current)
     try {
-      const uri = await getWavDataUri(sound)
-      if (!uri) {
-        console.warn('[cocina] No se pudo obtener WAV data URI para:', sound)
-        return
+      if (!audioCtxRef.current) {
+        audioCtxRef.current = new AudioContext()
       }
-      const el = audioElRef.current
-      if (!el) {
-        console.warn('[cocina] Audio element no disponible')
-        return
+      const ctx = audioCtxRef.current
+      if (ctx.state === 'suspended') {
+        await ctx.resume()
       }
-      el.pause()
-      el.currentTime = 0
-      el.src = uri
-      el.load()
-      await el.play()
+
+      if (sound === 'beep') {
+        const osc = ctx.createOscillator()
+        const gain = ctx.createGain()
+        osc.connect(gain)
+        gain.connect(ctx.destination)
+        osc.type = 'sine'
+        osc.frequency.setValueAtTime(880, ctx.currentTime)
+        osc.frequency.exponentialRampToValueAtTime(440, ctx.currentTime + 0.5)
+        gain.gain.setValueAtTime(1.0, ctx.currentTime)
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.8)
+        osc.start(ctx.currentTime)
+        osc.stop(ctx.currentTime + 0.8)
+      } else if (sound === 'bell') {
+        const makeNote = (freq: number, start: number) => {
+          const osc = ctx.createOscillator()
+          const gain = ctx.createGain()
+          osc.connect(gain)
+          gain.connect(ctx.destination)
+          osc.type = 'sine'
+          osc.frequency.setValueAtTime(freq, ctx.currentTime + start)
+          gain.gain.setValueAtTime(1.0, ctx.currentTime + start)
+          gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + start + 0.4)
+          osc.start(ctx.currentTime + start)
+          osc.stop(ctx.currentTime + start + 0.4)
+        }
+        makeNote(660, 0)
+        makeNote(880, 0.45)
+      } else if (sound === 'alert') {
+        for (let i = 0; i < 3; i++) {
+          const t = i * 0.22
+          const osc = ctx.createOscillator()
+          const gain = ctx.createGain()
+          osc.connect(gain)
+          gain.connect(ctx.destination)
+          osc.type = 'square'
+          osc.frequency.setValueAtTime(800, ctx.currentTime + t)
+          gain.gain.setValueAtTime(0.7, ctx.currentTime + t)
+          gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + t + 0.18)
+          osc.start(ctx.currentTime + t)
+          osc.stop(ctx.currentTime + t + 0.18)
+        }
+      }
       console.log('[cocina] Sonido reproducido OK:', sound)
     } catch (err) {
       console.warn('[cocina] Error reproduciendo sonido:', err)
