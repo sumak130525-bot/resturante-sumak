@@ -236,6 +236,11 @@ async function getLocalOrders(): Promise<KdsOrder[]> {
     for (let idx = 0; idx < receipts.length; idx++) {
       const r = receipts[idx]
 
+      // Excluir receipts que ya son pedidos web sincronizados desde Supabase
+      // La nota del receipt tiene el formato 'Pedido web #XXXXXXXX — ...'
+      const noteLC = (r.note ?? '').toLowerCase()
+      if (noteLC.startsWith('pedido web') || noteLC.startsWith('pedido online')) continue
+
       // Filtrar line_items que sean bebidas (por item_id, ya que category_id está en /items, no en line_items)
       const allItems = r.line_items ?? []
       const kitchenItems = beverageItemIds.size > 0

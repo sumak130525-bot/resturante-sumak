@@ -6,6 +6,7 @@ import { createClient } from '@/lib/supabase/client'
 // ─── LocalStorage helpers para dismissed IDs ─────────────────────────────────
 
 const LS_KEY = 'sumak-cocina-dismissed'
+const LS_SOUND_KEY = 'sumak-cocina-sound'
 const MAX_AGE_MS = 24 * 60 * 60 * 1000 // 24 horas
 
 type DismissedEntry = { id: string; timestamp: number }
@@ -16,9 +17,7 @@ function loadDismissed(): Set<string> {
     if (!raw) return new Set()
     const entries: DismissedEntry[] = JSON.parse(raw)
     const now = Date.now()
-    // Filtrar entradas con más de 24h
     const valid = entries.filter((e) => now - e.timestamp < MAX_AGE_MS)
-    // Si hubo limpieza, guardar ya depurado
     if (valid.length !== entries.length) saveDismissed(valid)
     return new Set(valid.map((e) => e.id))
   } catch {
@@ -29,9 +28,7 @@ function loadDismissed(): Set<string> {
 function saveDismissed(entries: DismissedEntry[]) {
   try {
     localStorage.setItem(LS_KEY, JSON.stringify(entries))
-  } catch {
-    // silencioso (modo privado, quota, etc.)
-  }
+  } catch {}
 }
 
 function addDismissed(id: string) {
@@ -52,6 +49,112 @@ function removeDismissed(id: string) {
     const entries: DismissedEntry[] = JSON.parse(raw)
     saveDismissed(entries.filter((e) => e.id !== id))
   } catch {}
+}
+
+// ─── LocalStorage helpers para items tachados ────────────────────────────────
+
+function struckKey(orderId: string) {
+  return `sumak-cocina-struck-${orderId}`
+}
+
+function loadStruck(orderId: string): Set<number> {
+  try {
+    const raw = localStorage.getItem(struckKey(orderId))
+    if (!raw) return new Set()
+    const arr: number[] = JSON.parse(raw)
+    return new Set(arr)
+  } catch {
+    return new Set()
+  }
+}
+
+function saveStruck(orderId: string, indices: Set<number>) {
+  try {
+    localStorage.setItem(struckKey(orderId), JSON.stringify(Array.from(indices)))
+  } catch {}
+}
+
+function clearStruck(orderId: string) {
+  try {
+    localStorage.removeItem(struckKey(orderId))
+  } catch {}
+}
+
+// ─── Sonidos ──────────────────────────────────────────────────────────────────
+
+type SoundOption = 'beep' | 'bell' | 'alert' | 'silent'
+
+const SOUND_LABELS: Record<SoundOption, string> = {
+  beep: 'Beep',
+  bell: 'Campana',
+  alert: 'Alerta',
+  silent: 'Silencio',
+}
+
+function loadSound(): SoundOption {
+  try {
+    const v = localStorage.getItem(LS_SOUND_KEY)
+    if (v === 'beep' || v === 'bell' || v === 'alert' || v === 'silent') return v
+  } catch {}
+  return 'beep'
+}
+
+function saveSound(s: SoundOption) {
+  try {
+    localStorage.setItem(LS_SOUND_KEY, s)
+  } catch {}
+}
+
+function playSound(ctx: AudioContext, sound: SoundOption) {
+  if (sound === 'silent') return
+
+  const now = ctx.currentTime
+
+  if (sound === 'beep') {
+    // Original: 880→440Hz descendente
+    const osc = ctx.createOscillator()
+    const gain = ctx.createGain()
+    osc.connect(gain)
+    gain.connect(ctx.destination)
+    osc.type = 'sine'
+    osc.frequency.setValueAtTime(880, now)
+    osc.frequency.exponentialRampToValueAtTime(440, now + 0.3)
+    gain.gain.setValueAtTime(0.6, now)
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.5)
+    osc.start(now)
+    osc.stop(now + 0.5)
+  } else if (sound === 'bell') {
+    // Dos tonos cortos: 660Hz luego 880Hz
+    const makeNote = (freq: number, start: number) => {
+      const osc = ctx.createOscillator()
+      const gain = ctx.createGain()
+      osc.connect(gain)
+      gain.connect(ctx.destination)
+      osc.type = 'sine'
+      osc.frequency.setValueAtTime(freq, start)
+      gain.gain.setValueAtTime(0.5, start)
+      gain.gain.exponentialRampToValueAtTime(0.001, start + 0.25)
+      osc.start(start)
+      osc.stop(start + 0.25)
+    }
+    makeNote(660, now)
+    makeNote(880, now + 0.3)
+  } else if (sound === 'alert') {
+    // Tres beeps rápidos a 800Hz
+    for (let i = 0; i < 3; i++) {
+      const t = now + i * 0.18
+      const osc = ctx.createOscillator()
+      const gain = ctx.createGain()
+      osc.connect(gain)
+      gain.connect(ctx.destination)
+      osc.type = 'square'
+      osc.frequency.setValueAtTime(800, t)
+      gain.gain.setValueAtTime(0.35, t)
+      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.12)
+      osc.start(t)
+      osc.stop(t + 0.12)
+    }
+  }
 }
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
@@ -133,6 +236,28 @@ function OrderCard({
   const [singleClicked, setSingleClicked] = useState(false)
   const singleClickTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
+  // ── Estado de items tachados ──
+  const [struckIndices, setStruckIndices] = useState<Set<number>>(() => {
+    if (typeof window === 'undefined') return new Set()
+    return loadStruck(order.id)
+  })
+
+  const allStruck = order.items.length > 0 && struckIndices.size === order.items.length
+
+  const toggleStruck = (idx: number) => {
+    if (isDelivered) return
+    setStruckIndices((prev) => {
+      const next = new Set(prev)
+      if (next.has(idx)) {
+        next.delete(idx)
+      } else {
+        next.add(idx)
+      }
+      saveStruck(order.id, next)
+      return next
+    })
+  }
+
   const sc = STATUS_COLORS[order.status] ?? STATUS_COLORS.pending
 
   const diningBadge = order.diningOption
@@ -159,12 +284,17 @@ function OrderCard({
     if (isDelivered || !onDeliver) return
     if (singleClickTimer.current) clearTimeout(singleClickTimer.current)
     setSingleClicked(false)
+    clearStruck(order.id)
     onDeliver(order.id, order.source)
   }
 
   return (
     <div
-      className={`relative flex flex-col bg-gray-900 rounded-2xl border-2 ${sc.border} shadow-xl overflow-hidden`}
+      className={`relative flex flex-col bg-gray-900 rounded-2xl border-2 ${
+        allStruck && !isDelivered
+          ? 'border-green-400 shadow-[0_0_12px_2px_rgba(74,222,128,0.45)] animate-pulse'
+          : sc.border
+      } shadow-xl overflow-hidden`}
     >
       {/* ── Cabecera: doble click para entregar ── */}
       <div
@@ -236,22 +366,39 @@ function OrderCard({
 
       {/* ── Items ── */}
       <div className="flex-1 px-4 py-3 flex flex-col gap-3">
+        {allStruck && !isDelivered && (
+          <div className="text-center text-green-400 text-xs font-bold animate-pulse">
+            Todos listos — doble click para entregar
+          </div>
+        )}
         <ul className="flex flex-col gap-2">
-          {order.items.map((item, i) => (
-            <li key={i} className="flex items-start gap-2 text-white">
-              <span className="text-2xl font-black text-yellow-400 leading-none w-8 shrink-0">
-                {item.quantity}×
-              </span>
-              <div className="flex flex-col min-w-0">
-                <span className="text-base font-semibold leading-tight">{item.name}</span>
-                {item.modifiers && item.modifiers.length > 0 && (
-                  <span className="text-xs text-cyan-300 leading-snug mt-0.5">
-                    {item.modifiers.join(' · ')}
+          {order.items.map((item, i) => {
+            const struck = struckIndices.has(i)
+            return (
+              <li
+                key={i}
+                className={`flex items-start gap-2 cursor-pointer select-none transition-opacity duration-150 ${
+                  struck ? 'opacity-40' : 'text-white'
+                }`}
+                onClick={() => toggleStruck(i)}
+                title={struck ? 'Click para quitar tachado' : 'Click para tachar'}
+              >
+                <span className={`text-2xl font-black leading-none w-8 shrink-0 ${struck ? 'text-gray-500' : 'text-yellow-400'}`}>
+                  {item.quantity}×
+                </span>
+                <div className="flex flex-col min-w-0">
+                  <span className={`text-base font-semibold leading-tight ${struck ? 'line-through text-gray-500' : ''}`}>
+                    {item.name}
                   </span>
-                )}
-              </div>
-            </li>
-          ))}
+                  {item.modifiers && item.modifiers.length > 0 && (
+                    <span className={`text-xs leading-snug mt-0.5 ${struck ? 'line-through text-gray-600' : 'text-cyan-300'}`}>
+                      {item.modifiers.join(' · ')}
+                    </span>
+                  )}
+                </div>
+              </li>
+            )
+          })}
         </ul>
 
         {/* Notas */}
@@ -277,6 +424,63 @@ function OrderCard({
   )
 }
 
+// ─── Selector de sonido ───────────────────────────────────────────────────────
+
+function SoundSelector({
+  value,
+  onChange,
+}: {
+  value: SoundOption
+  onChange: (s: SoundOption) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+
+  // Cerrar al click fuera
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [])
+
+  return (
+    <div ref={ref} className="relative">
+      <button
+        onClick={() => setOpen((o) => !o)}
+        className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-700 hover:bg-gray-600 rounded-lg text-sm font-bold transition-all"
+        title="Tono de notificación"
+      >
+        <span>{value === 'silent' ? '🔕' : '🔔'}</span>
+        <span className="hidden sm:inline text-gray-300">{SOUND_LABELS[value]}</span>
+      </button>
+
+      {open && (
+        <div className="absolute right-0 top-full mt-1 bg-gray-800 border border-gray-700 rounded-xl shadow-2xl z-50 min-w-[140px] overflow-hidden">
+          {(Object.keys(SOUND_LABELS) as SoundOption[]).map((s) => (
+            <button
+              key={s}
+              onClick={() => {
+                onChange(s)
+                setOpen(false)
+              }}
+              className={`w-full text-left px-4 py-2.5 text-sm font-semibold transition-colors ${
+                value === s
+                  ? 'bg-gray-600 text-white'
+                  : 'text-gray-300 hover:bg-gray-700 hover:text-white'
+              }`}
+            >
+              {s === 'silent' ? '🔕' : '🔔'} {SOUND_LABELS[s]}
+              {value === s && <span className="ml-2 text-green-400">✓</span>}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ─── Página principal ─────────────────────────────────────────────────────────
 
 export default function CocinaPage() {
@@ -287,39 +491,46 @@ export default function CocinaPage() {
   const [filterSource, setFilterSource] = useState<FilterSource>('ALL')
   const [activeTab, setActiveTab] = useState<ActiveTab>('cocina')
   const [lastCount, setLastCount] = useState(0)
-  // Flag para garantizar que localStorage se leyó antes del primer fetch
   const [dismissedLoaded, setDismissedLoaded] = useState(false)
+  const [soundOption, setSoundOption] = useState<SoundOption>('beep')
   const audioRef = useRef<AudioContext | null>(null)
   const prevIdsRef = useRef<Set<string>>(new Set())
-  // IDs de pedidos marcados como entregados — persiste en localStorage
   const dismissedIdsRef = useRef<Set<string>>(new Set())
+  // Ref para leer el sonido actual dentro de callbacks sin stale closure
+  const soundOptionRef = useRef<SoundOption>('beep')
 
-  // Cargar dismissedIds desde localStorage al montar (solo en cliente)
+  // Cargar dismissedIds y preferencia de sonido desde localStorage al montar
   useEffect(() => {
     dismissedIdsRef.current = loadDismissed()
-    console.log('[cocina] dismissedIds cargados:', Array.from(dismissedIdsRef.current))
+    const saved = loadSound()
+    soundOptionRef.current = saved
+    setSoundOption(saved)
     setDismissedLoaded(true)
+  }, [])
+
+  const handleSoundChange = useCallback((s: SoundOption) => {
+    soundOptionRef.current = s
+    setSoundOption(s)
+    saveSound(s)
+    // Reproducir preview del sonido seleccionado
+    if (s !== 'silent') {
+      try {
+        const ctx = audioRef.current ?? new AudioContext()
+        audioRef.current = ctx
+        playSound(ctx, s)
+      } catch {}
+    }
   }, [])
 
   // ── Sonido de notificación ──────────────────────────────────────────────────
   const playBeep = useCallback(() => {
+    const sound = soundOptionRef.current
+    if (sound === 'silent') return
     try {
       const ctx = audioRef.current ?? new AudioContext()
       audioRef.current = ctx
-      const osc = ctx.createOscillator()
-      const gain = ctx.createGain()
-      osc.connect(gain)
-      gain.connect(ctx.destination)
-      osc.type = 'sine'
-      osc.frequency.setValueAtTime(880, ctx.currentTime)
-      osc.frequency.exponentialRampToValueAtTime(440, ctx.currentTime + 0.3)
-      gain.gain.setValueAtTime(0.6, ctx.currentTime)
-      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.5)
-      osc.start(ctx.currentTime)
-      osc.stop(ctx.currentTime + 0.5)
-    } catch {
-      // ignorar
-    }
+      playSound(ctx, sound)
+    } catch {}
   }, [])
 
   // ── Fetch ──────────────────────────────────────────────────────────────────
@@ -329,7 +540,6 @@ export default function CocinaPage() {
       if (!res.ok) return
       const raw: KdsOrder[] = await res.json()
 
-      // Excluir pedidos ya marcados como entregados localmente
       const data = raw.filter((o) => !dismissedIdsRef.current.has(o.id))
 
       setOrders(data)
@@ -351,7 +561,7 @@ export default function CocinaPage() {
   useEffect(() => {
     if (!dismissedLoaded) return
     fetchOrders()
-    const interval = setInterval(fetchOrders, 15_000)
+    const interval = setInterval(() => fetchOrders(), 15_000)
     return () => clearInterval(interval)
   }, [fetchOrders, dismissedLoaded])
 
@@ -369,20 +579,17 @@ export default function CocinaPage() {
 
   // ── Marcar como ENTREGADO ──────────────────────────────────────────────────
   const handleDeliver = useCallback(async (id: string, source: 'WEB' | 'LOCAL') => {
-    // Encontrar el pedido
     const order = orders.find((o) => o.id === id)
     if (!order) return
 
-    // Agregar a dismissedIds para que no vuelva en futuros fetches
     dismissedIdsRef.current.add(id)
     addDismissed(id)
+    clearStruck(id)
 
-    // Moverlo al historial local inmediatamente
     const deliveredOrder = { ...order, status: 'delivered' }
     setOrders((prev) => prev.filter((o) => o.id !== id))
     setDeliveredOrders((prev) => [deliveredOrder, ...prev])
 
-    // Si es WEB, actualizar en Supabase
     if (source === 'WEB') {
       try {
         const res = await fetch('/api/admin/orders', {
@@ -392,14 +599,12 @@ export default function CocinaPage() {
         })
         if (!res.ok) throw new Error('PUT failed')
       } catch {
-        // Si falla, revertir: quitar de dismissed y restaurar en activos
         dismissedIdsRef.current.delete(id)
         removeDismissed(id)
         setDeliveredOrders((prev) => prev.filter((o) => o.id !== id))
         setOrders((prev) => [order, ...prev])
       }
     }
-    // Para LOCAL: dismissedIds es la única forma de ocultarlo (Loyverse no se modifica)
   }, [orders])
 
   // ── Recuperar pedido desde historial ──────────────────────────────────────
@@ -407,7 +612,6 @@ export default function CocinaPage() {
     const order = deliveredOrders.find((o) => o.id === id)
     if (!order) return
 
-    // Quitar de dismissedIds para que el fetch lo vuelva a incluir
     dismissedIdsRef.current.delete(id)
     removeDismissed(id)
 
@@ -415,7 +619,6 @@ export default function CocinaPage() {
     setDeliveredOrders((prev) => prev.filter((o) => o.id !== id))
     setOrders((prev) => [recoveredOrder, ...prev])
 
-    // Si es WEB, actualizar en Supabase
     if (order.source === 'WEB') {
       fetch('/api/admin/orders', {
         method: 'PUT',
@@ -474,7 +677,8 @@ export default function CocinaPage() {
               +{lastCount} nuevos
             </span>
           )}
-          <span>Actualiza cada 15s</span>
+          <SoundSelector value={soundOption} onChange={handleSoundChange} />
+          <span className="hidden sm:inline">Actualiza cada 15s</span>
           <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
         </div>
       </header>
@@ -572,7 +776,6 @@ export default function CocinaPage() {
             </div>
           )
         ) : (
-          // ── Tab Entregados ──
           filteredDelivered.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-full gap-4 text-gray-600">
               <span className="text-6xl">✅</span>
