@@ -606,13 +606,16 @@ export default function CocinaPage() {
   const [lastCount, setLastCount] = useState(0)
   const [dismissedLoaded, setDismissedLoaded] = useState(false)
   const [soundOption, setSoundOption] = useState<SoundOption>('beep')
-  const prevIdsRef = useRef<Set<string>>(new Set())
   const dismissedIdsRef = useRef<Set<string>>(new Set())
   // Ref para leer el sonido actual dentro de callbacks sin stale closure
   const soundOptionRef = useRef<SoundOption>('beep')
   // AudioContext persistente — se desbloquea en el primer click
   const audioCtxRef = useRef<AudioContext | null>(null)
   const audioUnlockedRef = useRef(false)
+  // Anti-duplicado: evita sonar dos veces en menos de 3 segundos
+  const lastSoundTimestampRef = useRef<number>(0)
+  // Fallback polling: detecta si el count de pedidos subió
+  const prevCountRef = useRef<number>(0)
 
   // Desbloquear AudioContext en cualquier interacción del usuario
   useEffect(() => {
@@ -727,8 +730,14 @@ export default function CocinaPage() {
     }
   }, [playSoundWithRef])
 
-  // ── Sonido de notificación ──────────────────────────────────────────────────
+  // ── Sonido de notificación (con anti-duplicado de 3s) ──────────────────────
   const playBeep = useCallback(async () => {
+    const now = Date.now()
+    if (now - lastSoundTimestampRef.current < 3000) {
+      console.log('[cocina] playBeep ignorado (anti-duplicado 3s)')
+      return
+    }
+    lastSoundTimestampRef.current = now
     await playSoundWithRef(soundOptionRef.current)
   }, [playSoundWithRef])
 
@@ -743,13 +752,13 @@ export default function CocinaPage() {
 
       setOrders(data)
 
-      const newIds = new Set(data.map((o) => o.id))
-      const incoming = data.filter((o) => !prevIdsRef.current.has(o.id))
-      if (prevIdsRef.current.size > 0 && incoming.length > 0) {
+      // Fallback polling: si el count subió (y no es el primer fetch), sonar
+      if (prevCountRef.current > 0 && data.length > prevCountRef.current) {
+        console.log('[cocina] Polling fallback: pedidos aumentaron de', prevCountRef.current, 'a', data.length)
         await playBeep()
-        setLastCount((c) => c + incoming.length)
+        setLastCount((c) => c + (data.length - prevCountRef.current))
       }
-      prevIdsRef.current = newIds
+      prevCountRef.current = data.length
     } catch {
       // silencioso
     } finally {
@@ -769,12 +778,20 @@ export default function CocinaPage() {
     const supabase = createClient()
     const channel = supabase
       .channel('cocina-orders-realtime')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, () => {
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'orders' }, (payload) => {
+        console.log('[cocina] Realtime INSERT detected:', (payload.new as { id?: string })?.id)
+        playBeep()
+        fetchOrders()
+      })
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'orders' }, () => {
+        fetchOrders()
+      })
+      .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'orders' }, () => {
         fetchOrders()
       })
       .subscribe()
     return () => { supabase.removeChannel(channel) }
-  }, [fetchOrders])
+  }, [fetchOrders, playBeep])
 
   // ── Marcar como ENTREGADO ──────────────────────────────────────────────────
   const handleDeliver = useCallback(async (id: string, source: 'WEB' | 'LOCAL') => {
