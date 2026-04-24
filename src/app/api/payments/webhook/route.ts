@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { MercadoPagoConfig, Payment, Preference } from 'mercadopago'
+import { MercadoPagoConfig, Payment } from 'mercadopago'
 import { createServerClient, type CookieOptions } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 import { waitUntil } from '@vercel/functions'
@@ -22,6 +22,16 @@ type MenuItemPartial = {
   name: string
   available: number
   price: number
+}
+
+type PendingOrder = {
+  id: string
+  customer_name: string
+  customer_phone: string | null
+  notes: string | null
+  mesa: string | null
+  channel: string
+  items: OrderItemInput[]
 }
 
 async function getServiceClient() {
@@ -117,6 +127,27 @@ async function syncLoyverse(
   console.log(`[Loyverse] Receipt creado: receipt_number=${result?.receipt_number ?? 'N/A'}`)
 }
 
+/**
+ * Extrae un payment ID del payload del webhook de MercadoPago.
+ * Soporta topic=payment (body.data.id | body.id) y topic=merchant_order
+ * (busca el primer payment aprobado dentro de payments[]).
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function extractPaymentId(topic: string, body: Record<string, any>): string | null {
+  if (topic === 'payment') {
+    const id = body.data?.id ?? body.id
+    return id ? String(id) : null
+  }
+  if (topic === 'merchant_order') {
+    // merchant_order incluye un array payments[] con los pagos vinculados
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const payments: any[] = body.payments ?? body.data?.payments ?? []
+    const approved = payments.find((p) => p.status === 'approved')
+    return approved ? String(approved.id) : null
+  }
+  return null
+}
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
@@ -129,46 +160,38 @@ export async function POST(request: NextRequest) {
     }
 
     const topic = body.topic ?? body.type
-    const resourceId = body.data?.id ?? body.id
+    console.log(`[webhook] topic/type: ${topic}`)
 
-    if (topic !== 'payment') {
+    // Aceptamos payment y merchant_order; ignoramos el resto
+    if (topic !== 'payment' && topic !== 'merchant_order') {
       console.log(`[webhook] Ignorando notificación de tipo: ${topic}`)
       return NextResponse.json({ ok: true })
     }
 
-    if (!resourceId) {
-      console.warn('[webhook] Sin payment ID en el payload')
+    const paymentId = extractPaymentId(topic, body)
+    if (!paymentId) {
+      console.warn(`[webhook] No se pudo extraer payment ID del payload (topic=${topic})`)
       return NextResponse.json({ ok: true })
     }
 
+    console.log(`[webhook] Consultando payment ID: ${paymentId}`)
     const mp = new MercadoPagoConfig({ accessToken })
     const paymentClient = new Payment(mp)
+    const payment = await paymentClient.get({ id: paymentId })
+    console.log(`[webhook] Payment ${paymentId} status: ${payment.status}`)
 
-    const payment = await paymentClient.get({ id: String(resourceId) })
-    console.log(`[webhook] Payment ${resourceId} status: ${payment.status}`)
-
-    // Only create order on approved payment
+    // Sólo crear pedido si el pago está aprobado
     if (payment.status !== 'approved') {
       console.log(`[webhook] Pago no aprobado (${payment.status}), no se crea pedido.`)
       return NextResponse.json({ ok: true })
     }
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const preferenceId = (payment as any).preference_id as string | undefined
-    if (!preferenceId) {
-      console.warn('[webhook] Sin preference_id en el payment')
-      return NextResponse.json({ ok: true })
-    }
+    const externalRef = (payment as any).external_reference as string | undefined
+    console.log(`[webhook] external_reference: ${externalRef}`)
 
-    // Fetch the original preference to get order metadata
-    const preferenceClient = new Preference(mp)
-    const pref = await preferenceClient.get({ preferenceId })
-
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const meta = pref.metadata as Record<string, any> | undefined
-
-    if (!meta || !meta.items || !meta.customer_name) {
-      console.error('[webhook] Preferencia sin metadata de pedido:', preferenceId)
+    if (!externalRef) {
+      console.warn('[webhook] Sin external_reference en el payment')
       return NextResponse.json({ ok: true })
     }
 
@@ -178,13 +201,28 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Sin acceso a DB' }, { status: 500 })
     }
 
-    const orderItems: OrderItemInput[] = meta.items
-    const customerName: string = meta.customer_name
-    const customerPhone: string | null = meta.customer_phone ?? null
-    const notes: string | null = meta.notes ?? null
-    const channel: 'web' | 'whatsapp' = meta.channel === 'whatsapp' ? 'whatsapp' : 'web'
+    // --- Buscar datos del pedido en pending_orders ---
+    const { data: pendingOrder, error: pendingError } = await supabase
+      .from('pending_orders')
+      .select('*')
+      .eq('id', externalRef)
+      .single() as { data: PendingOrder | null; error: { message: string } | null }
 
-    // Verify menu items availability and fetch names
+    if (pendingError || !pendingOrder) {
+      console.error(`[webhook] pending_order no encontrado para external_reference=${externalRef}:`, pendingError?.message ?? 'sin data')
+      // Si ya fue procesado (pedido ya creado) retornar ok
+      return NextResponse.json({ ok: true })
+    }
+
+    console.log(`[webhook] pending_order encontrado: ${pendingOrder.id}, items=${pendingOrder.items.length}`)
+
+    const orderItems: OrderItemInput[] = pendingOrder.items
+    const customerName: string = pendingOrder.customer_name
+    const customerPhone: string | null = pendingOrder.customer_phone ?? null
+    const notes: string | null = pendingOrder.notes ?? null
+    const channel: 'web' | 'whatsapp' = pendingOrder.channel === 'whatsapp' ? 'whatsapp' : 'web'
+
+    // Verificar disponibilidad de menu items
     const itemIds = orderItems.map((i) => i.menu_item_id)
     const { data: menuItems, error: menuError } = await supabase
       .from('menu_items')
@@ -196,10 +234,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: menuError.message }, { status: 500 })
     }
 
-    // Calculate total
+    // Calcular total
     const total = orderItems.reduce((sum, i) => sum + i.unit_price * i.quantity, 0)
 
-    // Create order with status=confirmed (payment already approved)
+    // Crear pedido con status=confirmed
     const { data: order, error: orderError } = await supabase
       .from('orders')
       .insert({
@@ -209,7 +247,7 @@ export async function POST(request: NextRequest) {
         total,
         status: 'confirmed',
         channel,
-        payment_id: String(resourceId),
+        payment_id: paymentId,
         payment_status: 'approved',
         payment_method: payment.payment_type_id ?? 'mercadopago',
       })
@@ -227,7 +265,7 @@ export async function POST(request: NextRequest) {
 
     console.log(`[webhook] Pedido creado: ${order.id}`)
 
-    // Insert order items
+    // Insertar order_items
     const orderItemsRows = orderItems.map((i) => ({
       order_id: order.id,
       menu_item_id: i.menu_item_id,
@@ -241,10 +279,10 @@ export async function POST(request: NextRequest) {
 
     if (itemsError) {
       console.error('[webhook] Error insertando order_items:', itemsError.message)
-      // Don't fail — order is created, items issue is secondary
+      // No fallar: el pedido ya fue creado
     }
 
-    // Discount stock
+    // Descontar stock
     for (const oi of orderItems) {
       const menuItem = menuItems?.find((m) => m.id === oi.menu_item_id)
       if (menuItem) {
@@ -253,6 +291,18 @@ export async function POST(request: NextRequest) {
           .update({ available: menuItem.available - oi.quantity })
           .eq('id', oi.menu_item_id)
       }
+    }
+
+    // Eliminar pending_order (ya procesado)
+    const { error: deleteError } = await supabase
+      .from('pending_orders')
+      .delete()
+      .eq('id', externalRef)
+
+    if (deleteError) {
+      console.warn(`[webhook] No se pudo borrar pending_order ${externalRef}:`, deleteError.message)
+    } else {
+      console.log(`[webhook] pending_order ${externalRef} eliminado.`)
     }
 
     // Sync Loyverse fire-and-forget
@@ -268,12 +318,12 @@ export async function POST(request: NextRequest) {
       })
     )
 
-    console.log(`[webhook] Pedido ${order.id} creado y confirmado.`)
+    console.log(`[webhook] Pedido ${order.id} creado y confirmado. pending_order eliminado.`)
     return NextResponse.json({ ok: true })
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Error interno'
     console.error('[webhook] Error:', message)
-    // Always return 200 so MP doesn't retry indefinitely
+    // Siempre 200 para que MP no reintente indefinidamente
     return NextResponse.json({ ok: true })
   }
 }

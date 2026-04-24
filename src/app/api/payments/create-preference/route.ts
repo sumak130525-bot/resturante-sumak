@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { MercadoPagoConfig, Preference } from 'mercadopago'
+import { createServerClient, type CookieOptions } from '@supabase/ssr'
+import { cookies } from 'next/headers'
 
 const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL ?? 'https://resturante-sumak.vercel.app'
 
@@ -8,6 +10,26 @@ type OrderItemInput = {
   quantity: number
   unit_price: number
   title?: string
+}
+
+async function getServiceClient() {
+  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY
+  if (!serviceKey) return null
+  const cookieStore = await cookies()
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    serviceKey,
+    {
+      cookies: {
+        getAll() { return cookieStore.getAll() },
+        setAll(cookiesToSet: { name: string; value: string; options: CookieOptions }[]) {
+          try { cookiesToSet.forEach(({ name, value, options }) => cookieStore.set(name, value, options)) } catch {}
+        },
+      },
+    }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  ) as any
 }
 
 export async function POST(request: NextRequest) {
@@ -41,17 +63,46 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'MercadoPago no configurado' }, { status: 500 })
     }
 
-    // Build MercadoPago preference items
-    const mpItems = items.map((item) => ({
+    // --- 1. Guardar datos del pedido en pending_orders ANTES de crear la preferencia ---
+    const pendingId = `pre_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`
+
+    const supabase = await getServiceClient()
+    if (!supabase) {
+      console.error('[create-preference] SUPABASE_SERVICE_ROLE_KEY no configurado')
+      return NextResponse.json({ error: 'Sin acceso a DB' }, { status: 500 })
+    }
+
+    const { error: insertError } = await supabase
+      .from('pending_orders')
+      .insert({
+        id: pendingId,
+        customer_name,
+        customer_phone: customer_phone ?? null,
+        notes: notes ?? null,
+        mesa: mesa ?? null,
+        channel: channel ?? 'web',
+        items: items.map((i: OrderItemInput) => ({
+          menu_item_id: i.menu_item_id,
+          quantity: i.quantity,
+          unit_price: i.unit_price,
+        })),
+      })
+
+    if (insertError) {
+      console.error('[create-preference] Error insertando pending_order:', insertError.message)
+      return NextResponse.json({ error: insertError.message }, { status: 500 })
+    }
+
+    console.log(`[create-preference] pending_order guardado: ${pendingId}`)
+
+    // --- 2. Crear preferencia MP usando pendingId como external_reference (sin metadata de items) ---
+    const mpItems = items.map((item: OrderItemInput) => ({
       id: item.menu_item_id,
       title: item.title ?? 'Producto',
       quantity: item.quantity,
       unit_price: Math.round(item.unit_price),
       currency_id: 'ARS',
     }))
-
-    // Use a temporary external_reference UUID; the real order will be created by the webhook
-    const tempRef = `pre_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`
 
     const mp = new MercadoPagoConfig({ accessToken })
     const preference = new Preference(mp)
@@ -65,24 +116,12 @@ export async function POST(request: NextRequest) {
           pending: `${BASE_URL}/pedido/estado?status=pending`,
         },
         auto_return: 'approved',
-        external_reference: tempRef,
+        external_reference: pendingId,
         notification_url: `${BASE_URL}/api/payments/webhook`,
         payer: {
           name: customer_name,
         },
-        // Store order data in metadata so the webhook can create the real order
-        metadata: {
-          customer_name,
-          customer_phone: customer_phone ?? null,
-          notes: notes ?? null,
-          mesa: mesa ?? null,
-          channel: channel ?? 'web',
-          items: items.map((i) => ({
-            menu_item_id: i.menu_item_id,
-            quantity: i.quantity,
-            unit_price: i.unit_price,
-          })),
-        },
+        // Sin metadata de items: los datos están en pending_orders
       },
     })
 
