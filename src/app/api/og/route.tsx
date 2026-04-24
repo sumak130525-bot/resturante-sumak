@@ -3,6 +3,27 @@ import { ImageResponse } from 'next/og'
 export const runtime = 'edge'
 
 export async function GET() {
+  // Fetch the logo (dark version with black background) to embed in the OG image
+  const logoUrl = 'https://restaurante-sumak.vercel.app/logo-sumak-dark.jpg'
+
+  let logoData: string | null = null
+  try {
+    const res = await fetch(logoUrl)
+    if (res.ok) {
+      const buf = await res.arrayBuffer()
+      // Edge-compatible base64 encoding
+      const bytes = new Uint8Array(buf)
+      let binary = ''
+      for (let i = 0; i < bytes.byteLength; i++) {
+        binary += String.fromCharCode(bytes[i])
+      }
+      const base64 = btoa(binary)
+      logoData = `data:image/jpeg;base64,${base64}`
+    }
+  } catch {
+    // fall through to text-only layout
+  }
+
   return new ImageResponse(
     (
       <div
@@ -41,31 +62,24 @@ export async function GET() {
           }}
         />
 
-        {/* Emoji icon */}
-        <div
-          style={{
-            fontSize: '80px',
-            marginBottom: '20px',
-          }}
-        >
-          🍽️
-        </div>
-
-        {/* Main title */}
-        <div
-          style={{
-            fontSize: '72px',
-            fontWeight: 'bold',
-            color: '#F5E6C8',
-            letterSpacing: '-1px',
-            textAlign: 'center',
-            lineHeight: 1.1,
-            marginBottom: '16px',
-            textShadow: '0 2px 8px rgba(0,0,0,0.4)',
-          }}
-        >
-          Restaurante Sumak
-        </div>
+        {/* Logo or fallback */}
+        {logoData ? (
+          <img
+            src={logoData}
+            width={420}
+            height={200}
+            style={{ objectFit: 'contain', marginBottom: '24px' }}
+          />
+        ) : (
+          <div
+            style={{
+              fontSize: '80px',
+              marginBottom: '20px',
+            }}
+          >
+            🍽️
+          </div>
+        )}
 
         {/* Divider */}
         <div

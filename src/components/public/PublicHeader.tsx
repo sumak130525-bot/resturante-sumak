@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
+import Image from 'next/image'
 import { ShoppingBag, ChevronDown } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useTranslation, type Locale } from '@/lib/i18n'
@@ -69,23 +70,15 @@ export function PublicHeader({ cartCount, onCartOpen, isLive }: PublicHeaderProp
         <div className="h-16 md:h-20 flex items-center justify-between">
 
           {/* ── Logo ── */}
-          <a href="/" className="flex items-center gap-3 group">
-            {/* Monogram badge */}
-            <div className="relative w-10 h-10 shrink-0">
-              <div className="absolute inset-0 rounded-xl bg-sumak-gold-gradient rotate-12 opacity-20 group-hover:rotate-0 transition-transform duration-500" />
-              <div className="relative w-full h-full rounded-xl bg-gold-gradient flex items-center justify-center shadow-gold-glow/50">
-                <span className="font-serif font-bold text-sumak-brown text-lg leading-none">S</span>
-              </div>
-            </div>
-
-            <div className="leading-none">
-              <p className="font-serif font-bold text-xl text-white tracking-wide group-hover:text-sumak-gold transition-colors duration-300">
-                Sumak
-              </p>
-              <p className="text-[10px] font-medium tracking-[0.18em] uppercase text-sumak-gold-light/80">
-                {t('restaurantSubtitle')}
-              </p>
-            </div>
+          <a href="/" className="flex items-center group">
+            <Image
+              src="/logo-sumak.png"
+              alt="Restaurante Sumak"
+              width={160}
+              height={50}
+              className="h-10 md:h-12 w-auto object-contain transition-opacity duration-300 group-hover:opacity-85"
+              priority
+            />
           </a>
 
           {/* ── Right controls ── */}

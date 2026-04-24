@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState, useCallback } from 'react'
+import Image from 'next/image'
 import { createClient } from '@/lib/supabase/client'
 
 // ─── LocalStorage helpers para dismissed IDs ─────────────────────────────────
@@ -864,7 +865,13 @@ export default function CocinaPage() {
       {/* ── Barra superior ── */}
       <header className="flex items-center justify-between px-4 py-3 bg-gray-900 border-b border-gray-800 shrink-0">
         <div className="flex items-center gap-3">
-          <span className="text-2xl">🍳</span>
+          <Image
+            src="/logo-sumak.png"
+            alt="Sumak"
+            width={80}
+            height={32}
+            className="h-8 w-auto object-contain"
+          />
           <div>
             <h1 className="text-xl font-black leading-none">COCINA</h1>
             <p className="text-gray-400 text-xs">
