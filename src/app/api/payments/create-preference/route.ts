@@ -3,7 +3,7 @@ import { MercadoPagoConfig, Preference } from 'mercadopago'
 import { createServerClient, type CookieOptions } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 
-const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL ?? 'https://resturante-sumak.vercel.app'
+const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL ?? 'https://restaurante-sumak.vercel.app'
 
 type OrderItemInput = {
   menu_item_id: string
