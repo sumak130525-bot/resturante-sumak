@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { Loader2, Save, X } from 'lucide-react'
+import { Loader2, Save, X, ChevronDown, ChevronUp } from 'lucide-react'
 import type { MenuItem, Category } from '@/lib/types'
 
 interface MenuItemFormProps {
@@ -20,9 +20,15 @@ export function MenuItemForm({ item, categories, onSave, onClose }: MenuItemForm
     category_id: item?.category_id ?? categories[0]?.id ?? '',
     image_url: item?.image_url ?? '',
     active: item?.active ?? true,
+    name_en: item?.name_en ?? '',
+    name_qu: item?.name_qu ?? '',
+    description_es: item?.description_es ?? '',
+    description_en: item?.description_en ?? '',
+    description_qu: item?.description_qu ?? '',
   })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [translationsOpen, setTranslationsOpen] = useState(false)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -35,11 +41,18 @@ export function MenuItemForm({ item, categories, onSave, onClose }: MenuItemForm
     try {
       await onSave({
         ...(item?.id ? { id: item.id } : {}),
-        ...form,
+        name: form.name,
+        description: form.description || null,
         price: Number(form.price),
         available: Number(form.available),
+        category_id: form.category_id,
         image_url: form.image_url || null,
-        description: form.description || null,
+        active: form.active,
+        name_en: form.name_en || null,
+        name_qu: form.name_qu || null,
+        description_es: form.description_es || null,
+        description_en: form.description_en || null,
+        description_qu: form.description_qu || null,
       })
       onClose()
     } catch (err: unknown) {
@@ -146,6 +159,77 @@ export function MenuItemForm({ item, categories, onSave, onClose }: MenuItemForm
                 Plato activo (visible en el menú)
               </label>
             </div>
+          </div>
+
+          {/* Sección de traducciones colapsable */}
+          <div className="border border-gray-200 rounded-xl overflow-hidden">
+            <button
+              type="button"
+              onClick={() => setTranslationsOpen((o) => !o)}
+              className="w-full flex items-center justify-between px-4 py-3 bg-gray-50 hover:bg-gray-100 transition-colors text-sm font-medium text-gray-700"
+            >
+              <span>🌍 Traducciones</span>
+              {translationsOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+            </button>
+
+            {translationsOpen && (
+              <div className="p-4 space-y-3">
+                <p className="text-xs text-gray-400 mb-2">Todos los campos son opcionales.</p>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Nombre en inglés</label>
+                    <input
+                      type="text"
+                      value={form.name_en}
+                      onChange={(e) => setForm({ ...form, name_en: e.target.value })}
+                      className="input-field text-sm"
+                      placeholder="Name in English"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">Nombre en quechua</label>
+                    <input
+                      type="text"
+                      value={form.name_qu}
+                      onChange={(e) => setForm({ ...form, name_qu: e.target.value })}
+                      className="input-field text-sm"
+                      placeholder="Suti qhichwa simipim"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Descripción en español</label>
+                  <textarea
+                    value={form.description_es}
+                    onChange={(e) => setForm({ ...form, description_es: e.target.value })}
+                    className="input-field resize-none h-16 text-sm"
+                    placeholder="Descripción en español"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Descripción en inglés</label>
+                  <textarea
+                    value={form.description_en}
+                    onChange={(e) => setForm({ ...form, description_en: e.target.value })}
+                    className="input-field resize-none h-16 text-sm"
+                    placeholder="Description in English"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">Descripción en quechua</label>
+                  <textarea
+                    value={form.description_qu}
+                    onChange={(e) => setForm({ ...form, description_qu: e.target.value })}
+                    className="input-field resize-none h-16 text-sm"
+                    placeholder="Rimay qhichwa simipim"
+                  />
+                </div>
+              </div>
+            )}
           </div>
 
           {error && (
