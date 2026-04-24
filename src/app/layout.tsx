@@ -3,7 +3,7 @@ import Script from 'next/script'
 import './globals.css'
 import { Providers } from '@/components/Providers'
 
-const OG_IMAGE = 'https://restaurante-sumak.vercel.app/og-image.jpg'
+const OG_IMAGE = 'https://restaurante-sumak.vercel.app/api/og'
 const SITE_URL = 'https://restaurante-sumak.vercel.app'
 
 export const metadata: Metadata = {
