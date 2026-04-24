@@ -45,20 +45,30 @@ export const viewport: Viewport = {
   colorScheme: 'light',
 }
 
+const MAPS_URL = 'https://www.google.com/maps/place/SUMAK/@-32.8949139,-68.8292403,19.5z/data=!4m6!3m5!1s0x967e09a1dd6eefdd:0x698ad41b5908215c!8m2!3d-32.8949528!4d-68.8286573!16s%2Fg%2F11xgssdlt9'
+
 const jsonLd = {
   '@context': 'https://schema.org',
   '@type': 'Restaurant',
   name: 'Restaurante Sumak',
   url: SITE_URL,
   menu: SITE_URL,
+  hasMap: MAPS_URL,
   servesCuisine: ['Bolivian', 'Andean'],
   priceRange: '$',
   currenciesAccepted: 'ARS',
   address: {
     '@type': 'PostalAddress',
-    streetAddress: '',
-    addressLocality: '',
+    streetAddress: 'Juan B Alberdi 247',
+    addressLocality: 'Guaymallén',
+    addressRegion: 'Mendoza',
+    postalCode: 'M5519',
     addressCountry: 'AR',
+  },
+  geo: {
+    '@type': 'GeoCoordinates',
+    latitude: -32.8949528,
+    longitude: -68.8286573,
   },
   image: OG_IMAGE,
 }
