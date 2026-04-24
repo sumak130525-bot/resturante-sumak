@@ -105,24 +105,25 @@ function saveSound(s: SoundOption) {
   } catch {}
 }
 
-function playSound(ctx: AudioContext, sound: SoundOption) {
+async function playSound(ctx: AudioContext, sound: SoundOption) {
   if (sound === 'silent') return
+  if (ctx.state === 'suspended') await ctx.resume()
 
   const now = ctx.currentTime
 
   if (sound === 'beep') {
-    // Original: 880→440Hz descendente
+    // 880→440Hz descendente
     const osc = ctx.createOscillator()
     const gain = ctx.createGain()
     osc.connect(gain)
     gain.connect(ctx.destination)
     osc.type = 'sine'
     osc.frequency.setValueAtTime(880, now)
-    osc.frequency.exponentialRampToValueAtTime(440, now + 0.3)
-    gain.gain.setValueAtTime(0.6, now)
-    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.5)
+    osc.frequency.exponentialRampToValueAtTime(440, now + 0.5)
+    gain.gain.setValueAtTime(1.0, now)
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.8)
     osc.start(now)
-    osc.stop(now + 0.5)
+    osc.stop(now + 0.8)
   } else if (sound === 'bell') {
     // Dos tonos cortos: 660Hz luego 880Hz
     const makeNote = (freq: number, start: number) => {
@@ -132,27 +133,27 @@ function playSound(ctx: AudioContext, sound: SoundOption) {
       gain.connect(ctx.destination)
       osc.type = 'sine'
       osc.frequency.setValueAtTime(freq, start)
-      gain.gain.setValueAtTime(0.5, start)
-      gain.gain.exponentialRampToValueAtTime(0.001, start + 0.25)
+      gain.gain.setValueAtTime(1.0, start)
+      gain.gain.exponentialRampToValueAtTime(0.001, start + 0.4)
       osc.start(start)
-      osc.stop(start + 0.25)
+      osc.stop(start + 0.4)
     }
     makeNote(660, now)
-    makeNote(880, now + 0.3)
+    makeNote(880, now + 0.45)
   } else if (sound === 'alert') {
     // Tres beeps rápidos a 800Hz
     for (let i = 0; i < 3; i++) {
-      const t = now + i * 0.18
+      const t = now + i * 0.22
       const osc = ctx.createOscillator()
       const gain = ctx.createGain()
       osc.connect(gain)
       gain.connect(ctx.destination)
       osc.type = 'square'
       osc.frequency.setValueAtTime(800, t)
-      gain.gain.setValueAtTime(0.35, t)
-      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.12)
+      gain.gain.setValueAtTime(0.7, t)
+      gain.gain.exponentialRampToValueAtTime(0.001, t + 0.18)
       osc.start(t)
-      osc.stop(t + 0.12)
+      osc.stop(t + 0.18)
     }
   }
 }
@@ -508,28 +509,39 @@ export default function CocinaPage() {
     setDismissedLoaded(true)
   }, [])
 
-  const handleSoundChange = useCallback((s: SoundOption) => {
+  const handleSoundChange = useCallback(async (s: SoundOption) => {
     soundOptionRef.current = s
     setSoundOption(s)
     saveSound(s)
-    // Reproducir preview del sonido seleccionado
+    // Reproducir preview del sonido seleccionado (también activa el AudioContext)
     if (s !== 'silent') {
       try {
         const ctx = audioRef.current ?? new AudioContext()
         audioRef.current = ctx
-        playSound(ctx, s)
+        await playSound(ctx, s)
       } catch {}
     }
   }, [])
 
+  // ── Resume AudioContext en cualquier click del usuario ──────────────────────
+  useEffect(() => {
+    const resumeCtx = () => {
+      if (audioRef.current && audioRef.current.state === 'suspended') {
+        audioRef.current.resume().catch(() => {})
+      }
+    }
+    document.addEventListener('click', resumeCtx)
+    return () => document.removeEventListener('click', resumeCtx)
+  }, [])
+
   // ── Sonido de notificación ──────────────────────────────────────────────────
-  const playBeep = useCallback(() => {
+  const playBeep = useCallback(async () => {
     const sound = soundOptionRef.current
     if (sound === 'silent') return
     try {
       const ctx = audioRef.current ?? new AudioContext()
       audioRef.current = ctx
-      playSound(ctx, sound)
+      await playSound(ctx, sound)
     } catch {}
   }, [])
 
