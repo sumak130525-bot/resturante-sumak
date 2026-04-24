@@ -9,6 +9,7 @@ import { CartDrawer } from '@/components/public/CartDrawer'
 import { PublicHeader } from '@/components/public/PublicHeader'
 import { WhatsAppFAB } from '@/components/public/WhatsAppFAB'
 import { WhatsAppBanner } from '@/components/public/WhatsAppBanner'
+import { useTranslation } from '@/lib/i18n'
 import { ChevronDown, Utensils, Wifi } from 'lucide-react'
 import type { MenuItem, CartItem } from '@/lib/types'
 import { cn } from '@/lib/utils'
@@ -18,6 +19,7 @@ function HomeContent() {
   const [activeCategory, setActiveCategory] = useState('all')
   const [cart, setCart] = useState<CartItem[]>([])
   const [cartOpen, setCartOpen] = useState(false)
+  const { t } = useTranslation()
 
   const searchParams = useSearchParams()
   const mesa = searchParams.get('mesa')
@@ -69,7 +71,7 @@ function HomeContent() {
           ════════════════════════════════════════ */}
       {mesa && (
         <div className="bg-sumak-gold/20 border-b border-sumak-gold/30 py-2 px-4 text-center text-sm font-semibold text-sumak-brown">
-          🪑 Mesa {mesa} — Tu pedido será enviado a tu mesa
+          {t('mesaBadge', { mesa })}
         </div>
       )}
 
@@ -98,7 +100,7 @@ function HomeContent() {
           <div className="flex items-center gap-2 mb-6 animate-fade-up" style={{ animationDelay: '0ms' }}>
             <span className="h-px w-8 bg-sumak-gold/60" />
             <p className="text-[11px] font-bold tracking-[0.35em] uppercase text-sumak-gold">
-              Auténtica cocina boliviana
+              {t('authenticCuisine')}
             </p>
             <span className="h-px w-8 bg-sumak-gold/60" />
           </div>
@@ -108,7 +110,7 @@ function HomeContent() {
             className="font-serif font-bold text-white text-balance leading-[1.05] mb-5 animate-fade-up"
             style={{ fontSize: 'clamp(2.6rem, 7vw, 5rem)', animationDelay: '80ms' }}
           >
-            Bienvenidos a{' '}
+            {t('welcomeTo')}{' '}
             <span
               className="block"
               style={{
@@ -127,8 +129,7 @@ function HomeContent() {
             className="text-white/70 max-w-lg leading-relaxed mb-10 text-[1.05rem] text-balance animate-fade-up"
             style={{ animationDelay: '160ms' }}
           >
-            Sabores del altiplano, preparados con tradición. Haz tu pedido en línea
-            y disfruta lo mejor de la gastronomía boliviana.
+            {t('heroSubtitle')}
           </p>
 
           {/* CTAs */}
@@ -143,11 +144,11 @@ function HomeContent() {
               )}
             >
               <Utensils size={16} />
-              Ver el menú
+              {t('viewMenu')}
             </a>
             <div className="flex items-center gap-2 text-xs text-white/50 font-medium">
               <Wifi size={12} className="text-emerald-400" />
-              Cantidades actualizadas en tiempo real
+              {t('realtimeStock')}
             </div>
           </div>
         </div>
@@ -225,22 +226,22 @@ function HomeContent() {
               >
                 Sumak
               </p>
-              <p className="text-sm text-white/50">Restaurante Boliviano</p>
+              <p className="text-sm text-white/50">{t('restaurantSubtitle')}</p>
             </div>
 
             {/* Info */}
             <div className="text-center space-y-1">
-              <p className="text-sm text-white/60">Auténticos sabores del altiplano</p>
+              <p className="text-sm text-white/60">{t('footerTagline')}</p>
               <div className="flex items-center justify-center gap-2 text-xs text-white/35">
                 <Wifi size={11} className="text-emerald-400" />
-                <span>Menú y cantidades en tiempo real</span>
+                <span>{t('footerRealtime')}</span>
               </div>
             </div>
           </div>
 
           <div className="mt-8 pt-6 border-t border-white/10 text-center">
             <p className="text-xs text-white/25">
-              © {new Date().getFullYear()} Sumak Restaurante Boliviano. Todos los precios en pesos colombianos (COP).
+              {t('footerCopyright', { year: new Date().getFullYear() })}
             </p>
           </div>
         </div>

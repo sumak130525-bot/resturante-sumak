@@ -4,9 +4,11 @@ import { useSearchParams } from 'next/navigation'
 import { Suspense } from 'react'
 import { CheckCircle, XCircle, Clock, ArrowLeft } from 'lucide-react'
 import Link from 'next/link'
+import { useTranslation } from '@/lib/i18n'
 
 function OrderEstadoContent() {
   const searchParams = useSearchParams()
+  const { t } = useTranslation()
   const status = searchParams.get('status') ?? 'pending'
   const orderId = searchParams.get('order_id')
 
@@ -19,14 +21,14 @@ function OrderEstadoContent() {
           <CheckCircle size={52} className="text-emerald-500" strokeWidth={1.5} />
         </div>
         <h1 className="font-serif text-3xl font-bold text-sumak-brown mb-3">
-          ¡Pago confirmado!
+          {t('paymentApproved')}
         </h1>
         <p className="text-sumak-brown-light text-base leading-relaxed max-w-sm mb-2">
-          Tu pedido fue confirmado y está en preparación. En breve lo tendrás listo.
+          {t('paymentApprovedDesc')}
         </p>
         {shortId && (
           <p className="text-xs text-sumak-brown-light/60 mb-8">
-            Pedido #{shortId}
+            {t('orderNumber', { id: shortId })}
           </p>
         )}
         <Link
@@ -34,7 +36,7 @@ function OrderEstadoContent() {
           className="inline-flex items-center gap-2 bg-sumak-brown text-sumak-gold font-bold py-3 px-6 rounded-full hover:bg-sumak-brown-mid transition-colors"
         >
           <ArrowLeft size={16} />
-          Volver al menú
+          {t('backToMenu')}
         </Link>
       </div>
     )
@@ -47,10 +49,10 @@ function OrderEstadoContent() {
           <XCircle size={52} className="text-red-500" strokeWidth={1.5} />
         </div>
         <h1 className="font-serif text-3xl font-bold text-sumak-brown mb-3">
-          Pago no procesado
+          {t('paymentFailure')}
         </h1>
         <p className="text-sumak-brown-light text-base leading-relaxed max-w-sm mb-8">
-          No pudimos procesar tu pago. Podés intentarlo de nuevo o comunicarte con nosotros.
+          {t('paymentFailureDesc')}
         </p>
         <div className="flex flex-col sm:flex-row gap-3">
           <Link
@@ -58,7 +60,7 @@ function OrderEstadoContent() {
             className="inline-flex items-center justify-center gap-2 bg-sumak-brown text-sumak-gold font-bold py-3 px-6 rounded-full hover:bg-sumak-brown-mid transition-colors"
           >
             <ArrowLeft size={16} />
-            Volver al menú
+            {t('backToMenu')}
           </Link>
         </div>
       </div>
@@ -72,14 +74,14 @@ function OrderEstadoContent() {
         <Clock size={52} className="text-yellow-500" strokeWidth={1.5} />
       </div>
       <h1 className="font-serif text-3xl font-bold text-sumak-brown mb-3">
-        Pago pendiente
+        {t('paymentPending')}
       </h1>
       <p className="text-sumak-brown-light text-base leading-relaxed max-w-sm mb-2">
-        Tu pago está siendo procesado. Una vez confirmado, tu pedido pasará a preparación automáticamente.
+        {t('paymentPendingDesc')}
       </p>
       {shortId && (
         <p className="text-xs text-sumak-brown-light/60 mb-8">
-          Pedido #{shortId}
+          {t('orderNumber', { id: shortId })}
         </p>
       )}
       <Link
@@ -87,7 +89,7 @@ function OrderEstadoContent() {
         className="inline-flex items-center gap-2 bg-sumak-brown text-sumak-gold font-bold py-3 px-6 rounded-full hover:bg-sumak-brown-mid transition-colors"
       >
         <ArrowLeft size={16} />
-        Volver al menú
+        {t('backToMenu')}
       </Link>
     </div>
   )

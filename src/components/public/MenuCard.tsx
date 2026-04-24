@@ -1,7 +1,8 @@
 'use client'
 
 import { Plus, Minus, ShoppingBag } from 'lucide-react'
-import { cn, formatPrice, getAvailabilityColor, getAvailabilityLabel } from '@/lib/utils'
+import { cn, formatPrice, getAvailabilityColor } from '@/lib/utils'
+import { useTranslation } from '@/lib/i18n'
 import type { MenuItem, CartItem } from '@/lib/types'
 
 const CATEGORY_EMOJI: Record<string, string> = {
@@ -29,9 +30,16 @@ export function MenuCard({
   categorySlug,
   index = 0,
 }: MenuCardProps) {
+  const { t } = useTranslation()
   const quantity = cartItem?.quantity ?? 0
   const isUnavailable = item.available === 0
   const emoji = categorySlug ? (CATEGORY_EMOJI[categorySlug] ?? '🍴') : '🍴'
+
+  function availabilityLabel(available: number): string {
+    if (available === 0) return t('soldOut')
+    if (available === 1) return t('oneAvailable')
+    return t('available', { n: available })
+  }
 
   return (
     <article
@@ -59,7 +67,7 @@ export function MenuCard({
           <div className="w-full h-full flex flex-col items-center justify-center gap-2 bg-gradient-to-br from-sumak-cream to-sumak-cream-dark">
             <span className="text-5xl animate-float">{emoji}</span>
             <span className="text-xs font-medium text-sumak-brown-light tracking-wider uppercase opacity-60">
-              Foto próximamente
+              {t('photoSoon')}
             </span>
           </div>
         )}
@@ -72,7 +80,7 @@ export function MenuCard({
               getAvailabilityColor(item.available)
             )}
           >
-            {getAvailabilityLabel(item.available)}
+            {availabilityLabel(item.available)}
           </span>
         </div>
 
@@ -80,7 +88,7 @@ export function MenuCard({
         {quantity > 0 && (
           <div className="absolute top-3 left-3">
             <span className="badge bg-sumak-brown text-sumak-gold border border-sumak-gold/30 backdrop-blur-sm shadow-sm">
-              En pedido: {quantity}
+              {t('inOrder')}: {quantity}
             </span>
           </div>
         )}
@@ -112,7 +120,7 @@ export function MenuCard({
           {/* Controls */}
           {isUnavailable ? (
             <span className="text-xs font-semibold text-sumak-brown-light/70 bg-gray-100 px-3 py-1.5 rounded-pill">
-              Agotado
+              {t('soldOut')}
             </span>
           ) : quantity === 0 ? (
             <button
@@ -127,7 +135,7 @@ export function MenuCard({
               )}
             >
               <ShoppingBag size={14} />
-              Agregar
+              {t('addToCart')}
             </button>
           ) : (
             <div className="flex items-center gap-2">

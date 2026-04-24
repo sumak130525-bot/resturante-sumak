@@ -1,6 +1,7 @@
 'use client'
 
 import { MenuCard } from './MenuCard'
+import { useTranslation } from '@/lib/i18n'
 import type { MenuItem, Category, CartItem } from '@/lib/types'
 
 interface MenuGridProps {
@@ -20,6 +21,7 @@ export function MenuGrid({
   onAdd,
   onRemove,
 }: MenuGridProps) {
+  const { t } = useTranslation()
   const filteredItems =
     activeCategory === 'all'
       ? items
@@ -63,7 +65,7 @@ export function MenuGrid({
           <div className="flex items-center gap-4 mb-8">
             <div className="flex flex-col">
               <p className="text-[10px] font-bold tracking-[0.25em] uppercase text-sumak-gold mb-1">
-                Menú
+                {t('menuSection')}
               </p>
               <h2 className="section-title leading-tight">{category.name}</h2>
             </div>

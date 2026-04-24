@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { ChevronLeft, Loader2, Receipt, CreditCard } from 'lucide-react'
 import { formatPrice, cn } from '@/lib/utils'
+import { useTranslation } from '@/lib/i18n'
 import type { CartItem } from '@/lib/types'
 
 interface OrderFormProps {
@@ -14,6 +15,7 @@ interface OrderFormProps {
 }
 
 export function OrderForm({ cart, total, onBack, mesa }: OrderFormProps) {
+  const { t } = useTranslation()
   const [name, setName] = useState('')
   const [phone, setPhone] = useState('')
   const [notes, setNotes] = useState('')
@@ -23,7 +25,7 @@ export function OrderForm({ cart, total, onBack, mesa }: OrderFormProps) {
   const handlePagar = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!name.trim()) {
-      setError('Por favor ingresa tu nombre.')
+      setError(t('nameRequired'))
       return
     }
     setError(null)
@@ -83,7 +85,7 @@ export function OrderForm({ cart, total, onBack, mesa }: OrderFormProps) {
           className="flex items-center gap-1.5 text-sm text-sumak-brown-light hover:text-sumak-red transition-colors"
         >
           <ChevronLeft size={15} />
-          Volver al carrito
+          {t('backToCart')}
         </button>
 
         {/* Order summary */}
@@ -91,7 +93,7 @@ export function OrderForm({ cart, total, onBack, mesa }: OrderFormProps) {
           <div className="flex items-center gap-2 mb-3">
             <Receipt size={14} className="text-sumak-gold" />
             <p className="text-xs font-bold tracking-wider uppercase text-sumak-gold">
-              Resumen del pedido
+              {t('orderSummary')}
             </p>
           </div>
           {cart.map(({ menu_item, quantity }) => (
@@ -106,7 +108,7 @@ export function OrderForm({ cart, total, onBack, mesa }: OrderFormProps) {
             </div>
           ))}
           <div className="border-t border-white/10 mt-3 pt-3 flex justify-between font-bold">
-            <span className="text-sumak-gold">Total</span>
+            <span className="text-sumak-gold">{t('total')}</span>
             <span className="text-sumak-gold text-lg tabular-nums">
               {formatPrice(total)}
             </span>
@@ -116,18 +118,18 @@ export function OrderForm({ cart, total, onBack, mesa }: OrderFormProps) {
         {/* Customer fields */}
         <div className="space-y-4">
           <h3 className="font-serif font-semibold text-sumak-brown text-base">
-            Tus datos
+            {t('yourData')}
           </h3>
 
           <div>
             <label className="block text-xs font-bold tracking-wider uppercase text-sumak-brown-light mb-1.5">
-              Nombre *
+              {t('nameLabel')}
             </label>
             <input
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="Tu nombre completo"
+              placeholder={t('namePlaceholder')}
               className="input-field"
               required
             />
@@ -135,7 +137,7 @@ export function OrderForm({ cart, total, onBack, mesa }: OrderFormProps) {
 
           <div>
             <label className="block text-xs font-bold tracking-wider uppercase text-sumak-brown-light mb-1.5">
-              Teléfono <span className="normal-case font-normal text-sumak-brown-pale">(opcional)</span>
+              {t('phoneLabel')} <span className="normal-case font-normal text-sumak-brown-pale">{t('phoneOptional')}</span>
             </label>
             <input
               type="tel"
@@ -148,12 +150,12 @@ export function OrderForm({ cart, total, onBack, mesa }: OrderFormProps) {
 
           <div>
             <label className="block text-xs font-bold tracking-wider uppercase text-sumak-brown-light mb-1.5">
-              Notas <span className="normal-case font-normal text-sumak-brown-pale">(opcional)</span>
+              {t('notesLabel')} <span className="normal-case font-normal text-sumak-brown-pale">{t('notesOptional')}</span>
             </label>
             <textarea
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
-              placeholder="Sin cebolla, extra llajua, alergia a…"
+              placeholder={t('notesSamplePlaceholder')}
               className="input-field resize-none h-20"
             />
           </div>
@@ -185,12 +187,12 @@ export function OrderForm({ cart, total, onBack, mesa }: OrderFormProps) {
           {loading ? (
             <>
               <Loader2 size={18} className="animate-spin" />
-              Redirigiendo a MercadoPago…
+              {t('redirectingMP')}
             </>
           ) : (
             <>
               <CreditCard size={18} />
-              Pagar con MercadoPago
+              {t('payWithMP')}
             </>
           )}
         </button>

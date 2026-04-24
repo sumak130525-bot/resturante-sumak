@@ -1,8 +1,9 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { ShoppingBag } from 'lucide-react'
+import { useState, useEffect, useRef } from 'react'
+import { ShoppingBag, ChevronDown } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { useTranslation, type Locale } from '@/lib/i18n'
 
 interface PublicHeaderProps {
   cartCount: number
@@ -10,10 +11,20 @@ interface PublicHeaderProps {
   isLive: boolean
 }
 
+const LOCALES: { code: Locale; flag: string; label: string }[] = [
+  { code: 'es', flag: '🇪🇸', label: 'ES' },
+  { code: 'en', flag: '🇬🇧', label: 'EN' },
+  { code: 'qu', flag: '🏔️', label: 'QU' },
+]
+
 export function PublicHeader({ cartCount, onCartOpen, isLive }: PublicHeaderProps) {
   const [scrolled, setScrolled] = useState(false)
   const [prevCount, setPrevCount] = useState(cartCount)
   const [badgePop, setBadgePop] = useState(false)
+  const [langOpen, setLangOpen] = useState(false)
+  const langRef = useRef<HTMLDivElement>(null)
+
+  const { locale, setLocale, t } = useTranslation()
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 20)
@@ -25,12 +36,25 @@ export function PublicHeader({ cartCount, onCartOpen, isLive }: PublicHeaderProp
   useEffect(() => {
     if (cartCount > prevCount) {
       setBadgePop(true)
-      const t = setTimeout(() => setBadgePop(false), 500)
+      const ti = setTimeout(() => setBadgePop(false), 500)
       setPrevCount(cartCount)
-      return () => clearTimeout(t)
+      return () => clearTimeout(ti)
     }
     setPrevCount(cartCount)
   }, [cartCount, prevCount])
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (langRef.current && !langRef.current.contains(e.target as Node)) {
+        setLangOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [])
+
+  const currentLocale = LOCALES.find((l) => l.code === locale) ?? LOCALES[0]
 
   return (
     <header
@@ -59,7 +83,7 @@ export function PublicHeader({ cartCount, onCartOpen, isLive }: PublicHeaderProp
                 Sumak
               </p>
               <p className="text-[10px] font-medium tracking-[0.18em] uppercase text-sumak-gold-light/80">
-                Restaurante Boliviano
+                {t('restaurantSubtitle')}
               </p>
             </div>
           </a>
@@ -74,7 +98,53 @@ export function PublicHeader({ cartCount, onCartOpen, isLive }: PublicHeaderProp
                   isLive ? 'bg-emerald-400 animate-pulse' : 'bg-gray-500'
                 )}
               />
-              <span>{isLive ? 'Menú en vivo' : 'Conectando…'}</span>
+              <span>{isLive ? t('menuLive') : t('menuConnecting')}</span>
+            </div>
+
+            {/* ── Language selector ── */}
+            <div ref={langRef} className="relative">
+              <button
+                onClick={() => setLangOpen((o) => !o)}
+                className={cn(
+                  'flex items-center gap-1.5 text-xs font-semibold',
+                  'text-white/80 hover:text-white',
+                  'bg-white/10 hover:bg-white/20',
+                  'px-2.5 py-1.5 rounded-lg',
+                  'transition-all duration-200'
+                )}
+                aria-label="Change language"
+              >
+                <span>{currentLocale.flag}</span>
+                <span>{currentLocale.label}</span>
+                <ChevronDown
+                  size={11}
+                  className={cn('transition-transform duration-200', langOpen && 'rotate-180')}
+                />
+              </button>
+
+              {/* Dropdown */}
+              {langOpen && (
+                <div className="absolute right-0 mt-1.5 w-32 rounded-xl overflow-hidden shadow-premium bg-sumak-brown border border-sumak-gold/20 animate-fade-up z-50">
+                  {LOCALES.map((l) => (
+                    <button
+                      key={l.code}
+                      onClick={() => { setLocale(l.code); setLangOpen(false) }}
+                      className={cn(
+                        'w-full flex items-center gap-2.5 px-3 py-2.5 text-xs font-semibold text-left',
+                        'transition-colors duration-150',
+                        locale === l.code
+                          ? 'bg-sumak-gold/20 text-sumak-gold'
+                          : 'text-white/70 hover:bg-white/10 hover:text-white'
+                      )}
+                    >
+                      <span className="text-base leading-none">{l.flag}</span>
+                      <span>
+                        {l.code === 'es' ? 'Español' : l.code === 'en' ? 'English' : 'Runasimi'}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
 
             {/* Cart button */}
@@ -88,10 +158,10 @@ export function PublicHeader({ cartCount, onCartOpen, isLive }: PublicHeaderProp
                 'hover:scale-105 hover:shadow-red-glow active:scale-95',
                 cartCount > 0 && 'pr-5'
               )}
-              aria-label={`Ver pedido, ${cartCount} ítems`}
+              aria-label={`${t('myOrder')}, ${cartCount}`}
             >
               <ShoppingBag size={17} className="shrink-0" />
-              <span className="hidden sm:inline">Mi pedido</span>
+              <span className="hidden sm:inline">{t('myOrder')}</span>
 
               {/* Count badge */}
               {cartCount > 0 && (

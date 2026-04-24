@@ -2,6 +2,7 @@
 
 import { useRef, useEffect } from 'react'
 import { cn } from '@/lib/utils'
+import { useTranslation } from '@/lib/i18n'
 import type { Category } from '@/lib/types'
 
 const CATEGORY_ICONS: Record<string, string> = {
@@ -12,6 +13,18 @@ const CATEGORY_ICONS: Record<string, string> = {
   bebidas:            '🥤',
 }
 
+// Map DB slugs to i18n keys
+const CATEGORY_SLUG_KEYS: Record<string, string> = {
+  bebidas: 'catBebidas',
+  desayunos: 'catDesayunos',
+  sopas: 'catSopas',
+  segundo: 'catSegundo',
+  'para-llevar': 'catParaLlevar',
+  empanadas: 'catEmpanadas',
+  'platos-principales': 'catPlatos',
+  acompanamientos: 'catAcompanamientos',
+}
+
 interface CategoryTabsProps {
   categories: Category[]
   active: string
@@ -19,7 +32,8 @@ interface CategoryTabsProps {
 }
 
 export function CategoryTabs({ categories, active, onChange }: CategoryTabsProps) {
-  const all = { id: 'all', name: 'Todo el menú', slug: 'all', order_pos: 0 }
+  const { t } = useTranslation()
+  const all = { id: 'all', name: t('allMenu'), slug: 'all', order_pos: 0 }
   const tabs = [all, ...categories]
   const scrollRef = useRef<HTMLDivElement>(null)
 
@@ -44,6 +58,10 @@ export function CategoryTabs({ categories, active, onChange }: CategoryTabsProps
         >
           {tabs.map((cat) => {
             const isActive = active === cat.slug
+            // Translate category name if we have a key for this slug; otherwise use DB name
+            const i18nKey = CATEGORY_SLUG_KEYS[cat.slug]
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const displayName = cat.slug === 'all' ? t('allMenu') : (i18nKey ? t(i18nKey as any) : cat.name)
             return (
               <button
                 key={cat.slug}
@@ -61,7 +79,7 @@ export function CategoryTabs({ categories, active, onChange }: CategoryTabsProps
                 {cat.slug !== 'all' && (
                   <span className="text-base leading-none">{CATEGORY_ICONS[cat.slug] ?? '🍴'}</span>
                 )}
-                {cat.name}
+                {displayName}
 
                 {/* Active underline dot */}
                 {isActive && (

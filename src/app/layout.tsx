@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from 'next'
 import './globals.css'
+import { Providers } from '@/components/Providers'
 
 export const metadata: Metadata = {
   title: 'Sumak | Restaurante Boliviano',
@@ -39,7 +40,7 @@ export default function RootLayout({
         />
       </head>
       <body className="font-sans antialiased bg-sumak-cream text-sumak-brown selection:bg-sumak-gold selection:text-sumak-brown">
-        {children}
+        <Providers>{children}</Providers>
       </body>
     </html>
   )
