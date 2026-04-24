@@ -667,7 +667,10 @@ export default function CocinaPage() {
         console.warn('[cocina] Audio element no disponible')
         return
       }
+      el.pause()
+      el.currentTime = 0
       el.src = uri
+      el.load()
       await el.play()
       console.log('[cocina] Sonido reproducido OK:', sound)
     } catch (err) {
