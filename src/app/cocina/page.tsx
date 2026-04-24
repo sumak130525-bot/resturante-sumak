@@ -226,18 +226,38 @@ async function getWavDataUri(sound: SoundOption): Promise<string | null> {
   return null
 }
 
-async function playSound(sound: SoundOption): Promise<void> {
-  if (sound === 'silent') return
-  try {
-    const uri = await getWavDataUri(sound)
-    if (!uri) return
-    const audio = new Audio(uri)
-    audio.volume = 1.0
-    await audio.play()
-  } catch {
-    // Silently ignore: browser may block autoplay on very first load before any interaction
+// WAV silencioso de ~0.1s (44 bytes header + 4410 muestras a cero @ 44100Hz)
+// Sirve para desbloquear el Audio element en el primer click del usuario
+function buildSilentWavDataUri(): string {
+  const sampleRate = 44100
+  const numSamples = Math.ceil(sampleRate * 0.1)
+  const byteLength = 44 + numSamples * 2
+  const arrayBuffer = new ArrayBuffer(byteLength)
+  const view = new DataView(arrayBuffer)
+  const writeStr = (offset: number, str: string) => {
+    for (let i = 0; i < str.length; i++) view.setUint8(offset + i, str.charCodeAt(i))
   }
+  writeStr(0, 'RIFF')
+  view.setUint32(4, byteLength - 8, true)
+  writeStr(8, 'WAVE')
+  writeStr(12, 'fmt ')
+  view.setUint32(16, 16, true)
+  view.setUint16(20, 1, true)
+  view.setUint16(22, 1, true)
+  view.setUint32(24, sampleRate, true)
+  view.setUint32(28, sampleRate * 2, true)
+  view.setUint16(32, 2, true)
+  view.setUint16(34, 16, true)
+  writeStr(36, 'data')
+  view.setUint32(40, numSamples * 2, true)
+  // samples are all 0 (silence)
+  const bytes = new Uint8Array(arrayBuffer)
+  let binary = ''
+  for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i])
+  return `data:audio/wav;base64,${btoa(binary)}`
 }
+
+const SILENT_WAV_URI = typeof window !== 'undefined' ? buildSilentWavDataUri() : ''
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
@@ -590,6 +610,38 @@ export default function CocinaPage() {
   const dismissedIdsRef = useRef<Set<string>>(new Set())
   // Ref para leer el sonido actual dentro de callbacks sin stale closure
   const soundOptionRef = useRef<SoundOption>('beep')
+  // Audio element persistente — se desbloquea en el primer click del usuario
+  const audioElRef = useRef<HTMLAudioElement | null>(null)
+  const audioUnlockedRef = useRef(false)
+
+  // Montar Audio element persistente
+  useEffect(() => {
+    const el = new Audio()
+    el.volume = 1.0
+    audioElRef.current = el
+    return () => {
+      el.src = ''
+      audioElRef.current = null
+    }
+  }, [])
+
+  // Desbloquear el Audio element en el primer click del usuario
+  useEffect(() => {
+    const unlock = () => {
+      if (audioUnlockedRef.current) return
+      if (!audioElRef.current) return
+      audioUnlockedRef.current = true
+      const el = audioElRef.current
+      el.src = SILENT_WAV_URI
+      el.play().catch((err) => {
+        console.warn('[cocina] Audio unlock failed:', err)
+        audioUnlockedRef.current = false
+      })
+      console.log('[cocina] Audio element desbloqueado en primer click')
+    }
+    document.addEventListener('click', unlock, { once: false })
+    return () => document.removeEventListener('click', unlock)
+  }, [])
 
   // Cargar dismissedIds y preferencia de sonido desde localStorage al montar
   useEffect(() => {
@@ -600,20 +652,43 @@ export default function CocinaPage() {
     setDismissedLoaded(true)
   }, [])
 
+  // Función central de reproducción usando el Audio element persistente
+  const playSoundWithRef = useCallback(async (sound: SoundOption): Promise<void> => {
+    if (sound === 'silent') return
+    console.log('[cocina] playSound llamado, sound:', sound, 'unlocked:', audioUnlockedRef.current)
+    try {
+      const uri = await getWavDataUri(sound)
+      if (!uri) {
+        console.warn('[cocina] No se pudo obtener WAV data URI para:', sound)
+        return
+      }
+      const el = audioElRef.current
+      if (!el) {
+        console.warn('[cocina] Audio element no disponible')
+        return
+      }
+      el.src = uri
+      await el.play()
+      console.log('[cocina] Sonido reproducido OK:', sound)
+    } catch (err) {
+      console.warn('[cocina] Error reproduciendo sonido:', err)
+    }
+  }, [])
+
   const handleSoundChange = useCallback(async (s: SoundOption) => {
     soundOptionRef.current = s
     setSoundOption(s)
     saveSound(s)
-    // Reproducir preview del sonido seleccionado
+    // Reproducir preview del sonido seleccionado (viene de un click → siempre desbloqueado)
     if (s !== 'silent') {
-      await playSound(s)
+      await playSoundWithRef(s)
     }
-  }, [])
+  }, [playSoundWithRef])
 
   // ── Sonido de notificación ──────────────────────────────────────────────────
   const playBeep = useCallback(async () => {
-    await playSound(soundOptionRef.current)
-  }, [])
+    await playSoundWithRef(soundOptionRef.current)
+  }, [playSoundWithRef])
 
   // ── Fetch ──────────────────────────────────────────────────────────────────
   const fetchOrders = useCallback(async () => {
