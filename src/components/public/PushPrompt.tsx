@@ -27,16 +27,18 @@ export function PushPrompt() {
     if (!('serviceWorker' in navigator) || !('PushManager' in window)) return
     if (localStorage.getItem(LS_KEY)) return
 
-    // Verificar si ya está suscrito
-    navigator.serviceWorker.ready.then((reg) => {
+    // Registrar SW primero, luego verificar suscripción
+    navigator.serviceWorker.register('/sw.js').then((reg) => {
       reg.pushManager.getSubscription().then((sub) => {
         if (sub) {
           setSubscribed(true)
         } else {
-          // Mostrar banner con un pequeño delay para no interrumpir la carga inicial
           setTimeout(() => setVisible(true), 3000)
         }
       })
+    }).catch((err) => {
+      console.warn('[PushPrompt] SW registration failed:', err)
+      setTimeout(() => setVisible(true), 3000)
     })
   }, [])
 
