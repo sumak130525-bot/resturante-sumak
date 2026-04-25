@@ -9,6 +9,7 @@ import { CartDrawer } from '@/components/public/CartDrawer'
 import { PublicHeader } from '@/components/public/PublicHeader'
 import { WhatsAppFAB } from '@/components/public/WhatsAppFAB'
 import { WhatsAppBanner } from '@/components/public/WhatsAppBanner'
+import { PushPrompt } from '@/components/public/PushPrompt'
 import { useTranslation } from '@/lib/i18n'
 import { ChevronDown, Utensils, Wifi, MapPin, Clock } from 'lucide-react'
 import Image from 'next/image'
@@ -56,6 +57,7 @@ function HomeContent() {
 
   return (
     <>
+      <PushPrompt />
       <PublicHeader
         cartCount={totalItems}
         onCartOpen={() => setCartOpen(true)}
