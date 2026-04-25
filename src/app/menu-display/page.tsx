@@ -12,7 +12,7 @@ import type { MenuItem } from '@/lib/types'
 
 const CURSOR_HIDE_MS      = 5_000
 const FALLBACK_REFRESH_MS = 5 * 60 * 1_000
-const MAX_VISIBLE         = 28   // 7 × 4 grid — no scroll on TV
+const MAX_VISIBLE         = 24   // 6 × 4 grid — no scroll on TV
 
 // ─── Tabs ─────────────────────────────────────────────────────────────────────
 
@@ -137,7 +137,7 @@ function DishCard({ item, locale }: DishCardProps) {
         <p
           className={cn(
             'font-bold leading-tight text-white drop-shadow-sm',
-            'text-[clamp(0.6rem,1vw,0.85rem)]',
+            'text-[clamp(0.75rem,1.3vw,1.05rem)]',
             isUnavailable && 'line-through opacity-70'
           )}
           style={{ textShadow: '0 1px 3px rgba(0,0,0,0.9)' }}
@@ -147,7 +147,7 @@ function DishCard({ item, locale }: DishCardProps) {
         <p
           className={cn(
             'font-bold tabular-nums leading-tight',
-            'text-[clamp(0.65rem,1.1vw,0.9rem)]',
+            'text-[clamp(0.8rem,1.4vw,1.1rem)]',
             isUnavailable ? 'text-gray-300 line-through' : 'text-[#F5C842]'
           )}
           style={{ textShadow: '0 1px 3px rgba(0,0,0,0.9)' }}
@@ -315,7 +315,7 @@ export default function MenuDisplayPage() {
         )}
         style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(7, 1fr)',
+          gridTemplateColumns: 'repeat(6, 1fr)',
           gridTemplateRows: 'repeat(4, 1fr)',
           gap: '4px',
         }}
