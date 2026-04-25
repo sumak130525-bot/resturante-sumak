@@ -95,6 +95,69 @@ function useCursorHide() {
   }, [])
 }
 
+// ─── Delete Confirmation Modal ────────────────────────────────────────────────
+
+interface DeleteModalProps {
+  itemName: string
+  onConfirm: () => void
+  onCancel: () => void
+  deleting: boolean
+}
+
+function DeleteModal({ itemName, onConfirm, onCancel, deleting }: DeleteModalProps) {
+  return (
+    <div
+      className="absolute inset-0 z-10 flex items-center justify-center rounded-lg"
+      style={{ background: 'rgba(0,0,0,0.75)' }}
+      onClick={(e) => e.stopPropagation()}
+    >
+      <div
+        className="flex flex-col items-center gap-3 rounded-xl px-4 py-4 mx-2"
+        style={{ background: '#1a1917', border: '1px solid rgba(255,255,255,0.12)', minWidth: '120px', maxWidth: '90%' }}
+      >
+        <p
+          className="text-white font-bold text-center leading-tight"
+          style={{ fontSize: 'clamp(0.7rem, 1.2vw, 0.95rem)' }}
+        >
+          {itemName}
+        </p>
+        <p
+          className="text-white/70 text-center"
+          style={{ fontSize: 'clamp(0.6rem, 1vw, 0.8rem)' }}
+        >
+          ¿Eliminar?
+        </p>
+        <div className="flex gap-2 w-full">
+          <button
+            onClick={onConfirm}
+            disabled={deleting}
+            className="flex-1 rounded-lg font-bold text-white transition-all active:scale-95 disabled:opacity-50"
+            style={{
+              background: '#dc2626',
+              fontSize: 'clamp(0.6rem, 1vw, 0.8rem)',
+              padding: '6px 4px',
+            }}
+          >
+            {deleting ? '...' : 'Eliminar'}
+          </button>
+          <button
+            onClick={onCancel}
+            disabled={deleting}
+            className="flex-1 rounded-lg font-bold text-white/80 transition-all active:scale-95 disabled:opacity-50"
+            style={{
+              background: '#3f3f46',
+              fontSize: 'clamp(0.6rem, 1vw, 0.8rem)',
+              padding: '6px 4px',
+            }}
+          >
+            Cancelar
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ─── Dish Card ────────────────────────────────────────────────────────────────
 
 interface DishCardProps {
@@ -107,12 +170,46 @@ function DishCard({ item, locale }: DishCardProps) {
   const name = getItemName(item, locale)
   const emoji = CATEGORY_EMOJI[item.categories?.slug ?? ''] ?? '🍽️'
 
+  const [showConfirm, setShowConfirm] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+  const [deleted, setDeleted] = useState(false)
+
+  const handleCardClick = () => {
+    if (!showConfirm) setShowConfirm(true)
+  }
+
+  const handleCancel = () => {
+    setShowConfirm(false)
+  }
+
+  const handleConfirm = async () => {
+    setDeleting(true)
+    try {
+      const res = await fetch('/api/admin/menu', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: item.id }),
+      })
+      if (res.ok) {
+        setDeleted(true)
+        setShowConfirm(false)
+      }
+    } catch {
+      // silent fail — Realtime will reconcile
+    } finally {
+      setDeleting(false)
+    }
+  }
+
   return (
     <article
       className={cn(
-        'relative w-full h-full rounded-lg overflow-hidden',
-        isUnavailable && 'opacity-50'
+        'relative w-full h-full rounded-lg overflow-hidden cursor-pointer',
+        'transition-all duration-300',
+        isUnavailable && !deleted && 'opacity-50',
+        deleted && 'opacity-0 scale-95 pointer-events-none',
       )}
+      onClick={handleCardClick}
     >
       {/* Full-bleed image */}
       {item.image_url ? (
@@ -163,6 +260,16 @@ function DishCard({ item, locale }: DishCardProps) {
             Agotado
           </span>
         </div>
+      )}
+
+      {/* Delete confirmation modal */}
+      {showConfirm && (
+        <DeleteModal
+          itemName={name}
+          onConfirm={handleConfirm}
+          onCancel={handleCancel}
+          deleting={deleting}
+        />
       )}
     </article>
   )
