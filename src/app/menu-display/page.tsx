@@ -232,9 +232,14 @@ function CardModal({
 interface DishCardProps {
   item: MenuItem
   locale: Locale
+  // Reorder mode props
+  reorderMode?: boolean
+  isSelected?: boolean
+  position?: number
+  onReorderSelect?: (id: string) => void
 }
 
-function DishCard({ item, locale }: DishCardProps) {
+function DishCard({ item, locale, reorderMode, isSelected, position, onReorderSelect }: DishCardProps) {
   const isUnavailable = item.available === 0
   const name = getItemName(item, locale)
   const emoji = CATEGORY_EMOJI[item.categories?.slug ?? ''] ?? '🍽️'
@@ -245,6 +250,10 @@ function DishCard({ item, locale }: DishCardProps) {
   const [uploading, setUploading] = useState(false)
 
   const handleCardClick = () => {
+    if (reorderMode) {
+      onReorderSelect?.(item.id)
+      return
+    }
     if (!modalStep) setModalStep('menu')
   }
 
@@ -311,8 +320,10 @@ function DishCard({ item, locale }: DishCardProps) {
       className={cn(
         'relative w-full h-full rounded-lg overflow-hidden cursor-pointer',
         'transition-all duration-300',
-        isUnavailable && !deleted && 'opacity-50',
+        isUnavailable && !deleted && !reorderMode && 'opacity-50',
         deleted && 'opacity-0 scale-95 pointer-events-none',
+        reorderMode && isSelected && 'ring-4 ring-[#F5C842] ring-offset-2 ring-offset-[#0d0c0b]',
+        reorderMode && !isSelected && 'opacity-80 hover:opacity-100',
       )}
       onClick={handleCardClick}
     >
@@ -350,7 +361,7 @@ function DishCard({ item, locale }: DishCardProps) {
           className={cn(
             'font-bold leading-tight text-white drop-shadow-sm',
             'text-[clamp(0.75rem,1.3vw,1.05rem)]',
-            isUnavailable && 'line-through opacity-70'
+            isUnavailable && !reorderMode && 'line-through opacity-70'
           )}
           style={{ textShadow: '0 1px 3px rgba(0,0,0,0.9)' }}
         >
@@ -360,7 +371,7 @@ function DishCard({ item, locale }: DishCardProps) {
           className={cn(
             'font-bold tabular-nums leading-tight',
             'text-[clamp(0.8rem,1.4vw,1.1rem)]',
-            isUnavailable ? 'text-gray-300 line-through' : 'text-[#F5C842]'
+            isUnavailable && !reorderMode ? 'text-gray-300 line-through' : 'text-[#F5C842]'
           )}
           style={{ textShadow: '0 1px 3px rgba(0,0,0,0.9)' }}
         >
@@ -368,8 +379,8 @@ function DishCard({ item, locale }: DishCardProps) {
         </p>
       </div>
 
-      {/* Agotado badge */}
-      {isUnavailable && (
+      {/* Agotado badge — hidden in reorder mode to avoid clutter */}
+      {isUnavailable && !reorderMode && (
         <div className="absolute inset-0 flex items-center justify-center">
           <span className="px-2 py-0.5 rounded-full bg-gray-700/80 text-white text-[0.6rem] font-bold tracking-widest uppercase border border-white/20">
             Agotado
@@ -377,8 +388,27 @@ function DishCard({ item, locale }: DishCardProps) {
         </div>
       )}
 
-      {/* Action modal */}
-      {modalStep && (
+      {/* Reorder mode: position badge */}
+      {reorderMode && position !== undefined && (
+        <div
+          className={cn(
+            'absolute top-1.5 right-1.5 w-6 h-6 rounded-full flex items-center justify-center font-bold text-xs',
+            isSelected
+              ? 'bg-[#F5C842] text-[#3B2000]'
+              : 'bg-black/70 text-white/80 border border-white/20'
+          )}
+        >
+          {position}
+        </div>
+      )}
+
+      {/* Reorder mode: selected overlay */}
+      {reorderMode && isSelected && (
+        <div className="absolute inset-0 bg-[#F5C842]/10 pointer-events-none" />
+      )}
+
+      {/* Action modal — disabled in reorder mode */}
+      {!reorderMode && modalStep && (
         <CardModal
           itemName={name}
           step={modalStep}
@@ -417,6 +447,11 @@ export default function MenuDisplayPage() {
   useWakeLock()
   useCursorHide()
 
+  // ── Reorder mode state ──
+  const [reorderMode, setReorderMode] = useState(false)
+  const [selectedId, setSelectedId]   = useState<string | null>(null)
+  const [saving, setSaving]           = useState(false)
+
   // Only show tabs that have items (plus always-visible ones)
   const availableSlugs = new Set(categories.map((c) => c.slug))
   const visibleTabs = DISPLAY_TABS.filter((tab) => {
@@ -453,6 +488,66 @@ export default function MenuDisplayPage() {
     const id = setInterval(refetch, FALLBACK_REFRESH_MS)
     return () => clearInterval(id)
   }, [refetch])
+
+  // Toggle reorder mode — deselect on exit
+  const toggleReorderMode = () => {
+    setReorderMode((prev) => !prev)
+    setSelectedId(null)
+  }
+
+  // Handle card tap in reorder mode
+  const handleReorderSelect = useCallback(async (tappedId: string) => {
+    if (saving) return
+
+    // First tap: select
+    if (selectedId === null) {
+      setSelectedId(tappedId)
+      return
+    }
+
+    // Tap same card again: deselect
+    if (selectedId === tappedId) {
+      setSelectedId(null)
+      return
+    }
+
+    // Second tap on a different card: swap display_order
+    const itemA = filteredItems.find((i) => i.id === selectedId)
+    const itemB = filteredItems.find((i) => i.id === tappedId)
+    if (!itemA || !itemB) {
+      setSelectedId(null)
+      return
+    }
+
+    // Derive effective positions: use 1-based index as fallback if display_order is 0/null
+    const posA = itemA.display_order && itemA.display_order > 0
+      ? itemA.display_order
+      : filteredItems.indexOf(itemA) + 1
+    const posB = itemB.display_order && itemB.display_order > 0
+      ? itemB.display_order
+      : filteredItems.indexOf(itemB) + 1
+
+    setSaving(true)
+    setSelectedId(null)
+    try {
+      await fetch('/api/menu-display/reorder', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          updates: [
+            { id: itemA.id, display_order: posB },
+            { id: itemB.id, display_order: posA },
+          ],
+        }),
+      })
+      // Refetch so the grid reflects the new order
+      await refetch()
+    } catch {
+      // silent fail
+    } finally {
+      setSaving(false)
+    }
+  }, [selectedId, filteredItems, saving, refetch])
 
   const tabLabel = (tab: (typeof DISPLAY_TABS)[number]) =>
     tab.label[locale as keyof typeof tab.label] ?? tab.label.es
@@ -509,8 +604,22 @@ export default function MenuDisplayPage() {
           })}
         </nav>
 
-        {/* Right: language switcher + clock */}
+        {/* Right: reorder toggle + language switcher + clock */}
         <div className="flex items-center gap-2 shrink-0">
+          {/* Reorder mode toggle */}
+          <button
+            onClick={toggleReorderMode}
+            disabled={saving}
+            className={cn(
+              'px-2.5 py-1 rounded-full text-xs font-bold transition-all duration-200 disabled:opacity-50',
+              reorderMode
+                ? 'bg-[#F5C842] text-[#3B2000] shadow-md'
+                : 'bg-white/10 text-white/60 border border-white/10 hover:bg-white/20 hover:text-white'
+            )}
+          >
+            {saving ? '...' : 'Ordenar'}
+          </button>
+
           <div className="flex items-center gap-0.5">
             {(['es', 'en', 'qu'] as Locale[]).map((lang) => (
               <button
@@ -532,6 +641,18 @@ export default function MenuDisplayPage() {
           </div>
         </div>
       </header>
+
+      {/* Reorder mode hint bar */}
+      {reorderMode && (
+        <div className="shrink-0 flex items-center justify-center gap-2 py-1 text-xs font-semibold"
+          style={{ background: 'rgba(245,200,66,0.12)', borderBottom: '1px solid rgba(245,200,66,0.2)' }}>
+          <span className="text-[#F5C842]">
+            {selectedId
+              ? 'Toca otro plato para intercambiar posiciones'
+              : 'Toca un plato para seleccionarlo'}
+          </span>
+        </div>
+      )}
 
       {/* ── 7 × 4 grid — fills all remaining height ── */}
       <main
@@ -558,8 +679,16 @@ export default function MenuDisplayPage() {
             <p className="text-lg font-semibold">Sin platos en esta categoría</p>
           </div>
         ) : (
-          filteredItems.map((item) => (
-            <DishCard key={item.id} item={item} locale={locale} />
+          filteredItems.map((item, index) => (
+            <DishCard
+              key={item.id}
+              item={item}
+              locale={locale}
+              reorderMode={reorderMode}
+              isSelected={selectedId === item.id}
+              position={index + 1}
+              onReorderSelect={handleReorderSelect}
+            />
           ))
         )}
       </main>

@@ -19,6 +19,7 @@ export type MenuItem = {
   image_url: string | null
   available: number
   active: boolean
+  display_order?: number | null
   created_at: string
   categories?: Category
 }
@@ -74,6 +75,7 @@ type MenuItemRow = {
   image_url: string | null
   available: number
   active: boolean
+  display_order?: number | null
   created_at: string
 }
 

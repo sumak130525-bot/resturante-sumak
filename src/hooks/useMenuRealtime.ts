@@ -18,6 +18,7 @@ export function useMenuRealtime() {
           .from('menu_items')
           .select('*, categories(*)')
           .eq('active', true)
+          .order('display_order', { ascending: true, nullsFirst: false })
           .order('name'),
         supabase
           .from('categories')
@@ -25,7 +26,20 @@ export function useMenuRealtime() {
           .order('order_pos'),
       ])
 
-      if (itemsRes.data) setMenuItems(itemsRes.data as MenuItem[])
+      if (itemsRes.data) {
+        // Items with display_order null or 0 are treated as unordered — sort them after positioned items, then by name
+        const sorted = (itemsRes.data as MenuItem[]).slice().sort((a, b) => {
+          const aOrder = a.display_order ?? 0
+          const bOrder = b.display_order ?? 0
+          const aUnset = aOrder === 0
+          const bUnset = bOrder === 0
+          if (aUnset && bUnset) return a.name.localeCompare(b.name)
+          if (aUnset) return 1
+          if (bUnset) return -1
+          return aOrder - bOrder
+        })
+        setMenuItems(sorted)
+      }
       if (catsRes.data) setCategories(catsRes.data)
     } catch (err) {
       console.error('[useMenuRealtime] fetchMenu error:', err)
