@@ -15,15 +15,16 @@ self.addEventListener('push', function (event) {
     body: data.body || 'Tenemos novedades para vos',
     icon: '/logo-sumak.png',
     badge: '/logo-sumak.png',
-    image: '/logo-sumak-dark.jpg',
+    image: data.image || undefined,
     data: { url: data.url || 'https://restaurante-sumak.vercel.app' },
-    vibrate: [300, 100, 300, 100, 300],
-    tag: 'sumak-notification',
+    vibrate: [500, 200, 500, 200, 500],
+    tag: 'sumak-' + Date.now(),
     renotify: true,
     requireInteraction: true,
+    silent: false,
     actions: [
-      { action: 'open', title: 'Ver más' },
-      { action: 'close', title: 'Cerrar' }
+      { action: 'open', title: '🍽️ Ver oferta' },
+      { action: 'close', title: '❌ Cerrar' }
     ]
   }
 

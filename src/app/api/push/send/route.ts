@@ -51,10 +51,11 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
   }
 
-  const { title, body, url } = await req.json() as {
+  const { title, body, url, image } = await req.json() as {
     title: string
     body: string
     url?: string
+    image?: string
   }
 
   if (!title || !body) {
@@ -70,7 +71,12 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Error al leer suscripciones' }, { status: 500 })
   }
 
-  const payload = JSON.stringify({ title, body, url: url || 'https://restaurante-sumak.vercel.app' })
+  const payload = JSON.stringify({
+    title,
+    body,
+    url: url || 'https://restaurante-sumak.vercel.app',
+    ...(image ? { image } : {}),
+  })
   let sent = 0
   let failed = 0
   const toDelete: string[] = []
