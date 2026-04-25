@@ -10,6 +10,7 @@ import { PublicHeader } from '@/components/public/PublicHeader'
 import { WhatsAppFAB } from '@/components/public/WhatsAppFAB'
 import { WhatsAppBanner } from '@/components/public/WhatsAppBanner'
 import { PushPrompt } from '@/components/public/PushPrompt'
+import { NotificationButton } from '@/components/public/NotificationButton'
 import { useTranslation } from '@/lib/i18n'
 import { ChevronDown, Utensils, Wifi, MapPin, Clock } from 'lucide-react'
 import Image from 'next/image'
@@ -346,6 +347,9 @@ function HomeContent() {
                   </svg>
                   Facebook
                 </a>
+
+                {/* Notifications */}
+                <NotificationButton />
 
               </div>
             </div>

@@ -89,6 +89,15 @@ type TranslationDict = {
   footerRealtime: string
   footerCopyright: string
 
+  // Push notifications button
+  enableNotifications: string
+  notificationsEnabled: string
+  notificationsBlocked: string
+  notificationsBlockedInstructions: string
+  notificationsBlockedMobile: string
+  notificationsBlockedDesktop: string
+  notificationsBlockedClose: string
+
   // Pedido/estado page
   paymentApproved: string
   paymentApprovedDesc: string
@@ -174,6 +183,14 @@ const translations: Record<Locale, TranslationDict> = {
     footerRealtime: 'Menú y cantidades en tiempo real',
     footerCopyright: '© {year} Sumak Restaurante Boliviano. Todos los precios en pesos colombianos (COP).',
 
+    enableNotifications: 'Activar notificaciones',
+    notificationsEnabled: 'Notificaciones activadas ✅',
+    notificationsBlocked: 'Las notificaciones están bloqueadas',
+    notificationsBlockedInstructions: 'Para activarlas:',
+    notificationsBlockedMobile: 'En celular: tocá los 3 puntos ⋮ → Configuración del sitio → Notificaciones → Permitir',
+    notificationsBlockedDesktop: 'En computadora: hacé click en el candado 🔒 al lado de la URL → Notificaciones → Permitir',
+    notificationsBlockedClose: 'Entendido',
+
     paymentApproved: '¡Pago confirmado!',
     paymentApprovedDesc: 'Tu pedido fue confirmado y está en preparación. En breve lo tendrás listo.',
     orderNumber: 'Pedido #{id}',
@@ -255,6 +272,14 @@ const translations: Record<Locale, TranslationDict> = {
     footerRealtime: 'Menu and stock updated in real time',
     footerCopyright: '© {year} Sumak Bolivian Restaurant. All prices in Colombian pesos (COP).',
 
+    enableNotifications: 'Enable notifications',
+    notificationsEnabled: 'Notifications enabled ✅',
+    notificationsBlocked: 'Notifications are blocked',
+    notificationsBlockedInstructions: 'To enable them:',
+    notificationsBlockedMobile: 'On mobile: tap the 3 dots ⋮ → Site settings → Notifications → Allow',
+    notificationsBlockedDesktop: 'On desktop: click the lock 🔒 next to the URL → Notifications → Allow',
+    notificationsBlockedClose: 'Got it',
+
     paymentApproved: 'Payment confirmed!',
     paymentApprovedDesc: 'Your order has been confirmed and is being prepared. It will be ready shortly.',
     orderNumber: 'Order #{id}',
@@ -335,6 +360,14 @@ const translations: Record<Locale, TranslationDict> = {
     footerTagline: 'Chiqap altiplano mikuna',
     footerRealtime: 'Mikhuna kawsaqlla yachachispan',
     footerCopyright: '© {year} Sumak Bolivia Mikhuna Wasi. Lliw qullqikuna COP-pi.',
+
+    enableNotifications: 'Willay chaskiy',
+    notificationsEnabled: 'Willaykunata chaskichkanki ✅',
+    notificationsBlocked: 'Willaykunata saqisqa',
+    notificationsBlockedInstructions: 'Kicharinankipaq:',
+    notificationsBlockedMobile: 'Waqyanapi: 3 puntosta ⋮ tocay → Llaqta churay → Willay → Saqiy',
+    notificationsBlockedDesktop: 'Computadorapi: candadota 🔒 tocay URL pata → Willay → Saqiy',
+    notificationsBlockedClose: 'Entendirqani',
 
     paymentApproved: 'Qullqi chaskirqa!',
     paymentApprovedDesc: 'Mañasqayki saqisqa, rurakushan. Askham riqsisqa kanqa.',
