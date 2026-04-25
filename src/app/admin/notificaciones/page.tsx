@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { AdminLayoutClient } from '@/components/admin/AdminLayoutClient'
-import { Bell, Send, Users, Image as ImageIcon, ChevronDown, Clock, Trash2, Upload, Link } from 'lucide-react'
+import { Bell, Send, Users, Image as ImageIcon, ChevronDown, Clock, Trash2, Upload, Link, Share2, Copy, X, MessageCircle } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { createClient } from '@supabase/supabase-js'
 
@@ -86,6 +86,10 @@ export default function NotificacionesPage() {
 
   // History
   const [history, setHistory] = useState<HistoryEntry[]>([])
+
+  // WhatsApp sharing
+  const [whatsappData, setWhatsappData] = useState<{ title: string; body: string; image?: string } | null>(null)
+  const [copied, setCopied] = useState(false)
 
   // ── Load subscriber count ────────────────────────────────────────────────
   useEffect(() => {
@@ -196,6 +200,46 @@ export default function NotificacionesPage() {
     }
   }
 
+  // ── WhatsApp helpers ─────────────────────────────────────────────────────
+
+  const RESTAURANT_URL = 'https://restaurante-sumak.vercel.app'
+
+  function buildWhatsappMessage(t: string, b: string, img?: string) {
+    const lines: string[] = []
+    lines.push(`*${t}*`)
+    lines.push(b)
+    lines.push('')
+    lines.push(`📱 Pedí online: ${RESTAURANT_URL}`)
+    if (img) lines.push(`🖼️ ${img}`)
+    lines.push('')
+    lines.push('Restaurante Sumak 🍽️')
+    return lines.join('\n')
+  }
+
+  function openWhatsApp(msg: string) {
+    window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, '_blank')
+  }
+
+  async function copyMessage(msg: string) {
+    try {
+      await navigator.clipboard.writeText(msg)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 2000)
+    } catch {
+      // fallback: select a textarea
+    }
+  }
+
+  async function nativeShare(msg: string) {
+    if (navigator.share) {
+      try {
+        await navigator.share({ text: msg })
+      } catch {
+        // user cancelled
+      }
+    }
+  }
+
   // ── Submit ───────────────────────────────────────────────────────────────
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -204,6 +248,7 @@ export default function NotificacionesPage() {
 
     setLoading(true)
     setResult(null)
+    setWhatsappData(null)
 
     try {
       const res = await fetch('/api/push/send', {
@@ -232,6 +277,11 @@ export default function NotificacionesPage() {
           url: url.trim() || undefined,
           sent: sentCount,
           sentAt: new Date().toLocaleString('es-AR', { dateStyle: 'short', timeStyle: 'short' }),
+        })
+        setWhatsappData({
+          title: title.trim(),
+          body: body.trim(),
+          image: imageUrl.trim() || undefined,
         })
       }
     } catch {
@@ -584,6 +634,86 @@ export default function NotificacionesPage() {
             </button>
           </form>
         </div>
+
+        {/* ── WhatsApp Share ── */}
+        {whatsappData && (() => {
+          const msg = buildWhatsappMessage(whatsappData.title, whatsappData.body, whatsappData.image)
+          return (
+            <div className="bg-green-50 border border-green-200 rounded-2xl p-6 space-y-4">
+              <div className="flex items-center justify-between">
+                <h2 className="font-semibold text-green-800 flex items-center gap-2">
+                  <MessageCircle size={18} className="text-green-600" />
+                  Compartir por WhatsApp
+                </h2>
+                <button
+                  type="button"
+                  onClick={() => setWhatsappData(null)}
+                  className="text-green-400 hover:text-green-600 transition-colors"
+                  aria-label="Cerrar"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+
+              {/* Message preview */}
+              <div className="bg-white rounded-xl border border-green-200 px-4 py-3">
+                <p className="text-xs text-gray-400 mb-1.5">Vista previa del mensaje</p>
+                <pre className="text-sm text-gray-700 whitespace-pre-wrap font-sans leading-relaxed">
+                  {msg}
+                </pre>
+              </div>
+
+              {/* Action buttons */}
+              <div className="flex flex-col sm:flex-row gap-3">
+                {/* WhatsApp main button */}
+                <button
+                  type="button"
+                  onClick={() => openWhatsApp(msg)}
+                  className={cn(
+                    'flex-1 flex items-center justify-center gap-2',
+                    'px-5 py-3 rounded-xl font-semibold text-sm text-white',
+                    'bg-green-500 hover:bg-green-600 active:scale-[0.98] transition-all shadow-sm'
+                  )}
+                >
+                  <MessageCircle size={18} />
+                  Compartir por WhatsApp 💬
+                </button>
+
+                {/* Copy button */}
+                <button
+                  type="button"
+                  onClick={() => copyMessage(msg)}
+                  className={cn(
+                    'flex items-center justify-center gap-2',
+                    'px-4 py-3 rounded-xl font-medium text-sm border transition-all',
+                    copied
+                      ? 'bg-green-100 border-green-300 text-green-700'
+                      : 'bg-white border-green-200 text-green-700 hover:bg-green-50'
+                  )}
+                >
+                  <Copy size={15} />
+                  {copied ? 'Copiado ✓' : 'Copiar mensaje'}
+                </button>
+
+                {/* Native share (only shown if API available) */}
+                {typeof window !== 'undefined' && 'share' in navigator && (
+                  <button
+                    type="button"
+                    onClick={() => nativeShare(msg)}
+                    className={cn(
+                      'flex items-center justify-center gap-2',
+                      'px-4 py-3 rounded-xl font-medium text-sm border transition-all',
+                      'bg-white border-green-200 text-green-700 hover:bg-green-50'
+                    )}
+                  >
+                    <Share2 size={15} />
+                    Compartir
+                  </button>
+                )}
+              </div>
+            </div>
+          )
+        })()}
 
         {/* ── Historial ── */}
         {history.length > 0 && (
