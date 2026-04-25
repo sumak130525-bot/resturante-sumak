@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react'
 import { AdminLayoutClient } from '@/components/admin/AdminLayoutClient'
-import { Bell, Send, Users, Image as ImageIcon, ChevronDown, Clock, Trash2 } from 'lucide-react'
+import { Bell, Send, Users, Image as ImageIcon, ChevronDown, Clock, Trash2, Upload, Link } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { createClient } from '@supabase/supabase-js'
 
@@ -45,7 +45,7 @@ const TEMPLATES = [
   },
 ]
 
-// ─── Supabase anon client (solo para leer platos) ─────────────────────────────
+// ─── Supabase anon client ─────────────────────────────────────────────────────
 
 function getSupabaseAnonClient() {
   return createClient(
@@ -53,6 +53,10 @@ function getSupabaseAnonClient() {
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
   )
 }
+
+// ─── Image source type ────────────────────────────────────────────────────────
+
+type ImageSource = 'menu' | 'upload' | 'url'
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
@@ -64,6 +68,12 @@ export default function NotificacionesPage() {
   const [loading, setLoading] = useState(false)
   const [result, setResult] = useState<{ ok: boolean; sent?: number; message?: string } | null>(null)
   const [subscribers, setSubscribers] = useState<number | null>(null)
+
+  // Image source selector
+  const [imageSource, setImageSource] = useState<ImageSource>('url')
+  const [uploading, setUploading] = useState(false)
+  const [uploadError, setUploadError] = useState<string | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   // Templates dropdown
   const [templateOpen, setTemplateOpen] = useState(false)
@@ -134,7 +144,7 @@ export default function NotificacionesPage() {
 
   function saveToHistory(entry: HistoryEntry) {
     setHistory((prev) => {
-      const updated = [entry, ...prev].slice(0, 20) // keep last 20
+      const updated = [entry, ...prev].slice(0, 20)
       try {
         localStorage.setItem('sumak-push-history', JSON.stringify(updated))
       } catch {}
@@ -145,6 +155,45 @@ export default function NotificacionesPage() {
   function clearHistory() {
     setHistory([])
     try { localStorage.removeItem('sumak-push-history') } catch {}
+  }
+
+  function clearImage() {
+    setImageUrl('')
+    setUploadError(null)
+    if (fileInputRef.current) fileInputRef.current.value = ''
+  }
+
+  // ── Upload image to Supabase Storage ────────────────────────────────────
+
+  async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    setUploading(true)
+    setUploadError(null)
+    setImageUrl('')
+
+    try {
+      const supabase = getSupabaseAnonClient()
+      const ext = file.name.split('.').pop() ?? 'jpg'
+      const filename = `notifications/${Date.now()}.${ext}`
+
+      const { error: uploadErr } = await supabase.storage
+        .from('menu-images')
+        .upload(filename, file, { upsert: true })
+
+      if (uploadErr) {
+        setUploadError('Error al subir: ' + uploadErr.message)
+        return
+      }
+
+      const { data } = supabase.storage.from('menu-images').getPublicUrl(filename)
+      setImageUrl(data.publicUrl)
+    } catch {
+      setUploadError('Error inesperado al subir la imagen')
+    } finally {
+      setUploading(false)
+    }
   }
 
   // ── Submit ───────────────────────────────────────────────────────────────
@@ -304,80 +353,189 @@ export default function NotificacionesPage() {
               <p className="text-xs text-gray-400 mt-1 text-right">{body.length}/200</p>
             </div>
 
-            {/* Imagen */}
+            {/* Imagen ── 3 opciones */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center gap-1">
+              <label className="block text-sm font-medium text-gray-700 mb-2 flex items-center gap-1">
                 <ImageIcon size={14} />
                 Imagen <span className="text-gray-400 text-xs">(opcional)</span>
               </label>
-              <div className="flex gap-2">
+
+              {/* Source selector tabs */}
+              <div className="flex gap-2 mb-3">
+                {/* Del menú */}
+                {menuItems.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => { setImageSource('menu'); clearImage() }}
+                    className={cn(
+                      'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors',
+                      imageSource === 'menu'
+                        ? 'bg-sumak-gold/15 border-sumak-gold/50 text-sumak-brown'
+                        : 'bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100'
+                    )}
+                  >
+                    🍽️ Del menú
+                  </button>
+                )}
+
+                {/* Subir foto */}
+                <button
+                  type="button"
+                  onClick={() => { setImageSource('upload'); clearImage() }}
+                  className={cn(
+                    'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors',
+                    imageSource === 'upload'
+                      ? 'bg-sumak-gold/15 border-sumak-gold/50 text-sumak-brown'
+                      : 'bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100'
+                  )}
+                >
+                  <Upload size={12} /> Subir foto
+                </button>
+
+                {/* URL */}
+                <button
+                  type="button"
+                  onClick={() => { setImageSource('url'); clearImage() }}
+                  className={cn(
+                    'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors',
+                    imageSource === 'url'
+                      ? 'bg-sumak-gold/15 border-sumak-gold/50 text-sumak-brown'
+                      : 'bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100'
+                  )}
+                >
+                  <Link size={12} /> URL
+                </button>
+              </div>
+
+              {/* Panel: Del menú */}
+              {imageSource === 'menu' && (
+                <div className="relative" ref={menuRef}>
+                  <button
+                    type="button"
+                    onClick={() => setMenuOpen((o) => !o)}
+                    className={cn(
+                      'flex items-center gap-1.5 w-full px-4 py-2.5 rounded-xl border border-gray-200 text-sm',
+                      'bg-gray-50 text-gray-600 hover:bg-gray-100 transition-colors'
+                    )}
+                  >
+                    <span className="flex-1 text-left">
+                      {imageUrl
+                        ? menuItems.find(m => m.image_url === imageUrl)?.name ?? 'Plato seleccionado'
+                        : 'Seleccionar plato del menú'}
+                    </span>
+                    <ChevronDown size={14} />
+                  </button>
+                  {menuOpen && (
+                    <div className="absolute left-0 top-full mt-1 z-50 bg-white border border-gray-200 rounded-xl shadow-lg w-full max-h-64 overflow-y-auto py-1">
+                      {menuItems.map((item) => (
+                        <button
+                          key={item.id}
+                          type="button"
+                          onClick={() => pickMenuImage(item)}
+                          disabled={!item.image_url}
+                          className={cn(
+                            'w-full text-left px-3 py-2 text-sm flex items-center gap-2 transition-colors',
+                            item.image_url
+                              ? 'hover:bg-gray-50 text-gray-800'
+                              : 'text-gray-300 cursor-not-allowed'
+                          )}
+                        >
+                          {item.image_url ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img src={item.image_url} alt={item.name} className="w-8 h-8 rounded-lg object-cover shrink-0" />
+                          ) : (
+                            <div className="w-8 h-8 rounded-lg bg-gray-100 shrink-0" />
+                          )}
+                          <span className="truncate">{item.name}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Panel: Subir foto */}
+              {imageSource === 'upload' && (
+                <div>
+                  {/* Hidden file input */}
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={handleFileChange}
+                  />
+
+                  {!imageUrl ? (
+                    <button
+                      type="button"
+                      onClick={() => fileInputRef.current?.click()}
+                      disabled={uploading}
+                      className={cn(
+                        'w-full flex flex-col items-center justify-center gap-2',
+                        'px-4 py-6 rounded-xl border-2 border-dashed border-gray-200',
+                        'bg-gray-50 hover:bg-gray-100 transition-colors cursor-pointer',
+                        uploading && 'opacity-60 cursor-not-allowed'
+                      )}
+                    >
+                      {uploading ? (
+                        <>
+                          <div className="w-6 h-6 border-2 border-sumak-gold border-t-transparent rounded-full animate-spin" />
+                          <span className="text-sm text-gray-500">Subiendo imagen...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Upload size={22} className="text-gray-400" />
+                          <span className="text-sm font-medium text-gray-600">Subir imagen 📷</span>
+                          <span className="text-xs text-gray-400">JPG, PNG, WebP · desde tu dispositivo</span>
+                        </>
+                      )}
+                    </button>
+                  ) : null}
+
+                  {uploadError && (
+                    <p className="mt-2 text-xs text-red-500">{uploadError}</p>
+                  )}
+                </div>
+              )}
+
+              {/* Panel: URL */}
+              {imageSource === 'url' && (
                 <input
                   type="text"
                   value={imageUrl}
                   onChange={(e) => setImageUrl(e.target.value)}
                   placeholder="https://... (URL de imagen)"
-                  className={cn(inputCls, 'flex-1')}
+                  className={inputCls}
                 />
-                {/* Menu image picker */}
-                {menuItems.length > 0 && (
-                  <div className="relative shrink-0" ref={menuRef}>
-                    <button
-                      type="button"
-                      onClick={() => setMenuOpen((o) => !o)}
-                      className={cn(
-                        'flex items-center gap-1 px-3 py-2.5 rounded-xl border border-gray-200 text-xs font-medium',
-                        'bg-gray-50 text-gray-600 hover:bg-gray-100 transition-colors whitespace-nowrap'
-                      )}
-                    >
-                      Del menú <ChevronDown size={12} />
-                    </button>
-                    {menuOpen && (
-                      <div className="absolute right-0 top-full mt-1 z-50 bg-white border border-gray-200 rounded-xl shadow-lg w-56 max-h-64 overflow-y-auto py-1">
-                        {menuItems.map((item) => (
-                          <button
-                            key={item.id}
-                            type="button"
-                            onClick={() => pickMenuImage(item)}
-                            disabled={!item.image_url}
-                            className={cn(
-                              'w-full text-left px-3 py-2 text-sm flex items-center gap-2 transition-colors',
-                              item.image_url
-                                ? 'hover:bg-gray-50 text-gray-800'
-                                : 'text-gray-300 cursor-not-allowed'
-                            )}
-                          >
-                            {item.image_url ? (
-                              // eslint-disable-next-line @next/next/no-img-element
-                              <img src={item.image_url} alt={item.name} className="w-8 h-8 rounded-lg object-cover shrink-0" />
-                            ) : (
-                              <div className="w-8 h-8 rounded-lg bg-gray-100 shrink-0" />
-                            )}
-                            <span className="truncate">{item.name}</span>
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
+              )}
 
-              {/* Image preview */}
+              {/* Image preview (shared across all sources) */}
               {imageUrl.trim() && (
-                <div className="mt-2 relative inline-block">
+                <div className="mt-3 relative inline-block">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
                     src={imageUrl.trim()}
                     alt="Preview"
-                    className="h-24 rounded-xl object-cover border border-gray-200"
+                    className="h-28 rounded-xl object-cover border border-gray-200"
                     onError={(e) => { (e.target as HTMLImageElement).style.display = 'none' }}
                   />
                   <button
                     type="button"
-                    onClick={() => setImageUrl('')}
-                    className="absolute -top-2 -right-2 w-5 h-5 bg-red-500 text-white rounded-full flex items-center justify-center text-xs hover:bg-red-600"
+                    onClick={clearImage}
+                    className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 text-white rounded-full flex items-center justify-center text-sm hover:bg-red-600"
                   >
                     ×
                   </button>
+                  {imageSource === 'upload' && (
+                    <button
+                      type="button"
+                      onClick={() => fileInputRef.current?.click()}
+                      className="mt-1 block text-xs text-sumak-gold hover:underline"
+                    >
+                      Cambiar imagen
+                    </button>
+                  )}
                 </div>
               )}
             </div>
