@@ -95,16 +95,31 @@ function useCursorHide() {
   }, [])
 }
 
-// ─── Delete Confirmation Modal ────────────────────────────────────────────────
+// ─── Card Action Modal ────────────────────────────────────────────────────────
 
-interface DeleteModalProps {
+type ModalStep = 'menu' | 'confirm-delete'
+
+interface CardModalProps {
   itemName: string
-  onConfirm: () => void
+  step: ModalStep
+  onChangeImage: () => void
+  onDeleteRequest: () => void
+  onConfirmDelete: () => void
   onCancel: () => void
   deleting: boolean
+  uploading: boolean
 }
 
-function DeleteModal({ itemName, onConfirm, onCancel, deleting }: DeleteModalProps) {
+function CardModal({
+  itemName,
+  step,
+  onChangeImage,
+  onDeleteRequest,
+  onConfirmDelete,
+  onCancel,
+  deleting,
+  uploading,
+}: CardModalProps) {
   return (
     <div
       className="absolute inset-0 z-10 flex items-center justify-center rounded-lg"
@@ -113,7 +128,12 @@ function DeleteModal({ itemName, onConfirm, onCancel, deleting }: DeleteModalPro
     >
       <div
         className="flex flex-col items-center gap-3 rounded-xl px-4 py-4 mx-2"
-        style={{ background: '#1a1917', border: '1px solid rgba(255,255,255,0.12)', minWidth: '120px', maxWidth: '90%' }}
+        style={{
+          background: '#1a1917',
+          border: '1px solid rgba(255,255,255,0.12)',
+          minWidth: '130px',
+          maxWidth: '90%',
+        }}
       >
         <p
           className="text-white font-bold text-center leading-tight"
@@ -121,38 +141,87 @@ function DeleteModal({ itemName, onConfirm, onCancel, deleting }: DeleteModalPro
         >
           {itemName}
         </p>
-        <p
-          className="text-white/70 text-center"
-          style={{ fontSize: 'clamp(0.6rem, 1vw, 0.8rem)' }}
-        >
-          ¿Eliminar?
-        </p>
-        <div className="flex gap-2 w-full">
-          <button
-            onClick={onConfirm}
-            disabled={deleting}
-            className="flex-1 rounded-lg font-bold text-white transition-all active:scale-95 disabled:opacity-50"
-            style={{
-              background: '#dc2626',
-              fontSize: 'clamp(0.6rem, 1vw, 0.8rem)',
-              padding: '6px 4px',
-            }}
-          >
-            {deleting ? '...' : 'Eliminar'}
-          </button>
-          <button
-            onClick={onCancel}
-            disabled={deleting}
-            className="flex-1 rounded-lg font-bold text-white/80 transition-all active:scale-95 disabled:opacity-50"
-            style={{
-              background: '#3f3f46',
-              fontSize: 'clamp(0.6rem, 1vw, 0.8rem)',
-              padding: '6px 4px',
-            }}
-          >
-            Cancelar
-          </button>
-        </div>
+
+        {step === 'menu' ? (
+          <>
+            {/* Change image button */}
+            <button
+              onClick={onChangeImage}
+              disabled={uploading}
+              className="w-full rounded-lg font-bold text-white transition-all active:scale-95 disabled:opacity-50"
+              style={{
+                background: '#2563eb',
+                fontSize: 'clamp(0.65rem, 1.1vw, 0.85rem)',
+                padding: '8px 6px',
+              }}
+            >
+              {uploading ? '⏳ Subiendo...' : '📷 Cambiar imagen'}
+            </button>
+
+            {/* Delete button */}
+            <button
+              onClick={onDeleteRequest}
+              disabled={uploading}
+              className="w-full rounded-lg font-bold text-white transition-all active:scale-95 disabled:opacity-50"
+              style={{
+                background: '#dc2626',
+                fontSize: 'clamp(0.65rem, 1.1vw, 0.85rem)',
+                padding: '8px 6px',
+              }}
+            >
+              🗑️ Eliminar
+            </button>
+
+            {/* Cancel */}
+            <button
+              onClick={onCancel}
+              disabled={uploading}
+              className="w-full rounded-lg font-bold text-white/70 transition-all active:scale-95 disabled:opacity-50"
+              style={{
+                background: '#3f3f46',
+                fontSize: 'clamp(0.65rem, 1.1vw, 0.85rem)',
+                padding: '8px 6px',
+              }}
+            >
+              Cancelar
+            </button>
+          </>
+        ) : (
+          <>
+            <p
+              className="text-white/70 text-center"
+              style={{ fontSize: 'clamp(0.6rem, 1vw, 0.8rem)' }}
+            >
+              ¿Eliminar este plato?
+            </p>
+            <div className="flex gap-2 w-full">
+              <button
+                onClick={onConfirmDelete}
+                disabled={deleting}
+                className="flex-1 rounded-lg font-bold text-white transition-all active:scale-95 disabled:opacity-50"
+                style={{
+                  background: '#dc2626',
+                  fontSize: 'clamp(0.6rem, 1vw, 0.8rem)',
+                  padding: '8px 4px',
+                }}
+              >
+                {deleting ? '...' : 'Confirmar'}
+              </button>
+              <button
+                onClick={onCancel}
+                disabled={deleting}
+                className="flex-1 rounded-lg font-bold text-white/80 transition-all active:scale-95 disabled:opacity-50"
+                style={{
+                  background: '#3f3f46',
+                  fontSize: 'clamp(0.6rem, 1vw, 0.8rem)',
+                  padding: '8px 4px',
+                }}
+              >
+                Cancelar
+              </button>
+            </div>
+          </>
+        )}
       </div>
     </div>
   )
@@ -170,34 +239,70 @@ function DishCard({ item, locale }: DishCardProps) {
   const name = getItemName(item, locale)
   const emoji = CATEGORY_EMOJI[item.categories?.slug ?? ''] ?? '🍽️'
 
-  const [showConfirm, setShowConfirm] = useState(false)
+  const [modalStep, setModalStep] = useState<ModalStep | null>(null)
   const [deleting, setDeleting] = useState(false)
   const [deleted, setDeleted] = useState(false)
+  const [uploading, setUploading] = useState(false)
 
   const handleCardClick = () => {
-    if (!showConfirm) setShowConfirm(true)
+    if (!modalStep) setModalStep('menu')
   }
 
   const handleCancel = () => {
-    setShowConfirm(false)
+    setModalStep(null)
   }
 
-  const handleConfirm = async () => {
+  const handleDeleteRequest = () => {
+    setModalStep('confirm-delete')
+  }
+
+  const handleConfirmDelete = async () => {
     setDeleting(true)
     try {
-      const res = await fetch('/api/admin/menu', {
+      const res = await fetch('/api/menu-display/delete', {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id: item.id }),
       })
       if (res.ok) {
         setDeleted(true)
-        setShowConfirm(false)
+        setModalStep(null)
       }
     } catch {
       // silent fail — Realtime will reconcile
     } finally {
       setDeleting(false)
+    }
+  }
+
+  const handleChangeImage = () => {
+    // Trigger hidden file input
+    const input = document.getElementById(`file-input-${item.id}`) as HTMLInputElement | null
+    input?.click()
+  }
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    setUploading(true)
+    try {
+      const formData = new FormData()
+      formData.append('id', item.id)
+      formData.append('image', file)
+
+      await fetch('/api/menu-display/update-image', {
+        method: 'POST',
+        body: formData,
+      })
+      // Image update propagates via Realtime subscription
+      setModalStep(null)
+    } catch {
+      // silent fail — UI will recover on Realtime push
+    } finally {
+      setUploading(false)
+      // Reset so same file can be selected again if needed
+      e.target.value = ''
     }
   }
 
@@ -211,6 +316,16 @@ function DishCard({ item, locale }: DishCardProps) {
       )}
       onClick={handleCardClick}
     >
+      {/* Hidden file input for camera/gallery */}
+      <input
+        id={`file-input-${item.id}`}
+        type="file"
+        accept="image/*"
+        capture="environment"
+        className="hidden"
+        onChange={handleFileChange}
+      />
+
       {/* Full-bleed image */}
       {item.image_url ? (
         // eslint-disable-next-line @next/next/no-img-element
@@ -262,13 +377,17 @@ function DishCard({ item, locale }: DishCardProps) {
         </div>
       )}
 
-      {/* Delete confirmation modal */}
-      {showConfirm && (
-        <DeleteModal
+      {/* Action modal */}
+      {modalStep && (
+        <CardModal
           itemName={name}
-          onConfirm={handleConfirm}
+          step={modalStep}
+          onChangeImage={handleChangeImage}
+          onDeleteRequest={handleDeleteRequest}
+          onConfirmDelete={handleConfirmDelete}
           onCancel={handleCancel}
           deleting={deleting}
+          uploading={uploading}
         />
       )}
     </article>
