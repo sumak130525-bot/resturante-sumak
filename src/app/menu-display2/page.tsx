@@ -524,25 +524,23 @@ export default function MenuDisplayPage() {
         return null
       }
       // Second tap on a different card: swap positions
-      const itemA = filteredItems.find((i) => i.id === prev)
-      const itemB = filteredItems.find((i) => i.id === id)
-      if (itemA && itemB) {
-        const posA = itemA.display_order && itemA.display_order > 0
-          ? itemA.display_order
-          : filteredItems.indexOf(itemA) + 1
-        const posB = itemB.display_order && itemB.display_order > 0
-          ? itemB.display_order
-          : filteredItems.indexOf(itemB) + 1
+      const indexA = filteredItems.findIndex((i) => i.id === prev)
+      const indexB = filteredItems.findIndex((i) => i.id === id)
+      if (indexA >= 0 && indexB >= 0) {
+        // Swap: reassign all with sequential order, swapping A and B positions
+        const reordered = [...filteredItems]
+        const tmp = reordered[indexA]
+        reordered[indexA] = reordered[indexB]
+        reordered[indexB] = tmp
+        const updates = reordered.map((it, idx) => ({
+          id: it.id,
+          display_order: idx + 1,
+        }))
         setSaving(true)
         fetch('/api/menu-display/reorder', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            updates: [
-              { id: itemA.id, display_order: posB },
-              { id: itemB.id, display_order: posA },
-            ],
-          }),
+          body: JSON.stringify({ updates }),
         })
           .then(() => refetch())
           .catch(() => {})
@@ -553,6 +551,8 @@ export default function MenuDisplayPage() {
   }, [saving, filteredItems, refetch])
 
   // ── Tap-Tap: move selected card to empty slot ──
+  // Empty slot at visual index = filteredItems.length + emptyIndex
+  // We need to give the selected item a display_order that places it at that visual position
   const handleEmptyCellTap = useCallback(async (emptyIndex: number) => {
     if (!reorderMode || !selectedId || saving) return
     const item = filteredItems.find((i) => i.id === selectedId)
@@ -560,11 +560,22 @@ export default function MenuDisplayPage() {
     setSelectedId(null)
     setSaving(true)
     try {
-      const newOrder = filteredItems.length + emptyIndex + 1
+      // Target visual position (0-based): filteredItems.length + emptyIndex
+      const targetPos = filteredItems.length + emptyIndex
+      
+      // Reassign ALL items with sequential display_order, placing selected item at targetPos
+      const reordered = filteredItems.filter((i) => i.id !== selectedId)
+      reordered.splice(targetPos > reordered.length ? reordered.length : targetPos, 0, item)
+      
+      const updates = reordered.map((it, idx) => ({
+        id: it.id,
+        display_order: idx + 1,
+      }))
+      
       await fetch('/api/menu-display/reorder', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ updates: [{ id: item.id, display_order: newOrder }] }),
+        body: JSON.stringify({ updates }),
       })
       await refetch()
     } catch {
