@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import Image from 'next/image'
 import { useMenuRealtime } from '@/hooks/useMenuRealtime'
 import { useTranslation, getItemName, type Locale } from '@/lib/i18n'
@@ -227,174 +227,47 @@ function CardModal({
   )
 }
 
-// ─── Assign Modal ─────────────────────────────────────────────────────────────
+// ─── Drag ghost ───────────────────────────────────────────────────────────────
 
-interface AssignModalProps {
-  availableItems: MenuItem[]
+interface DragGhostProps {
+  item: MenuItem
   locale: Locale
-  assigning: boolean
-  onSelect: (item: MenuItem) => void
-  onCancel: () => void
+  x: number
+  y: number
 }
 
-function AssignModal({ availableItems, locale, assigning, onSelect, onCancel }: AssignModalProps) {
-  const [search, setSearch] = useState('')
-
-  const filtered = useMemo(() => {
-    const q = search.toLowerCase().trim()
-    if (!q) return availableItems
-    return availableItems.filter((item) => {
-      const name = getItemName(item, locale).toLowerCase()
-      const cat = (item.categories?.name ?? '').toLowerCase()
-      return name.includes(q) || cat.includes(q)
-    })
-  }, [availableItems, search, locale])
-
+function DragGhost({ item, locale, x, y }: DragGhostProps) {
+  const name = getItemName(item, locale)
+  const emoji = CATEGORY_EMOJI[item.categories?.slug ?? ''] ?? '🍽️'
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center"
-      style={{ background: 'rgba(0,0,0,0.82)' }}
-      onClick={onCancel}
-    >
-      <div
-        className="flex flex-col rounded-2xl overflow-hidden"
-        style={{
-          background: '#1a1917',
-          border: '1px solid rgba(255,255,255,0.14)',
-          width: 'min(480px, 90vw)',
-          maxHeight: '75vh',
-        }}
-        onClick={(e) => e.stopPropagation()}
-      >
-        {/* Header */}
-        <div className="flex items-center justify-between px-4 py-3 border-b border-white/10">
-          <p className="text-white font-bold text-base">Agregar plato</p>
-          <button
-            onClick={onCancel}
-            className="text-white/50 hover:text-white text-xl leading-none transition-colors"
-          >
-            ✕
-          </button>
-        </div>
-
-        {/* Search */}
-        <div className="px-4 py-2 border-b border-white/10">
-          <input
-            autoFocus
-            type="text"
-            placeholder="Buscar plato o categoría..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            className="w-full rounded-lg px-3 py-2 text-sm text-white placeholder-white/40 outline-none focus:ring-2 focus:ring-[#F5C842]/50"
-            style={{
-              background: 'rgba(255,255,255,0.07)',
-              border: '1px solid rgba(255,255,255,0.12)',
-            }}
-          />
-        </div>
-
-        {/* List */}
-        <div className="flex-1 overflow-y-auto">
-          {filtered.length === 0 ? (
-            <div className="flex items-center justify-center py-10 text-white/30 text-sm">
-              Sin resultados
-            </div>
-          ) : (
-            filtered.map((item) => {
-              const name = getItemName(item, locale)
-              const catName = item.categories?.name ?? item.categories?.slug ?? ''
-              return (
-                <button
-                  key={item.id}
-                  onClick={() => !assigning && onSelect(item)}
-                  disabled={assigning}
-                  className="w-full flex items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-white/8 active:bg-white/12 disabled:opacity-50 border-b border-white/5"
-                  style={{ minHeight: '56px' }}
-                >
-                  {/* Thumb */}
-                  <div className="shrink-0 w-10 h-10 rounded-md overflow-hidden bg-white/5 flex items-center justify-center">
-                    {item.image_url ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img src={item.image_url} alt={name} className="w-full h-full object-cover" />
-                    ) : (
-                      <span className="text-lg">{CATEGORY_EMOJI[item.categories?.slug ?? ''] ?? '🍽️'}</span>
-                    )}
-                  </div>
-
-                  {/* Text */}
-                  <div className="flex-1 min-w-0">
-                    <p className="text-white font-semibold text-sm truncate">{name}</p>
-                    <p className="text-white/40 text-xs truncate">{catName}</p>
-                  </div>
-
-                  {/* Price */}
-                  <p className="shrink-0 text-[#F5C842] font-bold text-sm tabular-nums">
-                    {formatPrice(item.price)}
-                  </p>
-                </button>
-              )
-            })
-          )}
-        </div>
-
-        {/* Footer */}
-        <div className="px-4 py-3 border-t border-white/10">
-          <button
-            onClick={onCancel}
-            className="w-full rounded-lg py-2 text-sm font-bold text-white/70 transition-all active:scale-95"
-            style={{ background: '#3f3f46' }}
-          >
-            Cancelar
-          </button>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-// ─── Empty Cell ───────────────────────────────────────────────────────────────
-
-interface EmptyCellProps {
-  onClick: () => void
-  reorderMode?: boolean
-}
-
-function EmptyCell({ onClick, reorderMode }: EmptyCellProps) {
-  if (reorderMode) {
-    return (
-      <button
-        onClick={onClick}
-        className="w-full h-full rounded-lg flex items-center justify-center transition-all duration-200 group hover:scale-[1.03] active:scale-95"
-        style={{
-          border: '2px dashed rgba(255,255,255,0.15)',
-          background: 'rgba(255,255,255,0.05)',
-        }}
-      >
-        <span
-          className="text-white/20 group-hover:text-white/40 transition-colors duration-200 select-none"
-          style={{ fontSize: 'clamp(1.2rem, 2.5vw, 2rem)', lineHeight: 1 }}
-        >
-          ↓
-        </span>
-      </button>
-    )
-  }
-  return (
-    <button
-      onClick={onClick}
-      className="w-full h-full rounded-lg flex items-center justify-center transition-all duration-200 group hover:scale-[1.03] active:scale-95"
+      className="pointer-events-none fixed z-[9999] rounded-lg overflow-hidden shadow-2xl"
       style={{
-        border: '2px dashed rgba(255,255,255,0.15)',
-        background: 'rgba(255,255,255,0.03)',
+        width: 120,
+        height: 90,
+        left: x - 60,
+        top: y - 45,
+        opacity: 0.85,
+        transform: 'scale(1.08)',
+        transition: 'none',
       }}
     >
-      <span
-        className="text-white/25 group-hover:text-white/50 transition-colors duration-200 select-none"
-        style={{ fontSize: 'clamp(1.2rem, 2.5vw, 2rem)', lineHeight: 1 }}
-      >
-        +
-      </span>
-    </button>
+      {item.image_url ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={item.image_url} alt={name} className="absolute inset-0 w-full h-full object-cover" />
+      ) : (
+        <div className="absolute inset-0 flex items-center justify-center bg-white/10">
+          <span className="text-3xl select-none">{emoji}</span>
+        </div>
+      )}
+      <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/10 to-transparent" />
+      <div className="absolute bottom-0 left-0 right-0 px-1.5 py-1">
+        <p className="text-white font-bold text-[0.65rem] leading-tight truncate" style={{ textShadow: '0 1px 3px rgba(0,0,0,0.9)' }}>
+          {name}
+        </p>
+      </div>
+      <div className="absolute inset-0 ring-2 ring-[#F5C842] rounded-lg" />
+    </div>
   )
 }
 
@@ -405,12 +278,14 @@ interface DishCardProps {
   locale: Locale
   // Reorder mode props
   reorderMode?: boolean
+  isDragging?: boolean
   isSelected?: boolean
   position?: number
   onReorderSelect?: (id: string) => void
+  onDragStart?: (id: string, e: React.TouchEvent | React.MouseEvent) => void
 }
 
-function DishCard({ item, locale, reorderMode, isSelected, position, onReorderSelect }: DishCardProps) {
+function DishCard({ item, locale, reorderMode, isDragging, isSelected, position, onReorderSelect, onDragStart }: DishCardProps) {
   const isUnavailable = item.available === 0
   const name = getItemName(item, locale)
   const emoji = CATEGORY_EMOJI[item.categories?.slug ?? ''] ?? '🍽️'
@@ -456,7 +331,6 @@ function DishCard({ item, locale, reorderMode, isSelected, position, onReorderSe
   }
 
   const handleChangeImage = () => {
-    // Trigger hidden file input
     const input = document.getElementById(`file-input-${item.id}`) as HTMLInputElement | null
     input?.click()
   }
@@ -475,28 +349,36 @@ function DishCard({ item, locale, reorderMode, isSelected, position, onReorderSe
         method: 'POST',
         body: formData,
       })
-      // Image update propagates via Realtime subscription
       setModalStep(null)
     } catch {
       // silent fail — UI will recover on Realtime push
     } finally {
       setUploading(false)
-      // Reset so same file can be selected again if needed
       e.target.value = ''
+    }
+  }
+
+  const handlePointerDown = (e: React.TouchEvent | React.MouseEvent) => {
+    if (reorderMode && onDragStart) {
+      onDragStart(item.id, e)
     }
   }
 
   return (
     <article
+      data-item-id={item.id}
       className={cn(
         'relative w-full h-full rounded-lg overflow-hidden cursor-pointer',
         'transition-all duration-300',
         isUnavailable && !deleted && !reorderMode && 'opacity-50',
         deleted && 'opacity-0 scale-95 pointer-events-none',
-        reorderMode && isSelected && 'ring-4 ring-[#F5C842] ring-offset-2 ring-offset-[#0d0c0b]',
-        reorderMode && !isSelected && 'opacity-80 hover:opacity-100',
+        reorderMode && isDragging && 'opacity-30',
+        reorderMode && isSelected && !isDragging && 'ring-4 ring-[#F5C842] ring-offset-2 ring-offset-[#0d0c0b]',
+        reorderMode && !isSelected && !isDragging && 'opacity-80 hover:opacity-100',
       )}
       onClick={handleCardClick}
+      onTouchStart={reorderMode ? handlePointerDown : undefined}
+      onMouseDown={reorderMode ? handlePointerDown : undefined}
     >
       {/* Hidden file input for camera/gallery */}
       <input
@@ -516,6 +398,7 @@ function DishCard({ item, locale, reorderMode, isSelected, position, onReorderSe
           alt={name}
           className="absolute inset-0 w-full h-full object-cover"
           loading="lazy"
+          draggable={false}
         />
       ) : (
         <div className="absolute inset-0 flex items-center justify-center bg-white/5">
@@ -560,7 +443,7 @@ function DishCard({ item, locale, reorderMode, isSelected, position, onReorderSe
       )}
 
       {/* Reorder mode: position badge */}
-      {reorderMode && position !== undefined && (
+      {reorderMode && position !== undefined && !isDragging && (
         <div
           className={cn(
             'absolute top-1.5 right-1.5 w-6 h-6 rounded-full flex items-center justify-center font-bold text-xs',
@@ -574,7 +457,7 @@ function DishCard({ item, locale, reorderMode, isSelected, position, onReorderSe
       )}
 
       {/* Reorder mode: selected overlay */}
-      {reorderMode && isSelected && (
+      {reorderMode && isSelected && !isDragging && (
         <div className="absolute inset-0 bg-[#F5C842]/10 pointer-events-none" />
       )}
 
@@ -620,13 +503,21 @@ export default function MenuDisplayPage() {
 
   // ── Reorder mode state ──
   const [reorderMode, setReorderMode] = useState(false)
-  const [selectedId, setSelectedId]   = useState<string | null>(null)
   const [saving, setSaving]           = useState(false)
 
-  // ── Assign modal state ──
-  const [assignModalOpen, setAssignModalOpen] = useState(false)
-  const [assigningSlot, setAssigningSlot]     = useState<number | null>(null) // target display_order slot
-  const [assigning, setAssigning]             = useState(false)
+  // ── Drag state ──
+  const [draggingId, setDraggingId]   = useState<string | null>(null)
+  const [ghostPos, setGhostPos]       = useState<{ x: number; y: number } | null>(null)
+  const [dropTargetIndex, setDropTargetIndex] = useState<number | null>(null)
+  // tap-tap fallback for touch (when no drag movement detected)
+  const [selectedId, setSelectedId]   = useState<string | null>(null)
+
+  const dragRef = useRef<{
+    startX: number
+    startY: number
+    moved: boolean
+    itemId: string
+  } | null>(null)
 
   // Only show tabs that have items (plus always-visible ones)
   const availableSlugs = new Set(categories.map((c) => c.slug))
@@ -650,18 +541,6 @@ export default function MenuDisplayPage() {
     return items.slice(0, MAX_VISIBLE)
   })()
 
-  // Items NOT in the current tab — candidates for the assign modal
-  const assignableCategoryId = useMemo(() => {
-    // For non-virtual tabs we need the actual category id to assign to
-    if (activeTab === 'all' || activeTab === 'menu-dia') return null
-    return categories.find((c) => c.slug === activeTab)?.id ?? null
-  }, [activeTab, categories])
-
-  const itemsNotInTab = useMemo(() => {
-    if (!assignableCategoryId) return []
-    return menuItems.filter((i) => i.category_id !== assignableCategoryId)
-  }, [menuItems, assignableCategoryId])
-
   // Tab switch with fade transition — manual only, no auto-rotate
   const switchTab = useCallback((key: TabKey) => {
     setVisible(false)
@@ -677,126 +556,242 @@ export default function MenuDisplayPage() {
     return () => clearInterval(id)
   }, [refetch])
 
-  // Toggle reorder mode — deselect on exit
+  // Toggle reorder mode — reset drag/select state
   const toggleReorderMode = () => {
     setReorderMode((prev) => !prev)
     setSelectedId(null)
+    setDraggingId(null)
+    setGhostPos(null)
+    setDropTargetIndex(null)
   }
 
-  // Handle card tap in reorder mode
-  const handleReorderSelect = useCallback(async (tappedId: string) => {
-    if (saving) return
+  // ── Drag & Drop helpers ──
 
-    // First tap: select
-    if (selectedId === null) {
-      setSelectedId(tappedId)
-      return
+  // Given a point (clientX, clientY), find which grid cell index (0-based, 0..23) is under it
+  function getCellIndexAtPoint(x: number, y: number): { kind: 'item'; id: string } | { kind: 'empty'; index: number } | null {
+    const el = document.elementFromPoint(x, y)
+    if (!el) return null
+    // Walk up to find data-item-id or data-empty-index
+    let cur: Element | null = el
+    while (cur) {
+      const itemId = (cur as HTMLElement).dataset?.itemId
+      if (itemId) return { kind: 'item', id: itemId }
+      const emptyIdx = (cur as HTMLElement).dataset?.emptyIndex
+      if (emptyIdx !== undefined) return { kind: 'empty', index: parseInt(emptyIdx, 10) }
+      cur = cur.parentElement
     }
+    return null
+  }
 
-    // Tap same card again: deselect
-    if (selectedId === tappedId) {
-      setSelectedId(null)
-      return
-    }
-
-    // Second tap on a different card: swap display_order
-    const itemA = filteredItems.find((i) => i.id === selectedId)
-    const itemB = filteredItems.find((i) => i.id === tappedId)
-    if (!itemA || !itemB) {
-      setSelectedId(null)
-      return
-    }
-
-    // Derive effective positions: use 1-based index as fallback if display_order is 0/null
-    const posA = itemA.display_order && itemA.display_order > 0
-      ? itemA.display_order
-      : filteredItems.indexOf(itemA) + 1
-    const posB = itemB.display_order && itemB.display_order > 0
-      ? itemB.display_order
-      : filteredItems.indexOf(itemB) + 1
-
+  const commitDrop = useCallback(async (draggedId: string, target: ReturnType<typeof getCellIndexAtPoint>) => {
+    if (!target || saving) return
     setSaving(true)
-    setSelectedId(null)
+    setDraggingId(null)
+    setGhostPos(null)
+    setDropTargetIndex(null)
+    dragRef.current = null
+
     try {
-      await fetch('/api/menu-display/reorder', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          updates: [
-            { id: itemA.id, display_order: posB },
-            { id: itemB.id, display_order: posA },
-          ],
-        }),
-      })
-      // Refetch so the grid reflects the new order
+      const draggedItem = filteredItems.find((i) => i.id === draggedId)
+      if (!draggedItem) return
+
+      const posA = draggedItem.display_order && draggedItem.display_order > 0
+        ? draggedItem.display_order
+        : filteredItems.indexOf(draggedItem) + 1
+
+      if (target.kind === 'item' && target.id !== draggedId) {
+        // Swap with another item
+        const targetItem = filteredItems.find((i) => i.id === target.id)
+        if (!targetItem) return
+        const posB = targetItem.display_order && targetItem.display_order > 0
+          ? targetItem.display_order
+          : filteredItems.indexOf(targetItem) + 1
+
+        await fetch('/api/menu-display/reorder', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            updates: [
+              { id: draggedItem.id, display_order: posB },
+              { id: targetItem.id, display_order: posA },
+            ],
+          }),
+        })
+      } else if (target.kind === 'empty') {
+        // Move to empty slot
+        const newOrder = filteredItems.length + target.index + 1
+        await fetch('/api/menu-display/reorder', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            updates: [{ id: draggedItem.id, display_order: newOrder }],
+          }),
+        })
+      }
+
       await refetch()
     } catch {
       // silent fail
     } finally {
       setSaving(false)
     }
-  }, [selectedId, filteredItems, saving, refetch])
+  }, [filteredItems, saving, refetch])
 
-  // Handle empty cell click — in reorder mode, move selected dish here
-  const handleEmptyCellClick = useCallback(async (slotIndex: number) => {
-    // In reorder mode: move selected dish to this empty position
-    if (reorderMode && selectedId) {
-      const item = filteredItems.find((i) => i.id === selectedId)
-      if (!item || saving) return
-      setSaving(true)
-      setSelectedId(null)
-      try {
-        const newOrder = slotIndex + 1
-        await fetch('/api/menu-display/reorder', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            updates: [{ id: item.id, display_order: newOrder }],
-          }),
-        })
-        await refetch()
-      } catch {
-        // silent
-      } finally {
-        setSaving(false)
+  // ── Drag start ──
+  const handleDragStart = useCallback((itemId: string, e: React.TouchEvent | React.MouseEvent) => {
+    if (saving) return
+    const isTouchEvent = 'touches' in e
+    const clientX = isTouchEvent ? (e as React.TouchEvent).touches[0].clientX : (e as React.MouseEvent).clientX
+    const clientY = isTouchEvent ? (e as React.TouchEvent).touches[0].clientY : (e as React.MouseEvent).clientY
+
+    dragRef.current = { startX: clientX, startY: clientY, moved: false, itemId }
+    // Don't start ghost immediately — wait for movement to distinguish tap from drag
+  }, [saving])
+
+  // ── Global move / up handlers (attached once, removed on cleanup) ──
+  useEffect(() => {
+    if (!reorderMode) return
+
+    function onTouchMove(e: TouchEvent) {
+      if (!dragRef.current) return
+      const t = e.touches[0]
+      const dx = Math.abs(t.clientX - dragRef.current.startX)
+      const dy = Math.abs(t.clientY - dragRef.current.startY)
+      if (!dragRef.current.moved && (dx > 8 || dy > 8)) {
+        dragRef.current.moved = true
+        setDraggingId(dragRef.current.itemId)
+        setSelectedId(null)
       }
-      return
+      if (dragRef.current.moved) {
+        e.preventDefault()
+        setGhostPos({ x: t.clientX, y: t.clientY })
+        const target = getCellIndexAtPoint(t.clientX, t.clientY)
+        if (target && target.kind === 'empty') setDropTargetIndex(target.index)
+        else if (target && target.kind === 'item' && target.id !== dragRef.current.itemId) setDropTargetIndex(null)
+        else setDropTargetIndex(null)
+      }
     }
-    // Normal mode: open assign modal
-    if (activeTab === 'all' || activeTab === 'menu-dia') return
-    setAssigningSlot(slotIndex + 1)
-    setAssignModalOpen(true)
-  }, [activeTab, reorderMode, selectedId, filteredItems, saving, refetch])
 
-  // Assign a dish to the current tab
-  const handleAssignItem = useCallback(async (item: MenuItem) => {
-    if (!assignableCategoryId || assigning) return
-    setAssigning(true)
+    function onMouseMove(e: MouseEvent) {
+      if (!dragRef.current) return
+      const dx = Math.abs(e.clientX - dragRef.current.startX)
+      const dy = Math.abs(e.clientY - dragRef.current.startY)
+      if (!dragRef.current.moved && (dx > 8 || dy > 8)) {
+        dragRef.current.moved = true
+        setDraggingId(dragRef.current.itemId)
+        setSelectedId(null)
+      }
+      if (dragRef.current.moved) {
+        setGhostPos({ x: e.clientX, y: e.clientY })
+        const target = getCellIndexAtPoint(e.clientX, e.clientY)
+        if (target && target.kind === 'empty') setDropTargetIndex(target.index)
+        else setDropTargetIndex(null)
+      }
+    }
+
+    function onTouchEnd(e: TouchEvent) {
+      if (!dragRef.current) return
+      const { moved, itemId } = dragRef.current
+      if (moved) {
+        const t = e.changedTouches[0]
+        const target = getCellIndexAtPoint(t.clientX, t.clientY)
+        commitDrop(itemId, target)
+      } else {
+        // It was a tap — use tap-tap logic
+        dragRef.current = null
+        setDraggingId(null)
+        setGhostPos(null)
+        setDropTargetIndex(null)
+        setSelectedId((prev) => {
+          if (prev === null) return itemId
+          if (prev === itemId) return null
+          // second tap on different item: handled below
+          return prev
+        })
+        // Handle second tap swap (async, needs selectedId at time of tap)
+        setSelectedId((prev) => {
+          if (prev !== null && prev !== itemId) {
+            // trigger swap
+            const itemA = filteredItems.find((i) => i.id === prev)
+            const itemB = filteredItems.find((i) => i.id === itemId)
+            if (itemA && itemB && !saving) {
+              const posA = itemA.display_order && itemA.display_order > 0 ? itemA.display_order : filteredItems.indexOf(itemA) + 1
+              const posB = itemB.display_order && itemB.display_order > 0 ? itemB.display_order : filteredItems.indexOf(itemB) + 1
+              setSaving(true)
+              fetch('/api/menu-display/reorder', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ updates: [{ id: itemA.id, display_order: posB }, { id: itemB.id, display_order: posA }] }),
+              }).then(() => refetch()).catch(() => {}).finally(() => setSaving(false))
+            }
+            return null
+          }
+          return prev
+        })
+      }
+    }
+
+    function onMouseUp(e: MouseEvent) {
+      if (!dragRef.current) return
+      const { moved, itemId } = dragRef.current
+      if (moved) {
+        const target = getCellIndexAtPoint(e.clientX, e.clientY)
+        commitDrop(itemId, target)
+      } else {
+        dragRef.current = null
+        setDraggingId(null)
+        setGhostPos(null)
+        setDropTargetIndex(null)
+      }
+    }
+
+    window.addEventListener('touchmove', onTouchMove, { passive: false })
+    window.addEventListener('touchend', onTouchEnd)
+    window.addEventListener('mousemove', onMouseMove)
+    window.addEventListener('mouseup', onMouseUp)
+    return () => {
+      window.removeEventListener('touchmove', onTouchMove)
+      window.removeEventListener('touchend', onTouchEnd)
+      window.removeEventListener('mousemove', onMouseMove)
+      window.removeEventListener('mouseup', onMouseUp)
+    }
+  }, [reorderMode, commitDrop, filteredItems, saving, refetch])
+
+  // Tap-tap: handle empty cell tap when a card is selected
+  const handleEmptyCellTap = useCallback(async (emptyIndex: number) => {
+    if (!reorderMode || !selectedId || saving) return
+    const item = filteredItems.find((i) => i.id === selectedId)
+    if (!item) return
+    setSelectedId(null)
+    setSaving(true)
     try {
-      await fetch('/api/menu-display/assign', {
+      const newOrder = filteredItems.length + emptyIndex + 1
+      await fetch('/api/menu-display/reorder', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          item_id: item.id,
-          category_id: assignableCategoryId,
-          display_order: assigningSlot ?? filteredItems.length + 1,
-        }),
+        body: JSON.stringify({ updates: [{ id: item.id, display_order: newOrder }] }),
       })
-      setAssignModalOpen(false)
       await refetch()
     } catch {
-      // silent fail — Realtime will reconcile
+      // silent
     } finally {
-      setAssigning(false)
+      setSaving(false)
     }
-  }, [assignableCategoryId, assigning, assigningSlot, filteredItems.length, refetch])
+  }, [reorderMode, selectedId, filteredItems, saving, refetch])
 
   const tabLabel = (tab: (typeof DISPLAY_TABS)[number]) =>
     tab.label[locale as keyof typeof tab.label] ?? tab.label.es
 
-  // Build padded cell list: actual items + empty slots up to MAX_VISIBLE
   const emptyCellCount = Math.max(0, MAX_VISIBLE - filteredItems.length)
   const isVirtualTab = activeTab === 'all' || activeTab === 'menu-dia'
+
+  const draggingItem = draggingId ? filteredItems.find((i) => i.id === draggingId) ?? null : null
+
+  const hintText = draggingId
+    ? 'Suelta para mover el plato'
+    : selectedId
+      ? 'Toca otro plato para intercambiar, o un espacio vacío para mover'
+      : 'Arrastra un plato o tócalo para seleccionarlo'
 
   return (
     <div
@@ -892,11 +887,7 @@ export default function MenuDisplayPage() {
       {reorderMode && (
         <div className="shrink-0 flex items-center justify-center gap-2 py-1 text-xs font-semibold"
           style={{ background: 'rgba(245,200,66,0.12)', borderBottom: '1px solid rgba(245,200,66,0.2)' }}>
-          <span className="text-[#F5C842]">
-            {selectedId
-              ? 'Toca otro plato para intercambiar posiciones'
-              : 'Toca un plato para seleccionarlo'}
-          </span>
+          <span className="text-[#F5C842]">{hintText}</span>
         </div>
       )}
 
@@ -916,7 +907,6 @@ export default function MenuDisplayPage() {
         {loading ? (
           <SkeletonGrid />
         ) : filteredItems.length === 0 && isVirtualTab ? (
-          // Span all cells for empty state on virtual tabs
           <div
             className="flex flex-col items-center justify-center gap-3 text-white/30"
             style={{ gridColumn: '1 / -1', gridRow: '1 / -1' }}
@@ -932,31 +922,61 @@ export default function MenuDisplayPage() {
                 item={item}
                 locale={locale}
                 reorderMode={reorderMode}
+                isDragging={draggingId === item.id}
                 isSelected={selectedId === item.id}
                 position={index + 1}
-                onReorderSelect={handleReorderSelect}
+                onReorderSelect={(id) => {
+                  // tap-tap: only fires when not dragging
+                  if (draggingId) return
+                  setSelectedId((prev) => {
+                    if (prev === null) return id
+                    if (prev === id) return null
+                    // swap
+                    const itemA = filteredItems.find((i) => i.id === prev)
+                    const itemB = filteredItems.find((i) => i.id === id)
+                    if (itemA && itemB && !saving) {
+                      const posA = itemA.display_order && itemA.display_order > 0 ? itemA.display_order : filteredItems.indexOf(itemA) + 1
+                      const posB = itemB.display_order && itemB.display_order > 0 ? itemB.display_order : filteredItems.indexOf(itemB) + 1
+                      setSaving(true)
+                      fetch('/api/menu-display/reorder', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ updates: [{ id: itemA.id, display_order: posB }, { id: itemB.id, display_order: posA }] }),
+                      }).then(() => refetch()).catch(() => {}).finally(() => setSaving(false))
+                    }
+                    return null
+                  })
+                }}
+                onDragStart={handleDragStart}
               />
             ))}
             {Array.from({ length: emptyCellCount }).map((_, i) => (
-              <EmptyCell
+              <div
                 key={`empty-${i}`}
-                reorderMode={reorderMode}
-                onClick={() => handleEmptyCellClick(filteredItems.length + i)}
+                data-empty-index={i}
+                className={cn(
+                  'w-full h-full rounded-lg transition-all duration-200',
+                  reorderMode
+                    ? cn(
+                        'cursor-pointer',
+                        dropTargetIndex === i
+                          ? 'ring-2 ring-[#F5C842] bg-[#F5C842]/10'
+                          : selectedId
+                            ? 'border border-dashed border-white/20 bg-white/[0.04]'
+                            : 'bg-black/20'
+                      )
+                    : 'bg-black/20'
+                )}
+                onClick={() => handleEmptyCellTap(i)}
               />
             ))}
           </>
         )}
       </main>
 
-      {/* ── Assign modal ── */}
-      {assignModalOpen && (
-        <AssignModal
-          availableItems={itemsNotInTab}
-          locale={locale}
-          assigning={assigning}
-          onSelect={handleAssignItem}
-          onCancel={() => setAssignModalOpen(false)}
-        />
+      {/* ── Drag ghost ── */}
+      {draggingItem && ghostPos && (
+        <DragGhost item={draggingItem} locale={locale} x={ghostPos.x} y={ghostPos.y} />
       )}
     </div>
   )
