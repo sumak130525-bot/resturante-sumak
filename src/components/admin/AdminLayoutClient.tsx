@@ -3,19 +3,20 @@
 import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
-import { ChefHat, LayoutGrid, ShoppingBag, LogOut, Menu as MenuIcon, X, ChevronLeft, ChevronRight, QrCode, Store, Bell, Tag } from 'lucide-react'
+import { ChefHat, LayoutGrid, ShoppingBag, LogOut, Menu as MenuIcon, X, ChevronLeft, ChevronRight, QrCode, Store, Bell, Tag, ArrowUpDown } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { User } from '@supabase/supabase-js'
 
 interface AdminLayoutClientProps {
   children: React.ReactNode
-  active: 'dashboard' | 'menu' | 'categorias' | 'orders' | 'qr' | 'loyverse' | 'notificaciones'
+  active: 'dashboard' | 'menu' | 'categorias' | 'ordenar' | 'orders' | 'qr' | 'loyverse' | 'notificaciones'
 }
 
 const NAV_ITEMS = [
   { href: '/admin', label: 'Dashboard', icon: LayoutGrid, key: 'dashboard' as const },
   { href: '/admin/menu', label: 'Menú', icon: ChefHat, key: 'menu' as const },
   { href: '/admin/categorias', label: 'Categorías', icon: Tag, key: 'categorias' as const },
+  { href: '/admin/ordenar', label: 'Ordenar TV', icon: ArrowUpDown, key: 'ordenar' as const },
   { href: '/admin/orders', label: 'Pedidos', icon: ShoppingBag, key: 'orders' as const },
   { href: '/admin/qr', label: 'Códigos QR', icon: QrCode, key: 'qr' as const },
   { href: '/admin/loyverse', label: 'Loyverse', icon: Store, key: 'loyverse' as const },
@@ -23,7 +24,7 @@ const NAV_ITEMS = [
 ]
 
 interface SidebarProps {
-  active: 'dashboard' | 'menu' | 'categorias' | 'orders' | 'qr' | 'loyverse' | 'notificaciones'
+  active: 'dashboard' | 'menu' | 'categorias' | 'ordenar' | 'orders' | 'qr' | 'loyverse' | 'notificaciones'
   user: User | null
   onLogout: () => void
   collapsed: boolean

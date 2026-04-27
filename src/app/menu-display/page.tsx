@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import Image from 'next/image'
 import { useMenuRealtime } from '@/hooks/useMenuRealtime'
 import { useTranslation, getItemName, type Locale } from '@/lib/i18n'
@@ -232,14 +232,9 @@ function CardModal({
 interface DishCardProps {
   item: MenuItem
   locale: Locale
-  // Reorder mode props
-  reorderMode?: boolean
-  isSelected?: boolean
-  position?: number
-  onReorderSelect?: (id: string) => void
 }
 
-function DishCard({ item, locale, reorderMode, isSelected, position, onReorderSelect }: DishCardProps) {
+function DishCard({ item, locale }: DishCardProps) {
   const isUnavailable = item.available === 0
   const name = getItemName(item, locale)
   const emoji = CATEGORY_EMOJI[item.categories?.slug ?? ''] ?? '🍽️'
@@ -248,8 +243,6 @@ function DishCard({ item, locale, reorderMode, isSelected, position, onReorderSe
   const [deleting, setDeleting] = useState(false)
   const [deleted, setDeleted] = useState(false)
   const [uploading, setUploading] = useState(false)
-  // Prevent ghost click after touchend in reorder mode
-  const touchHandledRef = useRef(false)
 
   const handleCancel = () => {
     setModalStep(null)
@@ -306,22 +299,7 @@ function DishCard({ item, locale, reorderMode, isSelected, position, onReorderSe
     }
   }
 
-  // Touch handler for reorder mode — fires before click, sets flag to suppress ghost click
-  const handleTouchEnd = (e: React.TouchEvent) => {
-    if (!reorderMode) return
-    e.preventDefault()
-    touchHandledRef.current = true
-    onReorderSelect?.(item.id)
-    // Reset flag after click would have fired
-    setTimeout(() => { touchHandledRef.current = false }, 300)
-  }
-
   const handleClick = () => {
-    if (reorderMode) {
-      if (touchHandledRef.current) return
-      onReorderSelect?.(item.id)
-      return
-    }
     if (!modalStep) setModalStep('menu')
   }
 
@@ -331,16 +309,10 @@ function DishCard({ item, locale, reorderMode, isSelected, position, onReorderSe
       className={cn(
         'relative w-full h-full rounded-lg overflow-hidden cursor-pointer',
         'transition-all duration-300',
-        isUnavailable && !deleted && !reorderMode && 'opacity-50',
+        isUnavailable && !deleted && 'opacity-50',
         deleted && 'opacity-0 scale-95 pointer-events-none',
-        reorderMode && isSelected && [
-          'ring-4 ring-[#F5C842] ring-offset-2 ring-offset-[#0d0c0b]',
-          'shadow-[0_0_18px_4px_rgba(245,200,66,0.45)]',
-        ],
-        reorderMode && !isSelected && 'opacity-80 hover:opacity-100',
       )}
       onClick={handleClick}
-      onTouchEnd={reorderMode ? handleTouchEnd : undefined}
     >
       {/* Hidden file input for camera/gallery */}
       <input
@@ -377,7 +349,7 @@ function DishCard({ item, locale, reorderMode, isSelected, position, onReorderSe
           className={cn(
             'font-bold leading-tight text-white drop-shadow-sm',
             'text-[clamp(0.75rem,1.3vw,1.05rem)]',
-            isUnavailable && !reorderMode && 'line-through opacity-70'
+            isUnavailable && 'line-through opacity-70'
           )}
           style={{ textShadow: '0 1px 3px rgba(0,0,0,0.9)' }}
         >
@@ -387,7 +359,7 @@ function DishCard({ item, locale, reorderMode, isSelected, position, onReorderSe
           className={cn(
             'font-bold tabular-nums leading-tight',
             'text-[clamp(0.8rem,1.4vw,1.1rem)]',
-            isUnavailable && !reorderMode ? 'text-gray-300 line-through' : 'text-[#F5C842]'
+            isUnavailable ? 'text-gray-300 line-through' : 'text-[#F5C842]'
           )}
           style={{ textShadow: '0 1px 3px rgba(0,0,0,0.9)' }}
         >
@@ -395,8 +367,8 @@ function DishCard({ item, locale, reorderMode, isSelected, position, onReorderSe
         </p>
       </div>
 
-      {/* Agotado badge — hidden in reorder mode to avoid clutter */}
-      {isUnavailable && !reorderMode && (
+      {/* Agotado badge */}
+      {isUnavailable && (
         <div className="absolute inset-0 flex items-center justify-center">
           <span className="px-2 py-0.5 rounded-full bg-gray-700/80 text-white text-[0.6rem] font-bold tracking-widest uppercase border border-white/20">
             Agotado
@@ -404,27 +376,8 @@ function DishCard({ item, locale, reorderMode, isSelected, position, onReorderSe
         </div>
       )}
 
-      {/* Reorder mode: position badge */}
-      {reorderMode && position !== undefined && (
-        <div
-          className={cn(
-            'absolute top-1.5 right-1.5 w-6 h-6 rounded-full flex items-center justify-center font-bold text-xs',
-            isSelected
-              ? 'bg-[#F5C842] text-[#3B2000]'
-              : 'bg-black/70 text-white/80 border border-white/20'
-          )}
-        >
-          {position}
-        </div>
-      )}
-
-      {/* Reorder mode: golden overlay when selected */}
-      {reorderMode && isSelected && (
-        <div className="absolute inset-0 bg-[#F5C842]/15 pointer-events-none" />
-      )}
-
-      {/* Action modal — disabled in reorder mode */}
-      {!reorderMode && modalStep && (
+      {/* Action modal */}
+      {modalStep && (
         <CardModal
           itemName={name}
           step={modalStep}
@@ -463,17 +416,6 @@ export default function MenuDisplayPage() {
   useWakeLock()
   useCursorHide()
 
-  // ── Reorder mode state ──
-  const [reorderMode, setReorderMode] = useState(false)
-  const [saving, setSaving]           = useState(false)
-  const [selectedId, setSelectedId]   = useState<string | null>(null)
-  const selectedIdRef = useRef<string | null>(null)
-
-  // Keep ref in sync with state
-  useEffect(() => {
-    selectedIdRef.current = selectedId
-  }, [selectedId])
-
   // Only show tabs that have items (plus always-visible ones)
   const availableSlugs = new Set(categories.map((c) => c.slug))
   const visibleTabs = DISPLAY_TABS.filter((tab) => {
@@ -511,92 +453,10 @@ export default function MenuDisplayPage() {
     return () => clearInterval(id)
   }, [refetch])
 
-  // Toggle reorder mode — reset select state
-  const toggleReorderMode = () => {
-    setReorderMode((prev) => !prev)
-    setSelectedId(null)
-  }
-
-  // ── Tap-Tap: card selection & swap ──
-  const handleReorderSelect = useCallback((id: string) => {
-    if (saving) return
-    setSelectedId((prev) => {
-      if (prev === null) {
-        // First tap: select this card
-        return id
-      }
-      if (prev === id) {
-        // Tap same card again: deselect
-        return null
-      }
-      // Second tap on a different card: swap positions
-      const indexA = filteredItems.findIndex((i) => i.id === prev)
-      const indexB = filteredItems.findIndex((i) => i.id === id)
-      if (indexA >= 0 && indexB >= 0) {
-        // Swap: reassign all with sequential order, swapping A and B positions
-        const reordered = [...filteredItems]
-        const tmp = reordered[indexA]
-        reordered[indexA] = reordered[indexB]
-        reordered[indexB] = tmp
-        const updates = reordered.map((it, idx) => ({
-          id: it.id,
-          display_order: idx + 1,
-        }))
-        setSaving(true)
-        fetch('/api/menu-display/reorder', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ updates }),
-        })
-          .then(() => refetch())
-          .catch(() => {})
-          .finally(() => setSaving(false))
-      }
-      return null
-    })
-  }, [saving, filteredItems, refetch])
-
-  // ── Tap-Tap: move selected card to empty slot ──
-  const handleEmptyCellTap = useCallback(async (emptyIndex: number) => {
-    if (!reorderMode || saving) return
-    // Read selectedId directly from state ref
-    const selId = selectedIdRef.current
-    if (!selId) return
-    const item = filteredItems.find((i) => i.id === selId)
-    if (!item) return
-    setSelectedId(null)
-    selectedIdRef.current = null
-    setSaving(true)
-    try {
-      const targetPos = filteredItems.length + emptyIndex
-      const reordered = filteredItems.filter((i) => i.id !== selId)
-      reordered.splice(targetPos > reordered.length ? reordered.length : targetPos, 0, item)
-      const updates = reordered.map((it, idx) => ({
-        id: it.id,
-        display_order: idx + 1,
-      }))
-      await fetch('/api/menu-display/reorder', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ updates }),
-      })
-      await refetch()
-    } catch {
-      // silent
-    } finally {
-      setSaving(false)
-    }
-  }, [reorderMode, filteredItems, saving, refetch])
-
   const tabLabel = (tab: (typeof DISPLAY_TABS)[number]) =>
     tab.label[locale as keyof typeof tab.label] ?? tab.label.es
 
-  const emptyCellCount = Math.max(0, MAX_VISIBLE - filteredItems.length)
   const isVirtualTab = activeTab === 'all' || activeTab === 'menu-dia'
-
-  const hintText = selectedId
-    ? 'Toca otro plato para intercambiar, o un espacio vacío para mover'
-    : 'Toca un plato para seleccionarlo'
 
   return (
     <div
@@ -650,22 +510,8 @@ export default function MenuDisplayPage() {
           })}
         </nav>
 
-        {/* Right: reorder toggle + language switcher + clock */}
+        {/* Right: language switcher + clock */}
         <div className="flex items-center gap-2 shrink-0">
-          {/* Reorder mode toggle */}
-          <button
-            onClick={toggleReorderMode}
-            disabled={saving}
-            className={cn(
-              'px-2.5 py-1 rounded-full text-xs font-bold transition-all duration-200 disabled:opacity-50',
-              reorderMode
-                ? 'bg-[#F5C842] text-[#3B2000] shadow-md'
-                : 'bg-white/10 text-white/60 border border-white/10 hover:bg-white/20 hover:text-white'
-            )}
-          >
-            {saving ? '...' : 'Ordenar'}
-          </button>
-
           <div className="flex items-center gap-0.5">
             {(['es', 'en', 'qu'] as Locale[]).map((lang) => (
               <button
@@ -687,14 +533,6 @@ export default function MenuDisplayPage() {
           </div>
         </div>
       </header>
-
-      {/* Reorder mode hint bar */}
-      {reorderMode && (
-        <div className="shrink-0 flex items-center justify-center gap-2 py-1 text-xs font-semibold"
-          style={{ background: 'rgba(245,200,66,0.12)', borderBottom: '1px solid rgba(245,200,66,0.2)' }}>
-          <span className="text-[#F5C842]">{hintText}</span>
-        </div>
-      )}
 
       {/* ── 6 × 4 grid — fills all remaining height ── */}
       <main
@@ -721,7 +559,6 @@ export default function MenuDisplayPage() {
           </div>
         ) : (
           <>
-            {/* Render fixed 24-cell grid: items in their positions, then empty slots */}
             {Array.from({ length: MAX_VISIBLE }).map((_, gridIndex) => {
               const item = filteredItems[gridIndex]
               if (item) {
@@ -730,30 +567,13 @@ export default function MenuDisplayPage() {
                     key={item.id}
                     item={item}
                     locale={locale}
-                    reorderMode={reorderMode}
-                    isSelected={selectedId === item.id}
-                    position={gridIndex + 1}
-                    onReorderSelect={handleReorderSelect}
                   />
                 )
               }
-              // Empty cell
-              const emptyIndex = gridIndex - filteredItems.length
               return (
-                <button
+                <div
                   key={`empty-${gridIndex}`}
-                  type="button"
-                  className={cn(
-                    'w-full h-full rounded-lg transition-all duration-200 min-h-[40px]',
-                    reorderMode && selectedId
-                      ? 'cursor-pointer border-2 border-dashed border-[#F5C842]/50 bg-[#F5C842]/5 animate-pulse'
-                      : 'bg-black/20'
-                  )}
-                  onPointerUp={(e) => {
-                    e.preventDefault()
-                    e.stopPropagation()
-                    handleEmptyCellTap(emptyIndex)
-                  }}
+                  className="w-full h-full rounded-lg bg-black/20"
                 />
               )
             })}
