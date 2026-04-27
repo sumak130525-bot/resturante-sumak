@@ -93,8 +93,8 @@ export function MenuItemForm({ item, categories, onSave, onClose }: MenuItemForm
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Descripción</label>
               <textarea
-                value={form.description}
-                onChange={(e) => setForm({ ...form, description: e.target.value })}
+                value={form.description_es || form.description || ''}
+                onChange={(e) => setForm({ ...form, description: e.target.value, description_es: e.target.value })}
                 className="input-field resize-none h-20"
                 placeholder="Descripción del plato..."
               />
