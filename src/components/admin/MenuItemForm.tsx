@@ -14,7 +14,7 @@ interface MenuItemFormProps {
 export function MenuItemForm({ item, categories, onSave, onClose }: MenuItemFormProps) {
   const [form, setForm] = useState({
     name: item?.name ?? '',
-    description: item?.description ?? '',
+    description: item?.description_es || item?.description || '',
     price: item?.price ?? 0,
     available: item?.available ?? 0,
     category_id: item?.category_id ?? categories[0]?.id ?? '',
@@ -22,7 +22,7 @@ export function MenuItemForm({ item, categories, onSave, onClose }: MenuItemForm
     active: item?.active ?? true,
     name_en: item?.name_en ?? '',
     name_qu: item?.name_qu ?? '',
-    description_es: item?.description_es ?? '',
+    description_es: item?.description_es || item?.description || '',
     description_en: item?.description_en ?? '',
     description_qu: item?.description_qu ?? '',
   })
@@ -93,7 +93,7 @@ export function MenuItemForm({ item, categories, onSave, onClose }: MenuItemForm
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Descripción</label>
               <textarea
-                value={form.description_es || form.description || ''}
+                value={form.description}
                 onChange={(e) => setForm({ ...form, description: e.target.value, description_es: e.target.value })}
                 className="input-field resize-none h-20"
                 placeholder="Descripción del plato..."
