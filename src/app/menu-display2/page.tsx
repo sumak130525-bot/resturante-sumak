@@ -95,6 +95,153 @@ function useCursorHide() {
   }, [])
 }
 
+// ─── Assign Dish Modal ────────────────────────────────────────────────────────
+
+interface UnassignedItem {
+  id: string
+  name: string
+  name_en?: string | null
+  name_qu?: string | null
+  price: number
+  image_url?: string | null
+  categories?: { name: string; slug: string } | null
+}
+
+interface AssignModalProps {
+  position: number
+  onAssign: (itemId: string) => Promise<void>
+  onClose: () => void
+}
+
+function AssignModal({ position, onAssign, onClose }: AssignModalProps) {
+  const [items, setItems] = useState<UnassignedItem[]>([])
+  const [loading, setLoading] = useState(true)
+  const [query, setQuery] = useState('')
+  const [assigning, setAssigning] = useState<string | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    setLoading(true)
+    fetch('/api/menu-display/unassigned')
+      .then((r) => r.json())
+      .then((data) => { if (!cancelled) setItems(data.items ?? []) })
+      .catch(() => {})
+      .finally(() => { if (!cancelled) setLoading(false) })
+    return () => { cancelled = true }
+  }, [])
+
+  const filtered = query.trim()
+    ? items.filter((i) => i.name.toLowerCase().includes(query.trim().toLowerCase()))
+    : items
+
+  const handleSelect = async (id: string) => {
+    setAssigning(id)
+    try {
+      await onAssign(id)
+    } finally {
+      setAssigning(null)
+    }
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center"
+      style={{ background: 'rgba(0,0,0,0.82)' }}
+      onClick={onClose}
+    >
+      <div
+        className="flex flex-col rounded-2xl overflow-hidden"
+        style={{
+          background: '#1a1917',
+          border: '1px solid rgba(255,255,255,0.12)',
+          width: 'min(92vw, 480px)',
+          maxHeight: '80vh',
+        }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="px-5 pt-5 pb-3 shrink-0">
+          <p className="text-white font-bold text-base mb-1">
+            Agregar plato — celda {position}
+          </p>
+          <input
+            type="text"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Buscar plato..."
+            autoFocus
+            className="w-full rounded-lg px-3 py-2 text-sm text-white placeholder-white/30 outline-none"
+            style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.1)' }}
+          />
+        </div>
+
+        {/* List */}
+        <div className="flex-1 overflow-y-auto px-3 pb-3" style={{ minHeight: 0 }}>
+          {loading ? (
+            <div className="flex items-center justify-center py-10 text-white/30 text-sm">
+              Cargando...
+            </div>
+          ) : filtered.length === 0 ? (
+            <div className="flex items-center justify-center py-10 text-white/30 text-sm">
+              Sin platos disponibles
+            </div>
+          ) : (
+            filtered.map((item) => (
+              <button
+                key={item.id}
+                disabled={!!assigning}
+                onClick={() => handleSelect(item.id)}
+                className="w-full flex items-center gap-3 rounded-xl px-3 py-2.5 mb-1.5 text-left transition-all active:scale-[0.98] disabled:opacity-50"
+                style={{ background: assigning === item.id ? 'rgba(245,200,66,0.15)' : 'rgba(255,255,255,0.05)' }}
+              >
+                {/* Thumbnail */}
+                <div
+                  className="shrink-0 rounded-lg overflow-hidden bg-white/5 flex items-center justify-center"
+                  style={{ width: 40, height: 40 }}
+                >
+                  {item.image_url ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={item.image_url}
+                      alt={item.name}
+                      className="w-full h-full object-cover"
+                      draggable={false}
+                    />
+                  ) : (
+                    <span className="text-lg">{CATEGORY_EMOJI[item.categories?.slug ?? ''] ?? '🍽️'}</span>
+                  )}
+                </div>
+
+                {/* Name + price */}
+                <div className="flex-1 min-w-0">
+                  <p className="text-white text-sm font-semibold leading-tight truncate">{item.name}</p>
+                  {item.categories?.name && (
+                    <p className="text-white/40 text-xs leading-tight truncate">{item.categories.name}</p>
+                  )}
+                </div>
+                <p className="shrink-0 text-[#F5C842] text-sm font-bold tabular-nums">
+                  {formatPrice(item.price)}
+                </p>
+              </button>
+            ))
+          )}
+        </div>
+
+        {/* Cancel button */}
+        <div className="px-3 pb-4 pt-1 shrink-0">
+          <button
+            onClick={onClose}
+            className="w-full rounded-xl py-3 font-bold text-white/70 transition-all active:scale-95"
+            style={{ background: '#3f3f46', fontSize: '0.9rem' }}
+          >
+            Cancelar
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ─── Card Action Modal ────────────────────────────────────────────────────────
 
 type ModalStep = 'menu' | 'confirm-delete'
@@ -412,9 +559,29 @@ export default function MenuDisplayPage() {
   const { locale, setLocale } = useTranslation()
   const [activeTab, setActiveTab]   = useState<TabKey>('all')
   const [visible, setVisible]       = useState(true)
+  const [assigningPosition, setAssigningPosition] = useState<number | null>(null)
   const time = useClock()
   useWakeLock()
   useCursorHide()
+
+  const handleEmptyCellClick = (position: number) => {
+    setAssigningPosition(position)
+  }
+
+  const handleAssign = async (itemId: string) => {
+    if (assigningPosition === null) return
+    await fetch('/api/menu-display/reorder', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ updates: [{ id: itemId, display_order: assigningPosition }] }),
+    })
+    setAssigningPosition(null)
+    refetch()
+  }
+
+  const handleAssignClose = () => {
+    setAssigningPosition(null)
+  }
 
   // Only show tabs that have items (plus always-visible ones)
   const availableSlugs = new Set(categories.map((c) => c.slug))
@@ -572,15 +739,28 @@ export default function MenuDisplayPage() {
                 )
               }
               return (
-                <div
+                <button
                   key={`empty-${gridIndex}`}
-                  className="w-full h-full rounded-lg bg-black/20"
-                />
+                  onClick={() => handleEmptyCellClick(position)}
+                  className="w-full h-full rounded-lg bg-black/20 transition-all duration-150 hover:bg-white/5 active:bg-white/10 flex items-center justify-center group"
+                  aria-label={`Agregar plato en celda ${position}`}
+                >
+                  <span className="text-white/10 text-2xl group-hover:text-white/25 transition-colors duration-150 select-none">+</span>
+                </button>
               )
             })}
           </>
         )}
       </main>
+
+      {/* ── Assign dish modal (portal-like fixed overlay) ── */}
+      {assigningPosition !== null && (
+        <AssignModal
+          position={assigningPosition}
+          onAssign={handleAssign}
+          onClose={handleAssignClose}
+        />
+      )}
     </div>
   )
 }

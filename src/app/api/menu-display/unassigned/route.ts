@@ -1,0 +1,35 @@
+import { NextResponse } from 'next/server'
+import { createClient } from '@supabase/supabase-js'
+
+function getServiceClient() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+  )
+}
+
+// GET: return active menu items with display_order = 0 or null (no auth — called from TV screen)
+export async function GET() {
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const supabase = getServiceClient() as any
+
+    const { data, error } = await supabase
+      .from('menu_items')
+      .select('id, name, name_en, name_qu, price, image_url, categories(name, slug)')
+      .eq('active', true)
+      .or('display_order.eq.0,display_order.is.null')
+      .order('name', { ascending: true })
+
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 500 })
+    }
+
+    return NextResponse.json({ items: data ?? [] })
+  } catch (err) {
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : 'Unknown error' },
+      { status: 500 },
+    )
+  }
+}
