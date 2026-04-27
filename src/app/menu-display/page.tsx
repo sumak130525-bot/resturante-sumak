@@ -560,7 +560,8 @@ export default function MenuDisplayPage() {
         ) : (
           <>
             {Array.from({ length: MAX_VISIBLE }).map((_, gridIndex) => {
-              const item = filteredItems[gridIndex]
+              const position = gridIndex + 1 // positions 1-24
+              const item = filteredItems.find((i) => i.display_order === position)
               if (item) {
                 return (
                   <DishCard
