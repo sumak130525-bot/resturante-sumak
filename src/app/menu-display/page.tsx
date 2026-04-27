@@ -11,7 +11,7 @@ import type { MenuItem } from '@/lib/types'
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const CURSOR_HIDE_MS      = 5_000
-const FALLBACK_REFRESH_MS = 5 * 60 * 1_000
+const FALLBACK_REFRESH_MS = 15 * 1_000  // Refresh every 15s to pick up admin changes
 const MAX_VISIBLE         = 24   // 6 × 4 grid — no scroll on TV
 
 // ─── Tabs ─────────────────────────────────────────────────────────────────────
