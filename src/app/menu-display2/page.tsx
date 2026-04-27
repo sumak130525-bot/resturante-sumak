@@ -718,36 +718,47 @@ export default function MenuDisplayPage() {
           </div>
         ) : (
           <>
-            {filteredItems.map((item, index) => (
-              <DishCard
-                key={item.id}
-                item={item}
-                locale={locale}
-                reorderMode={reorderMode}
-                isSelected={selectedId === item.id}
-                position={index + 1}
-                onReorderSelect={handleReorderSelect}
-              />
-            ))}
-            {Array.from({ length: emptyCellCount }).map((_, i) => (
-              <div
-                key={`empty-${i}`}
-                className={cn(
-                  'w-full h-full rounded-lg transition-all duration-200',
-                  reorderMode && selectedId
-                    ? 'cursor-pointer border border-dashed border-[#F5C842]/50 bg-[#F5C842]/5 animate-pulse'
-                    : reorderMode
-                      ? 'bg-black/20'
+            {/* Render fixed 24-cell grid: items in their positions, then empty slots */}
+            {Array.from({ length: MAX_VISIBLE }).map((_, gridIndex) => {
+              const item = filteredItems[gridIndex]
+              if (item) {
+                return (
+                  <DishCard
+                    key={item.id}
+                    item={item}
+                    locale={locale}
+                    reorderMode={reorderMode}
+                    isSelected={selectedId === item.id}
+                    position={gridIndex + 1}
+                    onReorderSelect={handleReorderSelect}
+                  />
+                )
+              }
+              // Empty cell
+              const emptyIndex = gridIndex - filteredItems.length
+              return (
+                <button
+                  key={`empty-${gridIndex}`}
+                  type="button"
+                  className={cn(
+                    'w-full h-full rounded-lg transition-all duration-200 min-h-[40px]',
+                    reorderMode && selectedId
+                      ? 'cursor-pointer border-2 border-dashed border-[#F5C842]/50 bg-[#F5C842]/5 animate-pulse'
                       : 'bg-black/20'
-                )}
-                onClick={() => handleEmptyCellTap(i)}
-                onTouchEnd={(e) => {
-                  if (!reorderMode || !selectedId) return
-                  e.preventDefault()
-                  handleEmptyCellTap(i)
-                }}
-              />
-            ))}
+                  )}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    handleEmptyCellTap(emptyIndex)
+                  }}
+                  onTouchEnd={(e) => {
+                    if (!reorderMode || !selectedId) return
+                    e.preventDefault()
+                    e.stopPropagation()
+                    handleEmptyCellTap(emptyIndex)
+                  }}
+                />
+              )
+            })}
           </>
         )}
       </main>
