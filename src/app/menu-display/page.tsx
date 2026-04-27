@@ -467,6 +467,12 @@ export default function MenuDisplayPage() {
   const [reorderMode, setReorderMode] = useState(false)
   const [saving, setSaving]           = useState(false)
   const [selectedId, setSelectedId]   = useState<string | null>(null)
+  const selectedIdRef = useRef<string | null>(null)
+
+  // Keep ref in sync with state
+  useEffect(() => {
+    selectedIdRef.current = selectedId
+  }, [selectedId])
 
   // Only show tabs that have items (plus always-visible ones)
   const availableSlugs = new Set(categories.map((c) => c.slug))
@@ -551,27 +557,24 @@ export default function MenuDisplayPage() {
   }, [saving, filteredItems, refetch])
 
   // ── Tap-Tap: move selected card to empty slot ──
-  // Empty slot at visual index = filteredItems.length + emptyIndex
-  // We need to give the selected item a display_order that places it at that visual position
   const handleEmptyCellTap = useCallback(async (emptyIndex: number) => {
-    if (!reorderMode || !selectedId || saving) return
-    const item = filteredItems.find((i) => i.id === selectedId)
+    if (!reorderMode || saving) return
+    // Read selectedId directly from state ref
+    const selId = selectedIdRef.current
+    if (!selId) return
+    const item = filteredItems.find((i) => i.id === selId)
     if (!item) return
     setSelectedId(null)
+    selectedIdRef.current = null
     setSaving(true)
     try {
-      // Target visual position (0-based): filteredItems.length + emptyIndex
       const targetPos = filteredItems.length + emptyIndex
-      
-      // Reassign ALL items with sequential display_order, placing selected item at targetPos
-      const reordered = filteredItems.filter((i) => i.id !== selectedId)
+      const reordered = filteredItems.filter((i) => i.id !== selId)
       reordered.splice(targetPos > reordered.length ? reordered.length : targetPos, 0, item)
-      
       const updates = reordered.map((it, idx) => ({
         id: it.id,
         display_order: idx + 1,
       }))
-      
       await fetch('/api/menu-display/reorder', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -583,7 +586,7 @@ export default function MenuDisplayPage() {
     } finally {
       setSaving(false)
     }
-  }, [reorderMode, selectedId, filteredItems, saving, refetch])
+  }, [reorderMode, filteredItems, saving, refetch])
 
   const tabLabel = (tab: (typeof DISPLAY_TABS)[number]) =>
     tab.label[locale as keyof typeof tab.label] ?? tab.label.es
@@ -746,12 +749,7 @@ export default function MenuDisplayPage() {
                       ? 'cursor-pointer border-2 border-dashed border-[#F5C842]/50 bg-[#F5C842]/5 animate-pulse'
                       : 'bg-black/20'
                   )}
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    handleEmptyCellTap(emptyIndex)
-                  }}
-                  onTouchEnd={(e) => {
-                    if (!reorderMode || !selectedId) return
+                  onPointerUp={(e) => {
                     e.preventDefault()
                     e.stopPropagation()
                     handleEmptyCellTap(emptyIndex)
