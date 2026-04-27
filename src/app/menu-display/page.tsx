@@ -362,10 +362,21 @@ interface EmptyCellProps {
 function EmptyCell({ onClick, reorderMode }: EmptyCellProps) {
   if (reorderMode) {
     return (
-      <div
-        className="w-full h-full rounded-lg"
-        style={{ background: 'rgba(255,255,255,0.02)' }}
-      />
+      <button
+        onClick={onClick}
+        className="w-full h-full rounded-lg flex items-center justify-center transition-all duration-200 group hover:scale-[1.03] active:scale-95"
+        style={{
+          border: '2px dashed rgba(255,255,255,0.15)',
+          background: 'rgba(255,255,255,0.05)',
+        }}
+      >
+        <span
+          className="text-white/20 group-hover:text-white/40 transition-colors duration-200 select-none"
+          style={{ fontSize: 'clamp(1.2rem, 2.5vw, 2rem)', lineHeight: 1 }}
+        >
+          ↓
+        </span>
+      </button>
     )
   }
   return (
@@ -726,12 +737,36 @@ export default function MenuDisplayPage() {
     }
   }, [selectedId, filteredItems, saving, refetch])
 
-  // Open assign modal for an empty slot
-  const handleEmptyCellClick = useCallback((slotIndex: number) => {
-    if (activeTab === 'all' || activeTab === 'menu-dia') return // virtual tabs — no assign
-    setAssigningSlot(slotIndex + 1) // 1-based display_order
+  // Handle empty cell click — in reorder mode, move selected dish here
+  const handleEmptyCellClick = useCallback(async (slotIndex: number) => {
+    // In reorder mode: move selected dish to this empty position
+    if (reorderMode && selectedId) {
+      const item = filteredItems.find((i) => i.id === selectedId)
+      if (!item || saving) return
+      setSaving(true)
+      setSelectedId(null)
+      try {
+        const newOrder = slotIndex + 1
+        await fetch('/api/menu-display/reorder', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            updates: [{ id: item.id, display_order: newOrder }],
+          }),
+        })
+        await refetch()
+      } catch {
+        // silent
+      } finally {
+        setSaving(false)
+      }
+      return
+    }
+    // Normal mode: open assign modal
+    if (activeTab === 'all' || activeTab === 'menu-dia') return
+    setAssigningSlot(slotIndex + 1)
     setAssignModalOpen(true)
-  }, [activeTab])
+  }, [activeTab, reorderMode, selectedId, filteredItems, saving, refetch])
 
   // Assign a dish to the current tab
   const handleAssignItem = useCallback(async (item: MenuItem) => {
