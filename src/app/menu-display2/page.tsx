@@ -227,50 +227,6 @@ function CardModal({
   )
 }
 
-// ─── Drag ghost ───────────────────────────────────────────────────────────────
-
-interface DragGhostProps {
-  item: MenuItem
-  locale: Locale
-  x: number
-  y: number
-}
-
-function DragGhost({ item, locale, x, y }: DragGhostProps) {
-  const name = getItemName(item, locale)
-  const emoji = CATEGORY_EMOJI[item.categories?.slug ?? ''] ?? '🍽️'
-  return (
-    <div
-      className="pointer-events-none fixed z-[9999] rounded-lg overflow-hidden shadow-2xl"
-      style={{
-        width: 120,
-        height: 90,
-        left: x - 60,
-        top: y - 45,
-        opacity: 0.85,
-        transform: 'scale(1.08)',
-        transition: 'none',
-      }}
-    >
-      {item.image_url ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img src={item.image_url} alt={name} className="absolute inset-0 w-full h-full object-cover" />
-      ) : (
-        <div className="absolute inset-0 flex items-center justify-center bg-white/10">
-          <span className="text-3xl select-none">{emoji}</span>
-        </div>
-      )}
-      <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/10 to-transparent" />
-      <div className="absolute bottom-0 left-0 right-0 px-1.5 py-1">
-        <p className="text-white font-bold text-[0.65rem] leading-tight truncate" style={{ textShadow: '0 1px 3px rgba(0,0,0,0.9)' }}>
-          {name}
-        </p>
-      </div>
-      <div className="absolute inset-0 ring-2 ring-[#F5C842] rounded-lg" />
-    </div>
-  )
-}
-
 // ─── Dish Card ────────────────────────────────────────────────────────────────
 
 interface DishCardProps {
@@ -278,14 +234,12 @@ interface DishCardProps {
   locale: Locale
   // Reorder mode props
   reorderMode?: boolean
-  isDragging?: boolean
   isSelected?: boolean
   position?: number
   onReorderSelect?: (id: string) => void
-  onDragStart?: (id: string, e: React.TouchEvent | React.MouseEvent) => void
 }
 
-function DishCard({ item, locale, reorderMode, isDragging, isSelected, position, onReorderSelect, onDragStart }: DishCardProps) {
+function DishCard({ item, locale, reorderMode, isSelected, position, onReorderSelect }: DishCardProps) {
   const isUnavailable = item.available === 0
   const name = getItemName(item, locale)
   const emoji = CATEGORY_EMOJI[item.categories?.slug ?? ''] ?? '🍽️'
@@ -294,14 +248,8 @@ function DishCard({ item, locale, reorderMode, isDragging, isSelected, position,
   const [deleting, setDeleting] = useState(false)
   const [deleted, setDeleted] = useState(false)
   const [uploading, setUploading] = useState(false)
-
-  const handleCardClick = () => {
-    if (reorderMode) {
-      onReorderSelect?.(item.id)
-      return
-    }
-    if (!modalStep) setModalStep('menu')
-  }
+  // Prevent ghost click after touchend in reorder mode
+  const touchHandledRef = useRef(false)
 
   const handleCancel = () => {
     setModalStep(null)
@@ -358,10 +306,23 @@ function DishCard({ item, locale, reorderMode, isDragging, isSelected, position,
     }
   }
 
-  const handlePointerDown = (e: React.TouchEvent | React.MouseEvent) => {
-    if (reorderMode && onDragStart) {
-      onDragStart(item.id, e)
+  // Touch handler for reorder mode — fires before click, sets flag to suppress ghost click
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    if (!reorderMode) return
+    e.preventDefault()
+    touchHandledRef.current = true
+    onReorderSelect?.(item.id)
+    // Reset flag after click would have fired
+    setTimeout(() => { touchHandledRef.current = false }, 300)
+  }
+
+  const handleClick = () => {
+    if (reorderMode) {
+      if (touchHandledRef.current) return
+      onReorderSelect?.(item.id)
+      return
     }
+    if (!modalStep) setModalStep('menu')
   }
 
   return (
@@ -372,13 +333,14 @@ function DishCard({ item, locale, reorderMode, isDragging, isSelected, position,
         'transition-all duration-300',
         isUnavailable && !deleted && !reorderMode && 'opacity-50',
         deleted && 'opacity-0 scale-95 pointer-events-none',
-        reorderMode && isDragging && 'opacity-30',
-        reorderMode && isSelected && !isDragging && 'ring-4 ring-[#F5C842] ring-offset-2 ring-offset-[#0d0c0b]',
-        reorderMode && !isSelected && !isDragging && 'opacity-80 hover:opacity-100',
+        reorderMode && isSelected && [
+          'ring-4 ring-[#F5C842] ring-offset-2 ring-offset-[#0d0c0b]',
+          'shadow-[0_0_18px_4px_rgba(245,200,66,0.45)]',
+        ],
+        reorderMode && !isSelected && 'opacity-80 hover:opacity-100',
       )}
-      onClick={handleCardClick}
-      onTouchStart={reorderMode ? handlePointerDown : undefined}
-      onMouseDown={reorderMode ? handlePointerDown : undefined}
+      onClick={handleClick}
+      onTouchEnd={reorderMode ? handleTouchEnd : undefined}
     >
       {/* Hidden file input for camera/gallery */}
       <input
@@ -443,7 +405,7 @@ function DishCard({ item, locale, reorderMode, isDragging, isSelected, position,
       )}
 
       {/* Reorder mode: position badge */}
-      {reorderMode && position !== undefined && !isDragging && (
+      {reorderMode && position !== undefined && (
         <div
           className={cn(
             'absolute top-1.5 right-1.5 w-6 h-6 rounded-full flex items-center justify-center font-bold text-xs',
@@ -456,9 +418,9 @@ function DishCard({ item, locale, reorderMode, isDragging, isSelected, position,
         </div>
       )}
 
-      {/* Reorder mode: selected overlay */}
-      {reorderMode && isSelected && !isDragging && (
-        <div className="absolute inset-0 bg-[#F5C842]/10 pointer-events-none" />
+      {/* Reorder mode: golden overlay when selected */}
+      {reorderMode && isSelected && (
+        <div className="absolute inset-0 bg-[#F5C842]/15 pointer-events-none" />
       )}
 
       {/* Action modal — disabled in reorder mode */}
@@ -504,20 +466,7 @@ export default function MenuDisplayPage() {
   // ── Reorder mode state ──
   const [reorderMode, setReorderMode] = useState(false)
   const [saving, setSaving]           = useState(false)
-
-  // ── Drag state ──
-  const [draggingId, setDraggingId]   = useState<string | null>(null)
-  const [ghostPos, setGhostPos]       = useState<{ x: number; y: number } | null>(null)
-  const [dropTargetIndex, setDropTargetIndex] = useState<number | null>(null)
-  // tap-tap fallback for touch (when no drag movement detected)
   const [selectedId, setSelectedId]   = useState<string | null>(null)
-
-  const dragRef = useRef<{
-    startX: number
-    startY: number
-    moved: boolean
-    itemId: string
-  } | null>(null)
 
   // Only show tabs that have items (plus always-visible ones)
   const availableSlugs = new Set(categories.map((c) => c.slug))
@@ -556,208 +505,54 @@ export default function MenuDisplayPage() {
     return () => clearInterval(id)
   }, [refetch])
 
-  // Toggle reorder mode — reset drag/select state
+  // Toggle reorder mode — reset select state
   const toggleReorderMode = () => {
     setReorderMode((prev) => !prev)
     setSelectedId(null)
-    setDraggingId(null)
-    setGhostPos(null)
-    setDropTargetIndex(null)
   }
 
-  // ── Drag & Drop helpers ──
-
-  // Given a point (clientX, clientY), find which grid cell index (0-based, 0..23) is under it
-  function getCellIndexAtPoint(x: number, y: number): { kind: 'item'; id: string } | { kind: 'empty'; index: number } | null {
-    const el = document.elementFromPoint(x, y)
-    if (!el) return null
-    // Walk up to find data-item-id or data-empty-index
-    let cur: Element | null = el
-    while (cur) {
-      const itemId = (cur as HTMLElement).dataset?.itemId
-      if (itemId) return { kind: 'item', id: itemId }
-      const emptyIdx = (cur as HTMLElement).dataset?.emptyIndex
-      if (emptyIdx !== undefined) return { kind: 'empty', index: parseInt(emptyIdx, 10) }
-      cur = cur.parentElement
-    }
-    return null
-  }
-
-  const commitDrop = useCallback(async (draggedId: string, target: ReturnType<typeof getCellIndexAtPoint>) => {
-    if (!target || saving) return
-    setSaving(true)
-    setDraggingId(null)
-    setGhostPos(null)
-    setDropTargetIndex(null)
-    dragRef.current = null
-
-    try {
-      const draggedItem = filteredItems.find((i) => i.id === draggedId)
-      if (!draggedItem) return
-
-      const posA = draggedItem.display_order && draggedItem.display_order > 0
-        ? draggedItem.display_order
-        : filteredItems.indexOf(draggedItem) + 1
-
-      if (target.kind === 'item' && target.id !== draggedId) {
-        // Swap with another item
-        const targetItem = filteredItems.find((i) => i.id === target.id)
-        if (!targetItem) return
-        const posB = targetItem.display_order && targetItem.display_order > 0
-          ? targetItem.display_order
-          : filteredItems.indexOf(targetItem) + 1
-
-        await fetch('/api/menu-display/reorder', {
+  // ── Tap-Tap: card selection & swap ──
+  const handleReorderSelect = useCallback((id: string) => {
+    if (saving) return
+    setSelectedId((prev) => {
+      if (prev === null) {
+        // First tap: select this card
+        return id
+      }
+      if (prev === id) {
+        // Tap same card again: deselect
+        return null
+      }
+      // Second tap on a different card: swap positions
+      const itemA = filteredItems.find((i) => i.id === prev)
+      const itemB = filteredItems.find((i) => i.id === id)
+      if (itemA && itemB) {
+        const posA = itemA.display_order && itemA.display_order > 0
+          ? itemA.display_order
+          : filteredItems.indexOf(itemA) + 1
+        const posB = itemB.display_order && itemB.display_order > 0
+          ? itemB.display_order
+          : filteredItems.indexOf(itemB) + 1
+        setSaving(true)
+        fetch('/api/menu-display/reorder', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             updates: [
-              { id: draggedItem.id, display_order: posB },
-              { id: targetItem.id, display_order: posA },
+              { id: itemA.id, display_order: posB },
+              { id: itemB.id, display_order: posA },
             ],
           }),
         })
-      } else if (target.kind === 'empty') {
-        // Move to empty slot
-        const newOrder = filteredItems.length + target.index + 1
-        await fetch('/api/menu-display/reorder', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            updates: [{ id: draggedItem.id, display_order: newOrder }],
-          }),
-        })
+          .then(() => refetch())
+          .catch(() => {})
+          .finally(() => setSaving(false))
       }
+      return null
+    })
+  }, [saving, filteredItems, refetch])
 
-      await refetch()
-    } catch {
-      // silent fail
-    } finally {
-      setSaving(false)
-    }
-  }, [filteredItems, saving, refetch])
-
-  // ── Drag start ──
-  const handleDragStart = useCallback((itemId: string, e: React.TouchEvent | React.MouseEvent) => {
-    if (saving) return
-    const isTouchEvent = 'touches' in e
-    const clientX = isTouchEvent ? (e as React.TouchEvent).touches[0].clientX : (e as React.MouseEvent).clientX
-    const clientY = isTouchEvent ? (e as React.TouchEvent).touches[0].clientY : (e as React.MouseEvent).clientY
-
-    dragRef.current = { startX: clientX, startY: clientY, moved: false, itemId }
-    // Don't start ghost immediately — wait for movement to distinguish tap from drag
-  }, [saving])
-
-  // ── Global move / up handlers (attached once, removed on cleanup) ──
-  useEffect(() => {
-    if (!reorderMode) return
-
-    function onTouchMove(e: TouchEvent) {
-      if (!dragRef.current) return
-      const t = e.touches[0]
-      const dx = Math.abs(t.clientX - dragRef.current.startX)
-      const dy = Math.abs(t.clientY - dragRef.current.startY)
-      if (!dragRef.current.moved && (dx > 8 || dy > 8)) {
-        dragRef.current.moved = true
-        setDraggingId(dragRef.current.itemId)
-        setSelectedId(null)
-      }
-      if (dragRef.current.moved) {
-        e.preventDefault()
-        setGhostPos({ x: t.clientX, y: t.clientY })
-        const target = getCellIndexAtPoint(t.clientX, t.clientY)
-        if (target && target.kind === 'empty') setDropTargetIndex(target.index)
-        else if (target && target.kind === 'item' && target.id !== dragRef.current.itemId) setDropTargetIndex(null)
-        else setDropTargetIndex(null)
-      }
-    }
-
-    function onMouseMove(e: MouseEvent) {
-      if (!dragRef.current) return
-      const dx = Math.abs(e.clientX - dragRef.current.startX)
-      const dy = Math.abs(e.clientY - dragRef.current.startY)
-      if (!dragRef.current.moved && (dx > 8 || dy > 8)) {
-        dragRef.current.moved = true
-        setDraggingId(dragRef.current.itemId)
-        setSelectedId(null)
-      }
-      if (dragRef.current.moved) {
-        setGhostPos({ x: e.clientX, y: e.clientY })
-        const target = getCellIndexAtPoint(e.clientX, e.clientY)
-        if (target && target.kind === 'empty') setDropTargetIndex(target.index)
-        else setDropTargetIndex(null)
-      }
-    }
-
-    function onTouchEnd(e: TouchEvent) {
-      if (!dragRef.current) return
-      const { moved, itemId } = dragRef.current
-      if (moved) {
-        const t = e.changedTouches[0]
-        const target = getCellIndexAtPoint(t.clientX, t.clientY)
-        commitDrop(itemId, target)
-      } else {
-        // It was a tap — use tap-tap logic
-        dragRef.current = null
-        setDraggingId(null)
-        setGhostPos(null)
-        setDropTargetIndex(null)
-        setSelectedId((prev) => {
-          if (prev === null) return itemId
-          if (prev === itemId) return null
-          // second tap on different item: handled below
-          return prev
-        })
-        // Handle second tap swap (async, needs selectedId at time of tap)
-        setSelectedId((prev) => {
-          if (prev !== null && prev !== itemId) {
-            // trigger swap
-            const itemA = filteredItems.find((i) => i.id === prev)
-            const itemB = filteredItems.find((i) => i.id === itemId)
-            if (itemA && itemB && !saving) {
-              const posA = itemA.display_order && itemA.display_order > 0 ? itemA.display_order : filteredItems.indexOf(itemA) + 1
-              const posB = itemB.display_order && itemB.display_order > 0 ? itemB.display_order : filteredItems.indexOf(itemB) + 1
-              setSaving(true)
-              fetch('/api/menu-display/reorder', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ updates: [{ id: itemA.id, display_order: posB }, { id: itemB.id, display_order: posA }] }),
-              }).then(() => refetch()).catch(() => {}).finally(() => setSaving(false))
-            }
-            return null
-          }
-          return prev
-        })
-      }
-    }
-
-    function onMouseUp(e: MouseEvent) {
-      if (!dragRef.current) return
-      const { moved, itemId } = dragRef.current
-      if (moved) {
-        const target = getCellIndexAtPoint(e.clientX, e.clientY)
-        commitDrop(itemId, target)
-      } else {
-        dragRef.current = null
-        setDraggingId(null)
-        setGhostPos(null)
-        setDropTargetIndex(null)
-      }
-    }
-
-    window.addEventListener('touchmove', onTouchMove, { passive: false })
-    window.addEventListener('touchend', onTouchEnd)
-    window.addEventListener('mousemove', onMouseMove)
-    window.addEventListener('mouseup', onMouseUp)
-    return () => {
-      window.removeEventListener('touchmove', onTouchMove)
-      window.removeEventListener('touchend', onTouchEnd)
-      window.removeEventListener('mousemove', onMouseMove)
-      window.removeEventListener('mouseup', onMouseUp)
-    }
-  }, [reorderMode, commitDrop, filteredItems, saving, refetch])
-
-  // Tap-tap: handle empty cell tap when a card is selected
+  // ── Tap-Tap: move selected card to empty slot ──
   const handleEmptyCellTap = useCallback(async (emptyIndex: number) => {
     if (!reorderMode || !selectedId || saving) return
     const item = filteredItems.find((i) => i.id === selectedId)
@@ -785,13 +580,9 @@ export default function MenuDisplayPage() {
   const emptyCellCount = Math.max(0, MAX_VISIBLE - filteredItems.length)
   const isVirtualTab = activeTab === 'all' || activeTab === 'menu-dia'
 
-  const draggingItem = draggingId ? filteredItems.find((i) => i.id === draggingId) ?? null : null
-
-  const hintText = draggingId
-    ? 'Suelta para mover el plato'
-    : selectedId
-      ? 'Toca otro plato para intercambiar, o un espacio vacío para mover'
-      : 'Arrastra un plato o tócalo para seleccionarlo'
+  const hintText = selectedId
+    ? 'Toca otro plato para intercambiar, o un espacio vacío para mover'
+    : 'Toca un plato para seleccionarlo'
 
   return (
     <div
@@ -922,62 +713,33 @@ export default function MenuDisplayPage() {
                 item={item}
                 locale={locale}
                 reorderMode={reorderMode}
-                isDragging={draggingId === item.id}
                 isSelected={selectedId === item.id}
                 position={index + 1}
-                onReorderSelect={(id) => {
-                  // tap-tap: only fires when not dragging
-                  if (draggingId) return
-                  setSelectedId((prev) => {
-                    if (prev === null) return id
-                    if (prev === id) return null
-                    // swap
-                    const itemA = filteredItems.find((i) => i.id === prev)
-                    const itemB = filteredItems.find((i) => i.id === id)
-                    if (itemA && itemB && !saving) {
-                      const posA = itemA.display_order && itemA.display_order > 0 ? itemA.display_order : filteredItems.indexOf(itemA) + 1
-                      const posB = itemB.display_order && itemB.display_order > 0 ? itemB.display_order : filteredItems.indexOf(itemB) + 1
-                      setSaving(true)
-                      fetch('/api/menu-display/reorder', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ updates: [{ id: itemA.id, display_order: posB }, { id: itemB.id, display_order: posA }] }),
-                      }).then(() => refetch()).catch(() => {}).finally(() => setSaving(false))
-                    }
-                    return null
-                  })
-                }}
-                onDragStart={handleDragStart}
+                onReorderSelect={handleReorderSelect}
               />
             ))}
             {Array.from({ length: emptyCellCount }).map((_, i) => (
               <div
                 key={`empty-${i}`}
-                data-empty-index={i}
                 className={cn(
                   'w-full h-full rounded-lg transition-all duration-200',
-                  reorderMode
-                    ? cn(
-                        'cursor-pointer',
-                        dropTargetIndex === i
-                          ? 'ring-2 ring-[#F5C842] bg-[#F5C842]/10'
-                          : selectedId
-                            ? 'border border-dashed border-white/20 bg-white/[0.04]'
-                            : 'bg-black/20'
-                      )
-                    : 'bg-black/20'
+                  reorderMode && selectedId
+                    ? 'cursor-pointer border border-dashed border-[#F5C842]/50 bg-[#F5C842]/5 animate-pulse'
+                    : reorderMode
+                      ? 'bg-black/20'
+                      : 'bg-black/20'
                 )}
                 onClick={() => handleEmptyCellTap(i)}
+                onTouchEnd={(e) => {
+                  if (!reorderMode || !selectedId) return
+                  e.preventDefault()
+                  handleEmptyCellTap(i)
+                }}
               />
             ))}
           </>
         )}
       </main>
-
-      {/* ── Drag ghost ── */}
-      {draggingItem && ghostPos && (
-        <DragGhost item={draggingItem} locale={locale} x={ghostPos.x} y={ghostPos.y} />
-      )}
     </div>
   )
 }
