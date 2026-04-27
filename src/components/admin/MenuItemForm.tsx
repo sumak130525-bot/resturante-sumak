@@ -1,7 +1,7 @@
 'use client'
 
-import { useState } from 'react'
-import { Loader2, Save, X, ChevronDown, ChevronUp } from 'lucide-react'
+import { useState, useRef } from 'react'
+import { Loader2, Save, X, ChevronDown, ChevronUp, Upload, Image as ImageIcon } from 'lucide-react'
 import type { MenuItem, Category } from '@/lib/types'
 
 interface MenuItemFormProps {
@@ -27,8 +27,10 @@ export function MenuItemForm({ item, categories, onSave, onClose }: MenuItemForm
     description_qu: item?.description_qu ?? '',
   })
   const [loading, setLoading] = useState(false)
+  const [uploading, setUploading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [translationsOpen, setTranslationsOpen] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -137,13 +139,55 @@ export function MenuItemForm({ item, categories, onSave, onClose }: MenuItemForm
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">URL de imagen</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Imagen del plato</label>
+              {form.image_url && (
+                <div className="mb-2 relative w-full h-32 rounded-lg overflow-hidden bg-gray-100">
+                  <img src={form.image_url} alt="Preview" className="w-full h-full object-cover" />
+                </div>
+              )}
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={uploading}
+                  className="flex items-center gap-2 px-4 py-2 bg-sumak-brown text-white rounded-lg text-sm hover:bg-sumak-brown/90 transition-colors disabled:opacity-50"
+                >
+                  {uploading ? <Loader2 size={15} className="animate-spin" /> : <Upload size={15} />}
+                  {uploading ? 'Subiendo...' : 'Subir foto'}
+                </button>
+                <input
+                  type="text"
+                  value={form.image_url}
+                  onChange={(e) => setForm({ ...form, image_url: e.target.value })}
+                  className="input-field flex-1 text-sm"
+                  placeholder="o pegá una URL..."
+                />
+              </div>
               <input
-                type="url"
-                value={form.image_url}
-                onChange={(e) => setForm({ ...form, image_url: e.target.value })}
-                className="input-field"
-                placeholder="https://..."
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={async (e) => {
+                  const file = e.target.files?.[0]
+                  if (!file) return
+                  setUploading(true)
+                  setError(null)
+                  try {
+                    const fd = new FormData()
+                    fd.append('image', file)
+                    fd.append('id', item?.id || 'new')
+                    const res = await fetch('/api/menu-display/update-image', { method: 'POST', body: fd })
+                    if (!res.ok) throw new Error('Error al subir imagen')
+                    const data = await res.json()
+                    setForm({ ...form, image_url: data.image_url })
+                  } catch (err) {
+                    setError(err instanceof Error ? err.message : 'Error al subir imagen')
+                  } finally {
+                    setUploading(false)
+                    if (fileInputRef.current) fileInputRef.current.value = ''
+                  }
+                }}
               />
             </div>
 
