@@ -65,6 +65,12 @@ export function useMenuRealtime() {
           { event: '*', schema: 'public', table: 'menu_items' },
           (payload) => {
             if (payload.eventType === 'UPDATE') {
+              const updated = payload.new as MenuItem
+              // If display_order changed, refetch entirely (item may enter/leave the grid)
+              if (updated.display_order !== undefined) {
+                fetchMenu()
+                return
+              }
               setMenuItems((prev) =>
                 prev.map((item) =>
                   item.id === payload.new.id
@@ -73,7 +79,7 @@ export function useMenuRealtime() {
                 )
               )
             } else if (payload.eventType === 'INSERT') {
-              setMenuItems((prev) => [...prev, payload.new as MenuItem])
+              fetchMenu()
             } else if (payload.eventType === 'DELETE') {
               setMenuItems((prev) =>
                 prev.filter((item) => item.id !== payload.old.id)
