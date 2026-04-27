@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import Image from 'next/image'
 import { useMenuRealtime } from '@/hooks/useMenuRealtime'
 import { useTranslation, getItemName, type Locale } from '@/lib/i18n'
@@ -224,6 +224,166 @@ function CardModal({
         )}
       </div>
     </div>
+  )
+}
+
+// ─── Assign Modal ─────────────────────────────────────────────────────────────
+
+interface AssignModalProps {
+  availableItems: MenuItem[]
+  locale: Locale
+  assigning: boolean
+  onSelect: (item: MenuItem) => void
+  onCancel: () => void
+}
+
+function AssignModal({ availableItems, locale, assigning, onSelect, onCancel }: AssignModalProps) {
+  const [search, setSearch] = useState('')
+
+  const filtered = useMemo(() => {
+    const q = search.toLowerCase().trim()
+    if (!q) return availableItems
+    return availableItems.filter((item) => {
+      const name = getItemName(item, locale).toLowerCase()
+      const cat = (item.categories?.name ?? '').toLowerCase()
+      return name.includes(q) || cat.includes(q)
+    })
+  }, [availableItems, search, locale])
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center"
+      style={{ background: 'rgba(0,0,0,0.82)' }}
+      onClick={onCancel}
+    >
+      <div
+        className="flex flex-col rounded-2xl overflow-hidden"
+        style={{
+          background: '#1a1917',
+          border: '1px solid rgba(255,255,255,0.14)',
+          width: 'min(480px, 90vw)',
+          maxHeight: '75vh',
+        }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between px-4 py-3 border-b border-white/10">
+          <p className="text-white font-bold text-base">Agregar plato</p>
+          <button
+            onClick={onCancel}
+            className="text-white/50 hover:text-white text-xl leading-none transition-colors"
+          >
+            ✕
+          </button>
+        </div>
+
+        {/* Search */}
+        <div className="px-4 py-2 border-b border-white/10">
+          <input
+            autoFocus
+            type="text"
+            placeholder="Buscar plato o categoría..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="w-full rounded-lg px-3 py-2 text-sm text-white placeholder-white/40 outline-none focus:ring-2 focus:ring-[#F5C842]/50"
+            style={{
+              background: 'rgba(255,255,255,0.07)',
+              border: '1px solid rgba(255,255,255,0.12)',
+            }}
+          />
+        </div>
+
+        {/* List */}
+        <div className="flex-1 overflow-y-auto">
+          {filtered.length === 0 ? (
+            <div className="flex items-center justify-center py-10 text-white/30 text-sm">
+              Sin resultados
+            </div>
+          ) : (
+            filtered.map((item) => {
+              const name = getItemName(item, locale)
+              const catName = item.categories?.name ?? item.categories?.slug ?? ''
+              return (
+                <button
+                  key={item.id}
+                  onClick={() => !assigning && onSelect(item)}
+                  disabled={assigning}
+                  className="w-full flex items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-white/8 active:bg-white/12 disabled:opacity-50 border-b border-white/5"
+                  style={{ minHeight: '56px' }}
+                >
+                  {/* Thumb */}
+                  <div className="shrink-0 w-10 h-10 rounded-md overflow-hidden bg-white/5 flex items-center justify-center">
+                    {item.image_url ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={item.image_url} alt={name} className="w-full h-full object-cover" />
+                    ) : (
+                      <span className="text-lg">{CATEGORY_EMOJI[item.categories?.slug ?? ''] ?? '🍽️'}</span>
+                    )}
+                  </div>
+
+                  {/* Text */}
+                  <div className="flex-1 min-w-0">
+                    <p className="text-white font-semibold text-sm truncate">{name}</p>
+                    <p className="text-white/40 text-xs truncate">{catName}</p>
+                  </div>
+
+                  {/* Price */}
+                  <p className="shrink-0 text-[#F5C842] font-bold text-sm tabular-nums">
+                    {formatPrice(item.price)}
+                  </p>
+                </button>
+              )
+            })
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="px-4 py-3 border-t border-white/10">
+          <button
+            onClick={onCancel}
+            className="w-full rounded-lg py-2 text-sm font-bold text-white/70 transition-all active:scale-95"
+            style={{ background: '#3f3f46' }}
+          >
+            Cancelar
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── Empty Cell ───────────────────────────────────────────────────────────────
+
+interface EmptyCellProps {
+  onClick: () => void
+  reorderMode?: boolean
+}
+
+function EmptyCell({ onClick, reorderMode }: EmptyCellProps) {
+  if (reorderMode) {
+    return (
+      <div
+        className="w-full h-full rounded-lg"
+        style={{ background: 'rgba(255,255,255,0.02)' }}
+      />
+    )
+  }
+  return (
+    <button
+      onClick={onClick}
+      className="w-full h-full rounded-lg flex items-center justify-center transition-all duration-200 group hover:scale-[1.03] active:scale-95"
+      style={{
+        border: '2px dashed rgba(255,255,255,0.15)',
+        background: 'rgba(255,255,255,0.03)',
+      }}
+    >
+      <span
+        className="text-white/25 group-hover:text-white/50 transition-colors duration-200 select-none"
+        style={{ fontSize: 'clamp(1.2rem, 2.5vw, 2rem)', lineHeight: 1 }}
+      >
+        +
+      </span>
+    </button>
   )
 }
 
@@ -452,6 +612,11 @@ export default function MenuDisplayPage() {
   const [selectedId, setSelectedId]   = useState<string | null>(null)
   const [saving, setSaving]           = useState(false)
 
+  // ── Assign modal state ──
+  const [assignModalOpen, setAssignModalOpen] = useState(false)
+  const [assigningSlot, setAssigningSlot]     = useState<number | null>(null) // target display_order slot
+  const [assigning, setAssigning]             = useState(false)
+
   // Only show tabs that have items (plus always-visible ones)
   const availableSlugs = new Set(categories.map((c) => c.slug))
   const visibleTabs = DISPLAY_TABS.filter((tab) => {
@@ -473,6 +638,18 @@ export default function MenuDisplayPage() {
     }
     return items.slice(0, MAX_VISIBLE)
   })()
+
+  // Items NOT in the current tab — candidates for the assign modal
+  const assignableCategoryId = useMemo(() => {
+    // For non-virtual tabs we need the actual category id to assign to
+    if (activeTab === 'all' || activeTab === 'menu-dia') return null
+    return categories.find((c) => c.slug === activeTab)?.id ?? null
+  }, [activeTab, categories])
+
+  const itemsNotInTab = useMemo(() => {
+    if (!assignableCategoryId) return []
+    return menuItems.filter((i) => i.category_id !== assignableCategoryId)
+  }, [menuItems, assignableCategoryId])
 
   // Tab switch with fade transition — manual only, no auto-rotate
   const switchTab = useCallback((key: TabKey) => {
@@ -549,8 +726,42 @@ export default function MenuDisplayPage() {
     }
   }, [selectedId, filteredItems, saving, refetch])
 
+  // Open assign modal for an empty slot
+  const handleEmptyCellClick = useCallback((slotIndex: number) => {
+    if (activeTab === 'all' || activeTab === 'menu-dia') return // virtual tabs — no assign
+    setAssigningSlot(slotIndex + 1) // 1-based display_order
+    setAssignModalOpen(true)
+  }, [activeTab])
+
+  // Assign a dish to the current tab
+  const handleAssignItem = useCallback(async (item: MenuItem) => {
+    if (!assignableCategoryId || assigning) return
+    setAssigning(true)
+    try {
+      await fetch('/api/menu-display/assign', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          item_id: item.id,
+          category_id: assignableCategoryId,
+          display_order: assigningSlot ?? filteredItems.length + 1,
+        }),
+      })
+      setAssignModalOpen(false)
+      await refetch()
+    } catch {
+      // silent fail — Realtime will reconcile
+    } finally {
+      setAssigning(false)
+    }
+  }, [assignableCategoryId, assigning, assigningSlot, filteredItems.length, refetch])
+
   const tabLabel = (tab: (typeof DISPLAY_TABS)[number]) =>
     tab.label[locale as keyof typeof tab.label] ?? tab.label.es
+
+  // Build padded cell list: actual items + empty slots up to MAX_VISIBLE
+  const emptyCellCount = Math.max(0, MAX_VISIBLE - filteredItems.length)
+  const isVirtualTab = activeTab === 'all' || activeTab === 'menu-dia'
 
   return (
     <div
@@ -654,7 +865,7 @@ export default function MenuDisplayPage() {
         </div>
       )}
 
-      {/* ── 7 × 4 grid — fills all remaining height ── */}
+      {/* ── 6 × 4 grid — fills all remaining height ── */}
       <main
         className={cn(
           'flex-1 min-h-0 p-1 transition-opacity duration-200',
@@ -669,8 +880,8 @@ export default function MenuDisplayPage() {
       >
         {loading ? (
           <SkeletonGrid />
-        ) : filteredItems.length === 0 ? (
-          // Span all 28 cells for empty state
+        ) : filteredItems.length === 0 && isVirtualTab ? (
+          // Span all cells for empty state on virtual tabs
           <div
             className="flex flex-col items-center justify-center gap-3 text-white/30"
             style={{ gridColumn: '1 / -1', gridRow: '1 / -1' }}
@@ -679,19 +890,39 @@ export default function MenuDisplayPage() {
             <p className="text-lg font-semibold">Sin platos en esta categoría</p>
           </div>
         ) : (
-          filteredItems.map((item, index) => (
-            <DishCard
-              key={item.id}
-              item={item}
-              locale={locale}
-              reorderMode={reorderMode}
-              isSelected={selectedId === item.id}
-              position={index + 1}
-              onReorderSelect={handleReorderSelect}
-            />
-          ))
+          <>
+            {filteredItems.map((item, index) => (
+              <DishCard
+                key={item.id}
+                item={item}
+                locale={locale}
+                reorderMode={reorderMode}
+                isSelected={selectedId === item.id}
+                position={index + 1}
+                onReorderSelect={handleReorderSelect}
+              />
+            ))}
+            {Array.from({ length: emptyCellCount }).map((_, i) => (
+              <EmptyCell
+                key={`empty-${i}`}
+                reorderMode={reorderMode}
+                onClick={() => handleEmptyCellClick(filteredItems.length + i)}
+              />
+            ))}
+          </>
         )}
       </main>
+
+      {/* ── Assign modal ── */}
+      {assignModalOpen && (
+        <AssignModal
+          availableItems={itemsNotInTab}
+          locale={locale}
+          assigning={assigning}
+          onSelect={handleAssignItem}
+          onCancel={() => setAssignModalOpen(false)}
+        />
+      )}
     </div>
   )
 }
