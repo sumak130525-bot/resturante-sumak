@@ -291,39 +291,23 @@ function CardModal({
 
         {step === 'menu' ? (
           <>
-            {/* Change image button */}
-            <button
-              onClick={onChangeImage}
-              disabled={uploading}
-              className="w-full rounded-lg font-bold text-white transition-all active:scale-95 disabled:opacity-50"
-              style={{
-                background: '#2563eb',
-                fontSize: 'clamp(0.65rem, 1.1vw, 0.85rem)',
-                padding: '8px 6px',
-              }}
-            >
-              {uploading ? '⏳ Subiendo...' : '📷 Cambiar imagen'}
-            </button>
-
-            {/* Delete button */}
+            {/* Remove from grid button */}
             <button
               onClick={onDeleteRequest}
-              disabled={uploading}
-              className="w-full rounded-lg font-bold text-white transition-all active:scale-95 disabled:opacity-50"
+              className="w-full rounded-lg font-bold text-white transition-all active:scale-95"
               style={{
                 background: '#dc2626',
                 fontSize: 'clamp(0.65rem, 1.1vw, 0.85rem)',
                 padding: '8px 6px',
               }}
             >
-              🗑️ Eliminar
+              🗑️ Quitar de grilla
             </button>
 
             {/* Cancel */}
             <button
               onClick={onCancel}
-              disabled={uploading}
-              className="w-full rounded-lg font-bold text-white/70 transition-all active:scale-95 disabled:opacity-50"
+              className="w-full rounded-lg font-bold text-white/70 transition-all active:scale-95"
               style={{
                 background: '#3f3f46',
                 fontSize: 'clamp(0.65rem, 1.1vw, 0.85rem)',
@@ -339,7 +323,7 @@ function CardModal({
               className="text-white/70 text-center"
               style={{ fontSize: 'clamp(0.6rem, 1vw, 0.8rem)' }}
             >
-              ¿Eliminar este plato?
+              ¿Quitar de la grilla?
             </p>
             <div className="flex gap-2 w-full">
               <button
@@ -402,10 +386,10 @@ function DishCard({ item, locale }: DishCardProps) {
   const handleConfirmDelete = async () => {
     setDeleting(true)
     try {
-      const res = await fetch('/api/menu-display/delete', {
-        method: 'DELETE',
+      const res = await fetch('/api/menu-display/reorder', {
+        method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: item.id }),
+        body: JSON.stringify({ updates: [{ id: item.id, display_order: 0 }] }),
       })
       if (res.ok) {
         setDeleted(true)
