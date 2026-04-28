@@ -1,15 +1,15 @@
-import { GoogleGenerativeAI, HarmCategory, HarmBlockThreshold } from '@google/generative-ai';
+import Groq from 'groq-sdk';
 import { config } from './config';
 
-// ── Cliente Gemini (lazy init para no fallar si no hay API key) ───────────────
-let genAI: GoogleGenerativeAI | null = null;
+// ── Cliente Groq (lazy init) ──────────────────────────────────────────────────
+let groqClient: Groq | null = null;
 
-function getClient(): GoogleGenerativeAI | null {
-  if (!config.geminiApiKey) return null;
-  if (!genAI) {
-    genAI = new GoogleGenerativeAI(config.geminiApiKey);
+function getClient(): Groq | null {
+  if (!config.aiApiKey) return null;
+  if (!groqClient) {
+    groqClient = new Groq({ apiKey: config.aiApiKey });
   }
-  return genAI;
+  return groqClient;
 }
 
 // ── Tipos ─────────────────────────────────────────────────────────────────────
@@ -32,7 +32,7 @@ DATOS DEL RESTAURANTE:
 - Nombre: Restaurante Sumak
 - Dirección: Juan B Alberdi 247, frente a la Terminal de Mendoza, Guaymallén
 - Google Maps: https://maps.google.com/?q=-32.8949528,-68.8286573
-- Horario: Lunes a Sábado 8:00 a 20:00
+- Horario: Lunes a Sábado 8:00 a 22:30. Domingos cerrado. Feriados: depende del feriado, consultar.
 - WhatsApp: +54 9 261 752 6242
 - Web para pedir online: https://restaurante-sumak.vercel.app
 - Facebook: https://www.facebook.com/profile.php?id=61576603961881
@@ -48,13 +48,15 @@ REGLAS:
 6. Siempre intentá vender más: sugerí bebidas, postres, combos
 7. Si preguntan algo que no sabés, decí que vas a consultar con el equipo
 8. Si piden hablar con una persona, respondé EXACTAMENTE con: "HANDOFF_TO_HUMAN"
-9. NUNCA inventes platos o precios que no estén en el menú
+9. NUNCA inventes platos o precios que no estén en el menú. Usá ÚNICAMENTE los precios que aparecen en MENÚ ACTUAL. Si no encontrás el precio, decí "consultá en nuestra web".
 10. NUNCA des información falsa sobre horarios, ubicación, etc.
 11. Podés responder en inglés o quechua si el cliente escribe en esos idiomas
 12. Firmá como Sumak Bot 🤖 solo en el primer mensaje de bienvenida, después no
 
-MENÚ ACTUAL (se actualiza automáticamente):
+MENÚ ACTUAL (USALO TAL CUAL — NO INVENTES PLATOS NI PRECIOS):
 ${menuData}
+
+IMPORTANTE: Los precios y platos de arriba son los ÚNICOS que existen. Si un plato no está en esa lista, NO lo menciones. Si un precio no está ahí, NO lo inventes. Cuando te pregunten cómo es un plato, usá SOLO la descripción que aparece entre paréntesis al lado del plato. NO inventes ingredientes ni descripciones. Si no tiene descripción, decí que consulten en el local.
 
 ESTRATEGIAS DE VENTA:
 - Si piden un segundo, sugerí una sopa de entrada
@@ -73,28 +75,32 @@ export async function generateResponse(
   const client = getClient();
 
   if (!client) {
-    throw new Error('GEMINI_API_KEY no configurada');
+    throw new Error('AI_API_KEY no configurada');
   }
 
-  const model = client.getGenerativeModel({
-    model: 'gemini-2.0-flash',
-    systemInstruction: buildSystemPrompt(menuData),
-    safetySettings: [
-      { category: HarmCategory.HARM_CATEGORY_HARASSMENT, threshold: HarmBlockThreshold.BLOCK_ONLY_HIGH },
-      { category: HarmCategory.HARM_CATEGORY_HATE_SPEECH, threshold: HarmBlockThreshold.BLOCK_ONLY_HIGH },
-    ],
+  const messages: { role: 'system' | 'user' | 'assistant'; content: string }[] = [
+    { role: 'system', content: buildSystemPrompt(menuData) },
+  ];
+
+  // Agregar historial de conversación
+  for (const turn of conversationHistory) {
+    messages.push({
+      role: turn.role === 'assistant' ? 'assistant' : 'user',
+      content: turn.text,
+    });
+  }
+
+  // Agregar mensaje actual
+  messages.push({ role: 'user', content: userMessage });
+
+  const completion = await client.chat.completions.create({
+    model: 'llama-3.3-70b-versatile',
+    messages,
+    max_tokens: 500,
+    temperature: 0.7,
   });
 
-  // Convertir historial al formato de Gemini
-  const history = conversationHistory.map((turn) => ({
-    role: turn.role === 'assistant' ? 'model' : 'user',
-    parts: [{ text: turn.text }],
-  }));
-
-  const chat = model.startChat({ history });
-
-  const result = await chat.sendMessage(userMessage);
-  const responseText = result.response.text().trim();
+  const responseText = (completion.choices[0]?.message?.content ?? '').trim();
 
   // Detectar si la IA indica handoff a humano
   if (responseText === 'HANDOFF_TO_HUMAN' || responseText.includes('HANDOFF_TO_HUMAN')) {
@@ -111,5 +117,5 @@ export async function generateResponse(
 }
 
 export function isAIAvailable(): boolean {
-  return !!config.geminiApiKey;
+  return !!config.aiApiKey;
 }

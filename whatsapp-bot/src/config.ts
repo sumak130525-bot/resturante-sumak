@@ -17,7 +17,7 @@ export const config = {
     web: process.env.RESTAURANT_WEB || 'https://restaurante-sumak.vercel.app',
     hours: process.env.HOURS || 'Lunes a Sábado 8:00 - 20:00',
   },
-  // IA: obtené tu API key gratis en https://aistudio.google.com/apikey
-  // Límite gratuito: 15 req/min, 1500 req/día (más que suficiente para un restaurante)
-  geminiApiKey: process.env.GEMINI_API_KEY || '',
+  // IA: Groq (gratis) — https://console.groq.com/keys
+  // Límite gratuito: 30 req/min, 14400 req/día
+  aiApiKey: process.env.AI_API_KEY || process.env.GEMINI_API_KEY || '',
 };

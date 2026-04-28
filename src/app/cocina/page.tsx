@@ -83,9 +83,10 @@ function clearStruck(orderId: string) {
 
 // ─── Sonidos ──────────────────────────────────────────────────────────────────
 
-type SoundOption = 'beep' | 'bell' | 'alert' | 'silent'
+type SoundOption = 'loud' | 'beep' | 'bell' | 'alert' | 'silent'
 
 const SOUND_LABELS: Record<SoundOption, string> = {
+  loud: 'Alarma fuerte',
   beep: 'Beep',
   bell: 'Campana',
   alert: 'Alerta',
@@ -95,9 +96,9 @@ const SOUND_LABELS: Record<SoundOption, string> = {
 function loadSound(): SoundOption {
   try {
     const v = localStorage.getItem(LS_SOUND_KEY)
-    if (v === 'beep' || v === 'bell' || v === 'alert' || v === 'silent') return v
+    if (v === 'loud' || v === 'beep' || v === 'bell' || v === 'alert' || v === 'silent') return v
   } catch {}
-  return 'beep'
+  return 'loud'
 }
 
 function saveSound(s: SoundOption) {
@@ -214,12 +215,37 @@ async function getWavDataUri(sound: SoundOption): Promise<string | null> {
         gain.connect(ctx.destination)
         osc.type = 'square'
         osc.frequency.setValueAtTime(800, t)
-        gain.gain.setValueAtTime(0.7, t)
+        gain.gain.setValueAtTime(1.0, t)
         gain.gain.exponentialRampToValueAtTime(0.001, t + 0.18)
         osc.start(t)
         osc.stop(t + 0.18)
       }
     }, 0.7, sampleRate)
+    if (uri) wavCache[sound] = uri
+    return uri
+
+  } else if (sound === 'loud') {
+    // 6 beeps cortos y fuertes tipo alarma de cocina comercial
+    const beepDuration = 0.09
+    const beepGap = 0.10
+    const numBeeps = 6
+    const totalDuration = numBeeps * (beepDuration + beepGap)
+    const uri = await renderToWavDataUri((ctx) => {
+      for (let i = 0; i < numBeeps; i++) {
+        const t = i * (beepDuration + beepGap)
+        const osc = ctx.createOscillator()
+        const gain = ctx.createGain()
+        osc.connect(gain)
+        gain.connect(ctx.destination)
+        osc.type = 'square'
+        osc.frequency.setValueAtTime(1100, t)
+        gain.gain.setValueAtTime(1.0, t)
+        gain.gain.setValueAtTime(1.0, t + beepDuration - 0.005)
+        gain.gain.exponentialRampToValueAtTime(0.001, t + beepDuration)
+        osc.start(t)
+        osc.stop(t + beepDuration)
+      }
+    }, totalDuration, sampleRate)
     if (uri) wavCache[sound] = uri
     return uri
   }
@@ -606,10 +632,10 @@ export default function CocinaPage() {
   const [activeTab, setActiveTab] = useState<ActiveTab>('cocina')
   const [lastCount, setLastCount] = useState(0)
   const [dismissedLoaded, setDismissedLoaded] = useState(false)
-  const [soundOption, setSoundOption] = useState<SoundOption>('beep')
+  const [soundOption, setSoundOption] = useState<SoundOption>('loud')
   const dismissedIdsRef = useRef<Set<string>>(new Set())
   // Ref para leer el sonido actual dentro de callbacks sin stale closure
-  const soundOptionRef = useRef<SoundOption>('beep')
+  const soundOptionRef = useRef<SoundOption>('loud')
   // AudioContext persistente — se desbloquea en el primer click
   const audioCtxRef = useRef<AudioContext | null>(null)
   const audioUnlockedRef = useRef(false)
@@ -673,7 +699,26 @@ export default function CocinaPage() {
         await ctx.resume()
       }
 
-      if (sound === 'beep') {
+      if (sound === 'loud') {
+        // Alarma fuerte: 6 beeps cortos y agresivos tipo timer de cocina comercial
+        const beepDuration = 0.09
+        const beepGap = 0.10
+        const numBeeps = 6
+        for (let i = 0; i < numBeeps; i++) {
+          const t = i * (beepDuration + beepGap)
+          const osc = ctx.createOscillator()
+          const gain = ctx.createGain()
+          osc.connect(gain)
+          gain.connect(ctx.destination)
+          osc.type = 'square'
+          osc.frequency.setValueAtTime(1100, ctx.currentTime + t)
+          gain.gain.setValueAtTime(1.0, ctx.currentTime + t)
+          gain.gain.setValueAtTime(1.0, ctx.currentTime + t + beepDuration - 0.005)
+          gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + t + beepDuration)
+          osc.start(ctx.currentTime + t)
+          osc.stop(ctx.currentTime + t + beepDuration)
+        }
+      } else if (sound === 'beep') {
         const osc = ctx.createOscillator()
         const gain = ctx.createGain()
         osc.connect(gain)
@@ -709,7 +754,7 @@ export default function CocinaPage() {
           gain.connect(ctx.destination)
           osc.type = 'square'
           osc.frequency.setValueAtTime(800, ctx.currentTime + t)
-          gain.gain.setValueAtTime(0.7, ctx.currentTime + t)
+          gain.gain.setValueAtTime(1.0, ctx.currentTime + t)
           gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + t + 0.18)
           osc.start(ctx.currentTime + t)
           osc.stop(ctx.currentTime + t + 0.18)

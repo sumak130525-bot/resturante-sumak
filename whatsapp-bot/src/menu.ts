@@ -58,16 +58,21 @@ export async function getMenu(): Promise<{ items: MenuItem[]; categories: Catego
       supabase
         .from('categories')
         .select('*')
-        .order('display_order', { ascending: true }),
+        .order('order_pos', { ascending: true }),
       supabase
         .from('menu_items')
         .select('*, categories(*)')
-        .eq('is_available', true)
+        .eq('active', true)
+        .gt('display_order', 0)
         .order('display_order', { ascending: true }),
     ]);
 
     const categories: Category[] = categoriesResult.data || [];
     const items: MenuItem[] = itemsResult.data || [];
+
+    if (items.length === 0) {
+      console.log('⚠️ No items from Supabase, items error:', itemsResult.error?.message);
+    }
 
     menuCache = { items, categories, timestamp: now };
     return { items, categories };
@@ -94,13 +99,14 @@ export async function formatMenuText(): Promise<string> {
     const categoryItems = items.filter((item) => item.category_id === category.id);
     if (categoryItems.length === 0) continue;
 
-    const emoji = category.emoji || '🍽️';
-    const categoryName = category.name_es || category.name;
-    text += `${emoji} *${categoryName.toUpperCase()}*\n`;
+    text += `🍽️ *${category.name.toUpperCase()}*\n`;
 
     for (const item of categoryItems) {
-      const itemName = item.name_es || item.name;
-      text += `  • ${itemName} - ${formatPrice(item.price)}\n`;
+      text += `  • ${item.name} — ${formatPrice(item.price)}`;
+      if (item.description_es) {
+        text += ` (${item.description_es.trim()})`;
+      }
+      text += '\n';
     }
     text += '\n';
   }
@@ -129,24 +135,23 @@ export async function searchMenuItem(query: string): Promise<MenuItem[]> {
 // Menú estático de respaldo si Supabase falla
 export function getStaticMenu(): string {
   return `🍽️ *MENÚ RESTAURANTE SUMAK*
+_Precios en pesos argentinos_
 
 🍲 *SOPAS*
-  • Sopa de maní
-  • Chairo
-  • Sopa del día
+  • Sopa de Maní — $5.000
+  • Sopa de Trigo — $5.000
+  • Sopa Puchero — $5.500
 
-🍽️ *SEGUNDOS*
-  • Picante de pollo
-  • Sajta de pollo
-  • Ají de lengua
-  • Fricasé
+🍽️ *PLATOS PRINCIPALES*
+  • Picante de Pollo — $9.000
+  • Silpancho — $9.000
+  • Falso Conejo — $9.000
+  • Ají de Lengua — $9.000
+  • Carne a la Olla — $9.000
+  • Chicharrón de Cerdo — $14.000
+  • Fricasé — $13.000
+  • Pique Macho — $18.000
+  • Pescado Sábalo Frito — $18.000
 
-🥗 *ENTRADAS*
-  • Ensaladas del huerto
-  • Anticuchos
-
-🍮 *POSTRES*
-  • Postre del día
-
-_Para precios actualizados escribí *menu* o visitá ${config.restaurant.web}_`;
+_Visitá ${config.restaurant.web} para pedir online 📲_`;
 }
