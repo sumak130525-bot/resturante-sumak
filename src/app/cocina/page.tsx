@@ -527,11 +527,11 @@ function OrderCard({
                   {item.quantity}×
                 </span>
                 <div className="flex flex-col min-w-0">
-                  <span className={`text-base font-semibold leading-tight ${struck ? 'line-through text-gray-500' : ''}`}>
+                  <span className={`text-lg font-semibold leading-tight ${struck ? 'line-through text-gray-500' : ''}`}>
                     {item.name}
                   </span>
                   {item.modifiers && item.modifiers.length > 0 && (
-                    <span className={`text-xs leading-snug mt-0.5 ${struck ? 'line-through text-gray-600' : 'text-cyan-300'}`}>
+                    <span className={`text-sm leading-snug mt-0.5 ${struck ? 'line-through text-gray-600' : 'text-cyan-300'}`}>
                       {item.modifiers.join(' · ')}
                     </span>
                   )}
@@ -543,7 +543,7 @@ function OrderCard({
 
         {/* Notas */}
         {order.notes && (
-          <p className="text-xs text-yellow-300 italic border-t border-gray-700 pt-2">
+          <p className="text-sm text-yellow-300 italic border-t border-gray-700 pt-2">
             Nota: {order.notes}
           </p>
         )}
