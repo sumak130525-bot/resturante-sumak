@@ -294,9 +294,9 @@ export async function GET() {
     getLocalOrders(),
   ])
 
-  // Combinar y ordenar cronológicamente (más recientes primero)
+  // Combinar y ordenar cronológicamente FIFO (más antiguos primero)
   const all: KdsOrder[] = [...webOrders, ...localOrders].sort(
-    (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+    (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
   )
 
   return NextResponse.json(all, {

@@ -879,7 +879,9 @@ export default function CocinaPage() {
 
     const recoveredOrder = { ...order, status: order.source === 'WEB' ? 'ready' : 'confirmed' }
     setDeliveredOrders((prev) => prev.filter((o) => o.id !== id))
-    setOrders((prev) => [recoveredOrder, ...prev])
+    setOrders((prev) => [...prev, recoveredOrder].sort(
+      (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+    ))
 
     if (order.source === 'WEB') {
       fetch('/api/admin/orders', {
