@@ -18,14 +18,25 @@ export async function GET() {
       .from('menu_items')
       .select('id, name, name_en, name_qu, price, image_url, categories(name, slug)')
       .eq('active', true)
-      .or('display_order.eq.0,display_order.is.null')
+      .lte('display_order', 0)
       .order('name', { ascending: true })
 
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 500 })
     }
 
-    return NextResponse.json({ items: data ?? [] })
+    // Also get items with null display_order
+    const { data: nullData } = await supabase
+      .from('menu_items')
+      .select('id, name, name_en, name_qu, price, image_url, categories(name, slug)')
+      .eq('active', true)
+      .is('display_order', null)
+      .order('name', { ascending: true })
+
+    const all = [...(data ?? []), ...(nullData ?? [])]
+    all.sort((a: { name: string }, b: { name: string }) => a.name.localeCompare(b.name))
+
+    return NextResponse.json({ items: all })
   } catch (err) {
     return NextResponse.json(
       { error: err instanceof Error ? err.message : 'Unknown error' },
