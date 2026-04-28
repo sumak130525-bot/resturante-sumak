@@ -8,6 +8,9 @@ function getServiceClient() {
   )
 }
 
+export const dynamic = 'force-dynamic'
+export const revalidate = 0
+
 // GET: return active menu items with display_order = 0 or null (no auth — called from TV screen)
 export async function GET() {
   try {
