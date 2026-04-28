@@ -1,6 +1,8 @@
 import type { Metadata } from 'next'
 import { Providers } from '@/components/Providers'
 
+export const dynamic = 'force-dynamic'
+
 export const metadata: Metadata = {
   title: 'Menú — Restaurante Sumak',
   description: 'Carta digital del Restaurante Sumak',
