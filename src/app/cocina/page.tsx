@@ -352,9 +352,6 @@ function OrderCard({
   onRecover?: (id: string) => void
   isDelivered?: boolean
 }) {
-  const [singleClicked, setSingleClicked] = useState(false)
-  const singleClickTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
-
   // ── Estado de items tachados ──
   const [struckIndices, setStruckIndices] = useState<Set<number>>(() => {
     if (typeof window === 'undefined') return new Set()
@@ -392,17 +389,6 @@ function OrderCard({
 
   const handleHeaderClick = () => {
     if (isDelivered || !onDeliver) return
-    if (singleClickTimer.current) clearTimeout(singleClickTimer.current)
-    setSingleClicked(true)
-    singleClickTimer.current = setTimeout(() => {
-      setSingleClicked(false)
-    }, 1200)
-  }
-
-  const handleHeaderDoubleClick = () => {
-    if (isDelivered || !onDeliver) return
-    if (singleClickTimer.current) clearTimeout(singleClickTimer.current)
-    setSingleClicked(false)
     clearStruck(order.id)
     onDeliver(order.id, order.source)
   }
@@ -415,22 +401,14 @@ function OrderCard({
           : 'border-gray-200'
       } shadow-md overflow-hidden`}
     >
-      {/* ── Cabecera: doble click para entregar ── */}
+      {/* ── Cabecera: click para entregar ── */}
       <div
         className={`${headerBg} px-3 py-2 transition-opacity duration-150 ${
           !isDelivered && onDeliver ? 'cursor-pointer select-none' : ''
-        } ${singleClicked ? 'opacity-70' : 'opacity-100'}`}
+        }`}
         onClick={handleHeaderClick}
-        onDoubleClick={handleHeaderDoubleClick}
-        title={!isDelivered && onDeliver ? 'Doble click para entregar' : undefined}
+        title={!isDelivered && onDeliver ? 'Click para entregar' : undefined}
       >
-        {/* Tooltip de primer click */}
-        {singleClicked && (
-          <div className="absolute top-2 left-1/2 -translate-x-1/2 z-10 bg-gray-900/90 text-white text-xs font-semibold px-3 py-1 rounded-full whitespace-nowrap pointer-events-none">
-            Doble click para entregar
-          </div>
-        )}
-
         {/* Fila 1: Mesa/Orden + Tiempo */}
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2 min-w-0">
@@ -471,7 +449,7 @@ function OrderCard({
             {order.number}
           </span>
           {diningBadge && (
-            <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${diningBadge.cls}`}>
+            <span className={`text-xl font-bold px-2 py-0.5 rounded-full ${diningBadge.cls}`}>
               {diningBadge.label}
             </span>
           )}
@@ -497,7 +475,7 @@ function OrderCard({
       <div className="flex-1 px-4 py-3 flex flex-col gap-3 bg-white">
         {allStruck && !isDelivered && (
           <div className="text-center text-green-600 text-xs font-bold animate-pulse">
-            Todos listos — doble click para entregar
+            Todos listos — click para entregar
           </div>
         )}
         <ul className="flex flex-col gap-2">
@@ -518,7 +496,7 @@ function OrderCard({
                     {item.name}
                   </span>
                   {item.modifiers && item.modifiers.length > 0 && (
-                    <span className={`text-sm leading-snug mt-0.5 ${struck ? 'line-through text-gray-400' : 'text-gray-600'}`}>
+                    <span className={`text-base font-bold leading-snug mt-0.5 ${struck ? 'line-through text-gray-400' : 'text-gray-700'}`}>
                       {item.modifiers.join(' · ')}
                     </span>
                   )}
