@@ -283,6 +283,7 @@ type KdsItem = {
   quantity: number
   price: number
   modifiers?: string[]
+  note?: string | null
 }
 
 type KdsOrder = {
@@ -498,6 +499,11 @@ function OrderCard({
                   {item.modifiers && item.modifiers.length > 0 && (
                     <span className={`text-base leading-snug mt-0.5 ${struck ? 'line-through text-gray-400' : 'text-gray-700'}`}>
                       {item.modifiers.join(' · ')}
+                    </span>
+                  )}
+                  {item.note && (
+                    <span className={`text-base leading-snug mt-0.5 italic ${struck ? 'line-through text-gray-400' : 'text-amber-600'}`}>
+                      💬 {item.note}
                     </span>
                   )}
                 </div>

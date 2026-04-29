@@ -11,6 +11,7 @@ export type KdsItem = {
   quantity: number
   price: number
   modifiers?: string[]
+  note?: string | null
 }
 
 export type KdsOrder = {
@@ -98,6 +99,7 @@ type LoyverseLineItem = {
   variant_name?: string
   quantity: number
   price: number
+  note?: string | null
   line_modifiers?: LoyverseLineModifier[]
 }
 
@@ -284,6 +286,7 @@ async function getLocalOrders(): Promise<KdsOrder[]> {
             quantity: li.quantity,
             price: li.price,
             modifiers: modifiers.length > 0 ? modifiers : undefined,
+            note: li.note ?? null,
           }
         }),
         total: r.total_money,
