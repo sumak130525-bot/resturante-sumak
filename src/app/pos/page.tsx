@@ -1,9 +1,17 @@
 'use client'
 
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import Image from 'next/image'
 import { useMenuRealtime } from '@/hooks/useMenuRealtime'
 import type { MenuItem } from '@/lib/types'
+
+// ─── Frequent Customer type ───────────────────────────────────────────────────
+
+type FrequentCustomer = {
+  id: string
+  name: string
+  phone: string | null
+}
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -124,6 +132,76 @@ function POSDishCard({ item, onAdd }: { item: MenuItem; onAdd: (item: MenuItem) 
   )
 }
 
+// ─── Customer Combobox ────────────────────────────────────────────────────────
+
+function CustomerCombobox({
+  value,
+  onChange,
+  customers,
+}: {
+  value: string
+  onChange: (v: string) => void
+  customers: FrequentCustomer[]
+}) {
+  const [open, setOpen] = useState(false)
+  const containerRef = useRef<HTMLDivElement>(null)
+
+  const filtered = value.trim()
+    ? customers.filter((c) =>
+        c.name.toLowerCase().includes(value.toLowerCase()) ||
+        (c.phone ?? '').includes(value)
+      )
+    : customers
+
+  // Close on outside click
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClick)
+    return () => document.removeEventListener('mousedown', handleClick)
+  }, [])
+
+  const handleSelect = (name: string) => {
+    onChange(name)
+    setOpen(false)
+  }
+
+  return (
+    <div ref={containerRef} className="relative">
+      <input
+        type="text"
+        value={value}
+        onChange={(e) => { onChange(e.target.value); setOpen(true) }}
+        onFocus={() => setOpen(true)}
+        placeholder="Nombre del cliente"
+        className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm font-semibold text-gray-900 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-teal-400"
+        autoComplete="off"
+      />
+      {open && filtered.length > 0 && (
+        <ul className="absolute z-50 bottom-full mb-1 left-0 right-0 bg-white border border-gray-200 rounded-xl shadow-lg max-h-48 overflow-y-auto">
+          {filtered.map((c) => (
+            <li key={c.id}>
+              <button
+                type="button"
+                onMouseDown={(e) => { e.preventDefault(); handleSelect(c.name) }}
+                className="w-full text-left px-3 py-2 hover:bg-teal-50 transition-colors"
+              >
+                <span className="font-semibold text-sm text-gray-900">{c.name}</span>
+                {c.phone && (
+                  <span className="ml-2 text-xs text-gray-400">{c.phone}</span>
+                )}
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  )
+}
+
 // ─── Ticket Panel ─────────────────────────────────────────────────────────────
 
 function TicketPanel({
@@ -132,6 +210,7 @@ function TicketPanel({
   tableNumber,
   paymentMethod,
   customerName,
+  customers,
   onUpdateQty,
   onRemove,
   onDiningChange,
@@ -146,6 +225,7 @@ function TicketPanel({
   tableNumber: string
   paymentMethod: PaymentMethod
   customerName: string
+  customers: FrequentCustomer[]
   onUpdateQty: (id: string, delta: number) => void
   onRemove: (id: string) => void
   onDiningChange: (v: DiningOption) => void
@@ -284,12 +364,10 @@ function TicketPanel({
         {/* Customer */}
         <div>
           <p className="text-xs font-bold text-gray-500 mb-1 px-1">Cliente</p>
-          <input
-            type="text"
+          <CustomerCombobox
             value={customerName}
-            onChange={(e) => onCustomerChange(e.target.value)}
-            placeholder="Nombre del cliente"
-            className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm font-semibold text-gray-900 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-teal-400"
+            onChange={onCustomerChange}
+            customers={customers}
           />
         </div>
 
@@ -315,6 +393,15 @@ function TicketPanel({
 
 export default function POSPage() {
   const { menuItems, loading } = useMenuRealtime()
+
+  // Frequent customers
+  const [customers, setCustomers] = useState<FrequentCustomer[]>([])
+  useEffect(() => {
+    fetch('/api/admin/customers')
+      .then((r) => r.ok ? r.json() : [])
+      .then((data) => setCustomers(data))
+      .catch(() => {})
+  }, [])
 
   // Ticket state
   const [ticketItems, setTicketItems] = useState<TicketItem[]>([])
@@ -481,6 +568,7 @@ export default function POSPage() {
               tableNumber={tableNumber}
               paymentMethod={paymentMethod}
               customerName={customerName}
+              customers={customers}
               onUpdateQty={handleUpdateQty}
               onRemove={handleRemove}
               onDiningChange={setDiningOption}
