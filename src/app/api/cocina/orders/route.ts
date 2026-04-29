@@ -129,6 +129,18 @@ type LoyverseCategory = {
 // Categoria fija de Bebidas en Loyverse
 const BEBIDAS_CATEGORY_ID = 'd028b97d-7bc9-4628-9e29-d60ff0faaa8b'
 
+// ─── Cache de beverage item IDs (module-level, TTL 10 min) ────────────────────
+let beverageCache: { ids: Set<string>; expiry: number } | null = null
+
+async function getCachedBeverageItemIds(token: string): Promise<Set<string>> {
+  if (beverageCache && Date.now() < beverageCache.expiry) {
+    return beverageCache.ids
+  }
+  const ids = await getBeverageItemIds(token)
+  beverageCache = { ids, expiry: Date.now() + 10 * 60 * 1000 }
+  return ids
+}
+
 // Palabras clave de fallback para identificar la categoría de bebidas por nombre
 const BEBIDAS_KEYWORDS = ['bebida', 'bebidas', 'drink', 'drinks', 'jugo', 'jugos', 'refresco', 'refrescos', 'café', 'cafe', 'agua', 'soda', 'gaseosa']
 
@@ -225,7 +237,7 @@ async function getLocalOrders(): Promise<KdsOrder[]> {
           next: { revalidate: 0 },
         }
       ),
-      getBeverageItemIds(token),
+      getCachedBeverageItemIds(token),
     ])
 
     if (!receiptsRes.ok) return []
