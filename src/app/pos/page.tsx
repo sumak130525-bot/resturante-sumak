@@ -5,6 +5,83 @@ import Image from 'next/image'
 import { useMenuRealtime } from '@/hooks/useMenuRealtime'
 import type { MenuItem } from '@/lib/types'
 
+// ─── Print Ticket ─────────────────────────────────────────────────────────────
+
+type PrintData = {
+  orderNumber: number
+  dateStr: string
+  timeStr: string
+  items: TicketItem[]
+  total: number
+  diningOption: DiningOption
+  tableNumber: string
+  paymentMethod: PaymentMethod
+  customerName: string
+}
+
+function pad(str: string, width: number, right = false): string {
+  const s = String(str)
+  if (s.length >= width) return s.slice(0, width)
+  const spaces = ' '.repeat(width - s.length)
+  return right ? spaces + s : s + spaces
+}
+
+function formatTicketMoney(amount: number): string {
+  return '$' + new Intl.NumberFormat('es-AR', {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  }).format(amount)
+}
+
+function PrintTicket({ data }: { data: PrintData | null }) {
+  if (!data) return null
+
+  const LINE = '================================'
+  const total = formatTicketMoney(data.total)
+
+  return (
+    <div id="print-ticket" className="print-only">
+      <p style={{ textAlign: 'center', fontWeight: 'bold', fontSize: '16px', marginBottom: '4px' }}>SUMAK</p>
+      <p style={{ textAlign: 'center', fontSize: '11px', marginBottom: '8px' }}>Restaurante</p>
+      <p>{LINE}</p>
+      <p>{data.dateStr}  {data.timeStr}</p>
+      <p>Pedido: P-{String(data.orderNumber).padStart(3, '0')}</p>
+      {data.diningOption === 'Comer dentro' && data.tableNumber && (
+        <p>Mesa: {data.tableNumber}</p>
+      )}
+      <p>Modalidad: {data.diningOption}</p>
+      <p>{LINE}</p>
+      {data.items.map((item) => {
+        const qty = String(item.quantity)
+        const name = item.name
+        const sub = formatTicketMoney(item.price * item.quantity)
+        // Format: "2x Nombre ............ $sub"
+        const prefix = qty + 'x ' + name
+        const maxPrefix = 48 - sub.length - 1
+        const dots = maxPrefix > prefix.length
+          ? '.'.repeat(maxPrefix - prefix.length)
+          : ' '
+        return (
+          <p key={item.menu_item_id}>{prefix}{dots}{sub}</p>
+        )
+      })}
+      <p>{LINE}</p>
+      <p style={{ fontWeight: 'bold', fontSize: '14px' }}>
+        {pad('TOTAL:', 10)}{pad(total, 38 - 10, true)}
+      </p>
+      <p>Pago: {data.paymentMethod.toUpperCase()}{data.paymentMethod === 'Efectivo' ? ' [ABRIR CAJON]' : ''}</p>
+      {data.customerName && data.customerName !== 'POS' && (
+        <p>Cliente: {data.customerName}</p>
+      )}
+      <p>{LINE}</p>
+      <p style={{ textAlign: 'center' }}>Gracias por su visita!</p>
+      <p style={{ textAlign: 'center' }}>Restaurante Sumak</p>
+      <p>&nbsp;</p>
+      <p>&nbsp;</p>
+    </div>
+  )
+}
+
 // ─── Frequent Customer type ───────────────────────────────────────────────────
 
 type FrequentCustomer = {
@@ -415,6 +492,9 @@ export default function POSPage() {
   // Ticket panel open/close
   const [ticketOpen, setTicketOpen] = useState(false)
 
+  // Print ticket data
+  const [printData, setPrintData] = useState<PrintData | null>(null)
+
   // Only display items with display_order > 0, capped at 24
   const displayItems = menuItems.slice(0, MAX_VISIBLE)
 
@@ -474,12 +554,38 @@ export default function POSPage() {
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error ?? 'Error al enviar')
+
+      // Capture snapshot for print BEFORE resetting state
+      const now = new Date()
+      const dateStr = now.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' })
+      const timeStr = now.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })
+      const orderNumber: number = data.order?.order_number ?? data.order?.id ?? data.order_id ?? 0
+      const snapshot: PrintData = {
+        orderNumber,
+        dateStr,
+        timeStr,
+        items: [...ticketItems],
+        total,
+        diningOption,
+        tableNumber,
+        paymentMethod,
+        customerName: customerName || '',
+      }
+
       // Reset ticket
       setTicketItems([])
       setTableNumber('')
       setCustomerName('')
       setTicketOpen(false)
       setToast('Pedido enviado a cocina')
+
+      // Render ticket and print
+      setPrintData(snapshot)
+      setTimeout(() => {
+        window.print()
+        // Clear print data after printing
+        setTimeout(() => setPrintData(null), 1000)
+      }, 500)
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Error al enviar pedido'
       setToast(`Error: ${msg}`)
@@ -598,6 +704,9 @@ export default function POSPage() {
           <span>Ver Ticket ({ticketCount})</span>
         </button>
       )}
+
+      {/* ── Print Ticket (hidden on screen, visible only on print) ── */}
+      <PrintTicket data={printData} />
     </div>
   )
 }
