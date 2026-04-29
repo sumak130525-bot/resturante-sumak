@@ -527,7 +527,7 @@ function OrderCard({
                   {item.quantity}×
                 </span>
                 <div className="flex flex-col min-w-0">
-                  <span className={`text-2xl font-semibold leading-tight ${struck ? 'line-through text-gray-500' : ''}`}>
+                  <span className={`text-xl font-semibold leading-tight ${struck ? 'line-through text-gray-500' : ''}`}>
                     {item.name}
                   </span>
                   {item.modifiers && item.modifiers.length > 0 && (
