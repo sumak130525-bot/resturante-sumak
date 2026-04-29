@@ -306,19 +306,13 @@ type KdsOrder = {
 type FilterSource = 'ALL' | 'WEB' | 'LOCAL'
 type ActiveTab = 'cocina' | 'entregados'
 
-// ─── Colores rotativos para cabeceras de tarjetas (estilo Loyverse) ───────────
+// ─── Color de cabecera según tiempo transcurrido ──────────────────────────────
 
-const CARD_HEADER_COLORS = [
-  'bg-orange-400',
-  'bg-green-400',
-  'bg-blue-400',
-  'bg-purple-400',
-  'bg-teal-400',
-  'bg-pink-400',
-]
-
-function getCardHeaderColor(index: number): string {
-  return CARD_HEADER_COLORS[index % CARD_HEADER_COLORS.length]
+function getHeaderColorByTime(createdAt: string): string {
+  const mins = (Date.now() - new Date(createdAt).getTime()) / 60000
+  if (mins < 10) return 'bg-green-500'
+  if (mins < 20) return 'bg-amber-400'
+  return 'bg-red-500'
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -349,13 +343,11 @@ function getOrderLabel(order: KdsOrder): string {
 
 function OrderCard({
   order,
-  orderIndex,
   onDeliver,
   onRecover,
   isDelivered,
 }: {
   order: KdsOrder
-  orderIndex: number
   onDeliver?: (id: string, source: 'WEB' | 'LOCAL') => void
   onRecover?: (id: string) => void
   isDelivered?: boolean
@@ -385,7 +377,7 @@ function OrderCard({
     })
   }
 
-  const headerBg = isDelivered ? 'bg-gray-400' : getCardHeaderColor(orderIndex)
+  const headerBg = isDelivered ? 'bg-gray-400' : getHeaderColorByTime(order.created_at)
 
   const diningBadge = order.diningOption
     ? {
@@ -627,6 +619,7 @@ export default function CocinaPage() {
   const [lastCount, setLastCount] = useState(0)
   const [dismissedLoaded, setDismissedLoaded] = useState(false)
   const [soundOption, setSoundOption] = useState<SoundOption>('loud')
+  const [, setColorTick] = useState(0)
   const dismissedIdsRef = useRef<Set<string>>(new Set())
   const soundOptionRef = useRef<SoundOption>('loud')
   const audioCtxRef = useRef<AudioContext | null>(null)
@@ -803,6 +796,12 @@ export default function CocinaPage() {
     const interval = setInterval(() => fetchOrders(), 15_000)
     return () => clearInterval(interval)
   }, [fetchOrders, dismissedLoaded])
+
+  // ── Interval para actualizar colores de cabecera en tiempo real ───────────
+  useEffect(() => {
+    const colorInterval = setInterval(() => setColorTick((t) => t + 1), 30_000)
+    return () => clearInterval(colorInterval)
+  }, [])
 
   // ── Supabase Realtime ──────────────────────────────────────────────────────
   useEffect(() => {
@@ -1021,11 +1020,10 @@ export default function CocinaPage() {
             </div>
           ) : (
             <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-              {activeOrders.map((order, index) => (
+              {activeOrders.map((order) => (
                 <OrderCard
                   key={order.id}
                   order={order}
-                  orderIndex={index}
                   onDeliver={handleDeliver}
                 />
               ))}
@@ -1040,11 +1038,10 @@ export default function CocinaPage() {
             </div>
           ) : (
             <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-              {filteredDelivered.map((order, index) => (
+              {filteredDelivered.map((order) => (
                 <OrderCard
                   key={order.id}
                   order={order}
-                  orderIndex={index}
                   onRecover={handleRecover}
                   isDelivered
                 />
