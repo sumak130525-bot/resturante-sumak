@@ -60,9 +60,6 @@ async function requireAuth() {
 
 // POST: subir logo a Storage y guardar URL en settings
 export async function POST(request: NextRequest) {
-  const user = await requireAuth()
-  if (!user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
-
   const formData = await request.formData()
   const file = formData.get('file') as File | null
   if (!file) return NextResponse.json({ error: 'No se recibió archivo' }, { status: 400 })
@@ -127,9 +124,6 @@ export async function POST(request: NextRequest) {
 
 // DELETE: eliminar logo
 export async function DELETE() {
-  const user = await requireAuth()
-  if (!user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
-
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const admin = await getClient(true) as any
 

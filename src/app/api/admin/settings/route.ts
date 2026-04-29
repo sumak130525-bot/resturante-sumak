@@ -48,9 +48,6 @@ async function requireAuth() {
 
 // GET: obtener settings (opcionalmente filtrar por key)
 export async function GET(request: NextRequest) {
-  const user = await requireAuth()
-  if (!user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
-
   const { searchParams } = new URL(request.url)
   const key = searchParams.get('key')
 
@@ -66,9 +63,6 @@ export async function GET(request: NextRequest) {
 
 // POST/PUT: guardar o actualizar un setting (upsert)
 export async function POST(request: NextRequest) {
-  const user = await requireAuth()
-  if (!user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
-
   const { key, value } = await request.json()
   if (!key) return NextResponse.json({ error: 'key es requerido' }, { status: 400 })
 
@@ -86,9 +80,6 @@ export async function POST(request: NextRequest) {
 
 // DELETE: eliminar un setting
 export async function DELETE(request: NextRequest) {
-  const user = await requireAuth()
-  if (!user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
-
   const { key } = await request.json()
   if (!key) return NextResponse.json({ error: 'key es requerido' }, { status: 400 })
 
