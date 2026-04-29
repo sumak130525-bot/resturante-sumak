@@ -793,7 +793,7 @@ export default function CocinaPage() {
   useEffect(() => {
     if (!dismissedLoaded) return
     fetchOrders()
-    const interval = setInterval(() => fetchOrders(), 15_000)
+    const interval = setInterval(() => fetchOrders(), 5_000)
     return () => clearInterval(interval)
   }, [fetchOrders, dismissedLoaded])
 
