@@ -16,7 +16,7 @@ export type KdsItem = {
 
 export type KdsOrder = {
   id: string
-  source: 'WEB' | 'LOCAL'
+  source: 'WEB' | 'LOCAL' | 'POS'
   number: string
   customer: string
   status: string
@@ -24,13 +24,13 @@ export type KdsOrder = {
   total: number
   notes: string | null
   created_at: string
-  channel?: 'web' | 'whatsapp'
+  channel?: 'web' | 'whatsapp' | 'pos'
   customer_phone?: string | null
   // Campos extra Loyverse (LOCAL)
   orderNumber?: string      // campo 'order' del receipt (ej: 'MESA 8')
   diningOption?: string     // campo 'dining_option' (ej: 'Comer dentro')
   paymentMethod?: string    // payments[0].name (ej: 'Efectivo')
-  // Campos extra WEB
+  // Campos extra WEB / POS
   tableNumber?: string      // mesa del pedido web (del parámetro ?mesa=)
 }
 
@@ -65,25 +65,30 @@ async function getWebOrders(): Promise<KdsOrder[]> {
   if (error || !data) return []
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return (data as any[]).map((o, idx) => ({
-    id: o.id,
-    source: 'WEB' as const,
-    number: `W-${String(idx + 1).padStart(3, '0')}`,
-    customer: o.customer_name,
-    status: o.status,
-    channel: (o.channel === 'whatsapp' ? 'whatsapp' : 'web') as 'web' | 'whatsapp',
-    customer_phone: o.customer_phone ?? null,
-    tableNumber: o.table_number ?? o.mesa ?? null,
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    items: (o.order_items ?? []).map((i: any) => ({
-      name: i.menu_items?.name ?? 'Ítem',
-      quantity: i.quantity,
-      price: i.unit_price,
-    })),
-    total: o.total,
-    notes: o.notes,
-    created_at: o.created_at,
-  }))
+  return (data as any[]).map((o, idx) => {
+    const isPOS = o.channel === 'pos'
+    return {
+      id: o.id,
+      source: isPOS ? ('POS' as const) : ('WEB' as const),
+      number: isPOS ? `P-${String(idx + 1).padStart(3, '0')}` : `W-${String(idx + 1).padStart(3, '0')}`,
+      customer: o.customer_name,
+      status: o.status,
+      channel: (o.channel === 'whatsapp' ? 'whatsapp' : o.channel === 'pos' ? 'pos' : 'web') as 'web' | 'whatsapp' | 'pos',
+      customer_phone: o.customer_phone ?? null,
+      tableNumber: o.table_number ?? o.mesa ?? null,
+      diningOption: o.dining_option ?? undefined,
+      paymentMethod: o.payment_method ?? undefined,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      items: (o.order_items ?? []).map((i: any) => ({
+        name: i.menu_items?.name ?? 'Ítem',
+        quantity: i.quantity,
+        price: i.unit_price,
+      })),
+      total: o.total,
+      notes: o.notes,
+      created_at: o.created_at,
+    }
+  })
 }
 
 // ─── Loyverse ─────────────────────────────────────────────────────────────────

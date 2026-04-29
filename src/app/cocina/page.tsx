@@ -288,7 +288,7 @@ type KdsItem = {
 
 type KdsOrder = {
   id: string
-  source: 'WEB' | 'LOCAL'
+  source: 'WEB' | 'LOCAL' | 'POS'
   number: string
   customer: string
   status: string
@@ -296,7 +296,7 @@ type KdsOrder = {
   total: number
   notes: string | null
   created_at: string
-  channel?: 'web' | 'whatsapp'
+  channel?: 'web' | 'whatsapp' | 'pos'
   customer_phone?: string | null
   orderNumber?: string
   diningOption?: string
@@ -304,7 +304,7 @@ type KdsOrder = {
   tableNumber?: string
 }
 
-type FilterSource = 'ALL' | 'WEB' | 'LOCAL'
+type FilterSource = 'ALL' | 'WEB' | 'LOCAL' | 'POS'
 type ActiveTab = 'cocina' | 'entregados'
 
 // ─── Color de cabecera según tiempo transcurrido ──────────────────────────────
@@ -349,7 +349,7 @@ function OrderCard({
   isDelivered,
 }: {
   order: KdsOrder
-  onDeliver?: (id: string, source: 'WEB' | 'LOCAL') => void
+  onDeliver?: (id: string, source: 'WEB' | 'LOCAL' | 'POS') => void
   onRecover?: (id: string) => void
   isDelivered?: boolean
 }) {
@@ -438,6 +438,8 @@ function OrderCard({
           <span
             className={`text-xs font-bold px-2 py-0.5 rounded-full ${
               order.source === 'WEB' && order.channel === 'whatsapp'
+                ? 'bg-white/30 text-white'
+                : order.source === 'POS'
                 ? 'bg-white/30 text-white'
                 : order.source === 'WEB'
                 ? 'bg-white/30 text-white'
@@ -824,7 +826,7 @@ export default function CocinaPage() {
   }, [fetchOrders, playBeep])
 
   // ── Marcar como ENTREGADO ──────────────────────────────────────────────────
-  const handleDeliver = useCallback(async (id: string, source: 'WEB' | 'LOCAL') => {
+  const handleDeliver = useCallback(async (id: string, source: 'WEB' | 'LOCAL' | 'POS') => {
     const order = orders.find((o) => o.id === id)
     if (!order) return
 
@@ -836,7 +838,7 @@ export default function CocinaPage() {
     setOrders((prev) => prev.filter((o) => o.id !== id))
     setDeliveredOrders((prev) => [deliveredOrder, ...prev])
 
-    if (source === 'WEB') {
+    if (source === 'WEB' || source === 'POS') {
       try {
         const res = await fetch('/api/admin/orders', {
           method: 'PUT',
@@ -861,13 +863,13 @@ export default function CocinaPage() {
     dismissedIdsRef.current.delete(id)
     removeDismissed(id)
 
-    const recoveredOrder = { ...order, status: order.source === 'WEB' ? 'ready' : 'confirmed' }
+    const recoveredOrder = { ...order, status: order.source === 'WEB' || order.source === 'POS' ? 'ready' : 'confirmed' }
     setDeliveredOrders((prev) => prev.filter((o) => o.id !== id))
     setOrders((prev) => [...prev, recoveredOrder].sort(
       (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
     ))
 
-    if (order.source === 'WEB') {
+    if (order.source === 'WEB' || order.source === 'POS') {
       fetch('/api/admin/orders', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -981,7 +983,7 @@ export default function CocinaPage() {
         {/* Filtro origen + Refrescar */}
         <div className="flex items-center gap-2">
           <div className="flex gap-1 bg-gray-100 rounded-xl p-1">
-            {(['ALL', 'WEB', 'LOCAL'] as FilterSource[]).map((s) => (
+            {(['ALL', 'WEB', 'LOCAL', 'POS'] as FilterSource[]).map((s) => (
               <button
                 key={s}
                 onClick={() => setFilterSource(s)}
