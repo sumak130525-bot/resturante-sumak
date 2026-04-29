@@ -496,7 +496,7 @@ function OrderCard({
                     {item.name}
                   </span>
                   {item.modifiers && item.modifiers.length > 0 && (
-                    <span className={`text-base font-bold leading-snug mt-0.5 ${struck ? 'line-through text-gray-400' : 'text-gray-700'}`}>
+                    <span className={`text-base leading-snug mt-0.5 ${struck ? 'line-through text-gray-400' : 'text-gray-700'}`}>
                       {item.modifiers.join(' · ')}
                     </span>
                   )}
