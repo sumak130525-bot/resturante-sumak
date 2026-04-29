@@ -551,6 +551,22 @@ function OrderCard({
   )
 }
 
+// ─── Reloj en tiempo real ──────────────────────────────────────────────────────
+
+function ClockDisplay() {
+  const [time, setTime] = useState('')
+  useEffect(() => {
+    const update = () => {
+      const now = new Date()
+      setTime(now.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', second: '2-digit' }))
+    }
+    update()
+    const id = setInterval(update, 1000)
+    return () => clearInterval(id)
+  }, [])
+  return <>{time}</>
+}
+
 // ─── Selector de sonido ───────────────────────────────────────────────────────
 
 function SoundSelector({
@@ -894,7 +910,7 @@ export default function CocinaPage() {
   return (
     <div className="min-h-screen bg-gray-100 text-gray-900 flex flex-col select-none">
       {/* ── Barra superior ── */}
-      <header className="flex items-center justify-between px-4 py-3 bg-teal-500 shrink-0 shadow-md">
+      <header className="flex items-center justify-between px-4 py-3 bg-teal-500 shrink-0 shadow-md relative">
         <div className="flex items-center gap-3">
           <Image
             src="/logo-sumak.png"
@@ -922,6 +938,11 @@ export default function CocinaPage() {
           </div>
         </div>
 
+        {/* Reloj central grande */}
+        <div className="absolute left-1/2 -translate-x-1/2 text-white font-black text-4xl tabular-nums tracking-wider drop-shadow-lg">
+          <ClockDisplay />
+        </div>
+
         <div className="flex items-center gap-2 text-xs text-teal-100">
           {lastCount > 0 && (
             <span
@@ -932,7 +953,7 @@ export default function CocinaPage() {
             </span>
           )}
           <SoundSelector value={soundOption} onChange={handleSoundChange} />
-          <span className="hidden sm:inline text-teal-100">Actualiza cada 15s</span>
+          <span className="hidden sm:inline text-teal-100">Actualiza cada 5s</span>
           <span className="w-2 h-2 rounded-full bg-green-300 animate-pulse" />
         </div>
       </header>
