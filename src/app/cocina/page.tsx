@@ -502,7 +502,7 @@ function OrderCard({
                     </span>
                   )}
                   {item.note && (
-                    <span className={`text-base leading-snug mt-0.5 italic ${struck ? 'line-through text-gray-400' : 'text-amber-600'}`}>
+                    <span className={`text-base font-semibold leading-snug mt-0.5 ${struck ? 'line-through text-gray-400' : 'text-red-600'}`}>
                       💬 {item.note}
                     </span>
                   )}
