@@ -109,10 +109,6 @@ function saveSound(s: SoundOption) {
 
 // ── WAV synthesis helpers ──────────────────────────────────────────────────────
 
-/**
- * Renders audio frames using Web Audio API OfflineAudioContext into a WAV
- * data URI. Falls back gracefully if unavailable.
- */
 async function renderToWavDataUri(
   buildGraph: (ctx: OfflineAudioContext) => void,
   durationSec: number,
@@ -124,7 +120,6 @@ async function renderToWavDataUri(
     const buffer = await offlineCtx.startRendering()
     const samples = buffer.getChannelData(0)
 
-    // PCM 16-bit WAV
     const numSamples = samples.length
     const byteLength = 44 + numSamples * 2
     const arrayBuffer = new ArrayBuffer(byteLength)
@@ -138,8 +133,8 @@ async function renderToWavDataUri(
     writeStr(8, 'WAVE')
     writeStr(12, 'fmt ')
     view.setUint32(16, 16, true)
-    view.setUint16(20, 1, true)       // PCM
-    view.setUint16(22, 1, true)       // mono
+    view.setUint16(20, 1, true)
+    view.setUint16(22, 1, true)
     view.setUint32(24, sampleRate, true)
     view.setUint32(28, sampleRate * 2, true)
     view.setUint16(32, 2, true)
@@ -160,7 +155,6 @@ async function renderToWavDataUri(
   }
 }
 
-// Cache so we only render each sound once per session
 const wavCache: Partial<Record<SoundOption, string>> = {}
 
 async function getWavDataUri(sound: SoundOption): Promise<string | null> {
@@ -225,7 +219,6 @@ async function getWavDataUri(sound: SoundOption): Promise<string | null> {
     return uri
 
   } else if (sound === 'loud') {
-    // 6 beeps cortos y fuertes tipo alarma de cocina comercial
     const beepDuration = 0.09
     const beepGap = 0.10
     const numBeeps = 6
@@ -253,8 +246,6 @@ async function getWavDataUri(sound: SoundOption): Promise<string | null> {
   return null
 }
 
-// WAV silencioso de ~0.1s (44 bytes header + 4410 muestras a cero @ 44100Hz)
-// Sirve para desbloquear el Audio element en el primer click del usuario
 function buildSilentWavDataUri(): string {
   const sampleRate = 44100
   const numSamples = Math.ceil(sampleRate * 0.1)
@@ -277,7 +268,6 @@ function buildSilentWavDataUri(): string {
   view.setUint16(34, 16, true)
   writeStr(36, 'data')
   view.setUint32(40, numSamples * 2, true)
-  // samples are all 0 (silence)
   const bytes = new Uint8Array(arrayBuffer)
   let binary = ''
   for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i])
@@ -316,14 +306,19 @@ type KdsOrder = {
 type FilterSource = 'ALL' | 'WEB' | 'LOCAL'
 type ActiveTab = 'cocina' | 'entregados'
 
-// ─── Colores por estado ───────────────────────────────────────────────────────
+// ─── Colores rotativos para cabeceras de tarjetas (estilo Loyverse) ───────────
 
-const STATUS_COLORS: Record<string, { border: string; badge: string; label: string; headerBg: string }> = {
-  pending:   { border: 'border-yellow-400', badge: 'bg-yellow-400 text-yellow-900',  label: 'Pendiente',  headerBg: 'bg-yellow-500'  },
-  confirmed: { border: 'border-blue-400',   badge: 'bg-blue-400 text-blue-900',      label: 'Confirmado', headerBg: 'bg-blue-600'    },
-  ready:     { border: 'border-green-400',  badge: 'bg-green-400 text-green-900',    label: 'Listo',      headerBg: 'bg-green-600'   },
-  delivered: { border: 'border-gray-500',   badge: 'bg-gray-500 text-white',         label: 'Entregado',  headerBg: 'bg-gray-600'    },
-  cancelled: { border: 'border-red-600',    badge: 'bg-red-600 text-white',          label: 'Cancelado',  headerBg: 'bg-red-700'     },
+const CARD_HEADER_COLORS = [
+  'bg-orange-400',
+  'bg-green-400',
+  'bg-blue-400',
+  'bg-purple-400',
+  'bg-teal-400',
+  'bg-pink-400',
+]
+
+function getCardHeaderColor(index: number): string {
+  return CARD_HEADER_COLORS[index % CARD_HEADER_COLORS.length]
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -338,9 +333,9 @@ function elapsed(created_at: string): string {
 
 function elapsedColor(created_at: string): string {
   const mins = (Date.now() - new Date(created_at).getTime()) / 60000
-  if (mins < 10) return 'text-green-400'
-  if (mins < 20) return 'text-yellow-400'
-  return 'text-red-400'
+  if (mins < 10) return 'text-green-700'
+  if (mins < 20) return 'text-amber-600'
+  return 'text-red-600'
 }
 
 function getOrderLabel(order: KdsOrder): string {
@@ -354,11 +349,13 @@ function getOrderLabel(order: KdsOrder): string {
 
 function OrderCard({
   order,
+  orderIndex,
   onDeliver,
   onRecover,
   isDelivered,
 }: {
   order: KdsOrder
+  orderIndex: number
   onDeliver?: (id: string, source: 'WEB' | 'LOCAL') => void
   onRecover?: (id: string) => void
   isDelivered?: boolean
@@ -388,14 +385,14 @@ function OrderCard({
     })
   }
 
-  const sc = STATUS_COLORS[order.status] ?? STATUS_COLORS.pending
+  const headerBg = isDelivered ? 'bg-gray-400' : getCardHeaderColor(orderIndex)
 
   const diningBadge = order.diningOption
     ? {
         label: order.diningOption,
         cls: order.diningOption.toLowerCase().includes('llevar')
-          ? 'bg-red-600 text-white'
-          : 'bg-green-600 text-white',
+          ? 'bg-red-100 text-red-700 border border-red-200'
+          : 'bg-green-100 text-green-700 border border-green-200',
       }
     : null
 
@@ -420,15 +417,15 @@ function OrderCard({
 
   return (
     <div
-      className={`relative flex flex-col bg-gray-900 rounded-2xl border-2 ${
+      className={`relative flex flex-col bg-white rounded-2xl border ${
         allStruck && !isDelivered
           ? 'border-green-400 shadow-[0_0_12px_2px_rgba(74,222,128,0.45)] animate-pulse'
-          : sc.border
-      } shadow-xl overflow-hidden`}
+          : 'border-gray-200'
+      } shadow-md overflow-hidden`}
     >
       {/* ── Cabecera: doble click para entregar ── */}
       <div
-        className={`${sc.headerBg} px-3 py-2 transition-opacity duration-150 ${
+        className={`${headerBg} px-3 py-2 transition-opacity duration-150 ${
           !isDelivered && onDeliver ? 'cursor-pointer select-none' : ''
         } ${singleClicked ? 'opacity-70' : 'opacity-100'}`}
         onClick={handleHeaderClick}
@@ -437,7 +434,7 @@ function OrderCard({
       >
         {/* Tooltip de primer click */}
         {singleClicked && (
-          <div className="absolute top-2 left-1/2 -translate-x-1/2 z-10 bg-black/80 text-white text-xs font-semibold px-3 py-1 rounded-full whitespace-nowrap pointer-events-none">
+          <div className="absolute top-2 left-1/2 -translate-x-1/2 z-10 bg-gray-900/90 text-white text-xs font-semibold px-3 py-1 rounded-full whitespace-nowrap pointer-events-none">
             Doble click para entregar
           </div>
         )}
@@ -445,18 +442,18 @@ function OrderCard({
         {/* Fila 1: Mesa/Orden + Tiempo */}
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2 min-w-0">
-            <span className="text-white font-black text-2xl leading-none tracking-tight drop-shadow-lg truncate">
+            <span className="text-white font-black text-2xl leading-none tracking-tight drop-shadow truncate">
               {orderLabel}
             </span>
             {order.source === 'WEB' && order.tableNumber && (
-              <span className="text-white/70 font-semibold text-xs truncate hidden sm:inline">
+              <span className="text-white/80 font-semibold text-xs truncate hidden sm:inline">
                 {order.customer}
               </span>
             )}
           </div>
-          <div className={`flex items-center gap-1 text-sm font-mono font-bold shrink-0 ${elapsedColor(order.created_at)} bg-black/30 rounded-lg px-2 py-0.5`}>
+          <div className={`flex items-center gap-1 text-sm font-mono font-bold shrink-0 ${elapsedColor(order.created_at)} bg-white/40 rounded-lg px-2 py-0.5`}>
             <span>{elapsed(order.created_at)}</span>
-            <span className="text-white/50 text-xs font-normal">
+            <span className="text-white/70 text-xs font-normal">
               {new Date(order.created_at).toLocaleTimeString('es-CO', {
                 hour: '2-digit',
                 minute: '2-digit',
@@ -470,15 +467,15 @@ function OrderCard({
           <span
             className={`text-xs font-bold px-2 py-0.5 rounded-full ${
               order.source === 'WEB' && order.channel === 'whatsapp'
-                ? 'bg-[#25D366]/20 text-[#25D366]'
+                ? 'bg-white/30 text-white'
                 : order.source === 'WEB'
-                ? 'bg-purple-900/80 text-purple-200'
-                : 'bg-orange-900/80 text-orange-200'
+                ? 'bg-white/30 text-white'
+                : 'bg-white/30 text-white'
             }`}
           >
             {order.source === 'WEB' && order.channel === 'whatsapp' ? 'WHATSAPP' : order.source}
           </span>
-          <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-black/30 text-white/80">
+          <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-white/30 text-white">
             {order.number}
           </span>
           {diningBadge && (
@@ -487,7 +484,7 @@ function OrderCard({
             </span>
           )}
           {order.paymentMethod && (
-            <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-black/30 text-white/70">
+            <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-white/30 text-white">
               {order.paymentMethod}
             </span>
           )}
@@ -496,18 +493,18 @@ function OrderCard({
         {/* Fila 3: Teléfono (solo si existe) */}
         {order.customer_phone && (
           <div className="flex items-center gap-1 mt-1">
-            <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-white/60 shrink-0">
+            <svg xmlns="http://www.w3.org/2000/svg" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-white/80 shrink-0">
               <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 13a19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 3.77 2h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l.91-.91a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 17z"/>
             </svg>
-            <span className="text-xs text-white/80 font-mono">{order.customer_phone}</span>
+            <span className="text-xs text-white/90 font-mono">{order.customer_phone}</span>
           </div>
         )}
       </div>
 
       {/* ── Items ── */}
-      <div className="flex-1 px-4 py-3 flex flex-col gap-3">
+      <div className="flex-1 px-4 py-3 flex flex-col gap-3 bg-white">
         {allStruck && !isDelivered && (
-          <div className="text-center text-green-400 text-xs font-bold animate-pulse">
+          <div className="text-center text-green-600 text-xs font-bold animate-pulse">
             Todos listos — doble click para entregar
           </div>
         )}
@@ -517,21 +514,19 @@ function OrderCard({
             return (
               <li
                 key={i}
-                className={`flex items-start gap-2 cursor-pointer select-none transition-opacity duration-150 ${
-                  struck ? 'opacity-40' : 'text-white'
-                }`}
+                className={`flex items-start gap-2 cursor-pointer select-none transition-all duration-150`}
                 onClick={() => toggleStruck(i)}
                 title={struck ? 'Click para quitar tachado' : 'Click para tachar'}
               >
-                <span className={`text-2xl font-black leading-none w-8 shrink-0 ${struck ? 'text-gray-500' : 'text-yellow-400'}`}>
+                <span className={`text-2xl font-black leading-none w-8 shrink-0 ${struck ? 'text-gray-400 line-through' : 'text-gray-900'}`}>
                   {item.quantity}×
                 </span>
                 <div className="flex flex-col min-w-0">
-                  <span className={`text-xl font-semibold leading-tight ${struck ? 'line-through text-gray-500' : ''}`}>
+                  <span className={`text-xl font-semibold leading-tight ${struck ? 'line-through text-gray-400' : 'text-gray-900'}`}>
                     {item.name}
                   </span>
                   {item.modifiers && item.modifiers.length > 0 && (
-                    <span className={`text-sm leading-snug mt-0.5 ${struck ? 'line-through text-gray-600' : 'text-cyan-300'}`}>
+                    <span className={`text-sm leading-snug mt-0.5 ${struck ? 'line-through text-gray-400' : 'text-gray-600'}`}>
                       {item.modifiers.join(' · ')}
                     </span>
                   )}
@@ -543,7 +538,7 @@ function OrderCard({
 
         {/* Notas */}
         {order.notes && (
-          <p className="text-sm text-yellow-300 italic border-t border-gray-700 pt-2">
+          <p className="text-sm text-gray-600 italic border-t border-gray-100 pt-2">
             Nota: {order.notes}
           </p>
         )}
@@ -551,10 +546,10 @@ function OrderCard({
 
       {/* ── Botón Recuperar (solo en tab Entregados) ── */}
       {isDelivered && onRecover && (
-        <div className="px-4 pb-4">
+        <div className="px-4 pb-4 bg-white">
           <button
             onClick={() => onRecover(order.id)}
-            className="w-full py-3 rounded-xl text-base font-bold bg-gray-700 text-gray-200 hover:bg-gray-600 active:scale-95 transition-all"
+            className="w-full py-3 rounded-xl text-base font-bold bg-gray-100 text-gray-700 hover:bg-gray-200 active:scale-95 transition-all border border-gray-200"
           >
             ↩ Recuperar
           </button>
@@ -576,7 +571,6 @@ function SoundSelector({
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
 
-  // Cerrar al click fuera
   useEffect(() => {
     const handler = (e: MouseEvent) => {
       if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
@@ -589,15 +583,15 @@ function SoundSelector({
     <div ref={ref} className="relative">
       <button
         onClick={() => setOpen((o) => !o)}
-        className="flex items-center gap-1.5 px-3 py-1.5 bg-gray-700 hover:bg-gray-600 rounded-lg text-sm font-bold transition-all"
+        className="flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-gray-50 border border-gray-200 rounded-lg text-sm font-bold transition-all text-gray-700 shadow-sm"
         title="Tono de notificación"
       >
         <span>{value === 'silent' ? '🔕' : '🔔'}</span>
-        <span className="hidden sm:inline text-gray-300">{SOUND_LABELS[value]}</span>
+        <span className="hidden sm:inline text-gray-600">{SOUND_LABELS[value]}</span>
       </button>
 
       {open && (
-        <div className="absolute right-0 top-full mt-1 bg-gray-800 border border-gray-700 rounded-xl shadow-2xl z-50 min-w-[140px] overflow-hidden">
+        <div className="absolute right-0 top-full mt-1 bg-white border border-gray-200 rounded-xl shadow-2xl z-50 min-w-[160px] overflow-hidden">
           {(Object.keys(SOUND_LABELS) as SoundOption[]).map((s) => (
             <button
               key={s}
@@ -607,12 +601,12 @@ function SoundSelector({
               }}
               className={`w-full text-left px-4 py-2.5 text-sm font-semibold transition-colors ${
                 value === s
-                  ? 'bg-gray-600 text-white'
-                  : 'text-gray-300 hover:bg-gray-700 hover:text-white'
+                  ? 'bg-teal-50 text-teal-700'
+                  : 'text-gray-700 hover:bg-gray-50 hover:text-gray-900'
               }`}
             >
               {s === 'silent' ? '🔕' : '🔔'} {SOUND_LABELS[s]}
-              {value === s && <span className="ml-2 text-green-400">✓</span>}
+              {value === s && <span className="ml-2 text-teal-500">✓</span>}
             </button>
           ))}
         </div>
@@ -634,14 +628,10 @@ export default function CocinaPage() {
   const [dismissedLoaded, setDismissedLoaded] = useState(false)
   const [soundOption, setSoundOption] = useState<SoundOption>('loud')
   const dismissedIdsRef = useRef<Set<string>>(new Set())
-  // Ref para leer el sonido actual dentro de callbacks sin stale closure
   const soundOptionRef = useRef<SoundOption>('loud')
-  // AudioContext persistente — se desbloquea en el primer click
   const audioCtxRef = useRef<AudioContext | null>(null)
   const audioUnlockedRef = useRef(false)
-  // Anti-duplicado: evita sonar dos veces en menos de 3 segundos
   const lastSoundTimestampRef = useRef<number>(0)
-  // Fallback polling: detecta si el count de pedidos subió
   const prevCountRef = useRef<number>(0)
 
   // Desbloquear AudioContext en cualquier interacción del usuario
@@ -656,7 +646,6 @@ export default function CocinaPage() {
           await ctx.resume()
         }
         if (!audioUnlockedRef.current) {
-          // Reproducir un buffer silencioso para desbloquear completamente
           const buf = ctx.createBuffer(1, 1, 22050)
           const src = ctx.createBufferSource()
           src.buffer = buf
@@ -686,7 +675,6 @@ export default function CocinaPage() {
     setDismissedLoaded(true)
   }, [])
 
-  // Función central de reproducción usando AudioContext
   const playSoundWithRef = useCallback(async (sound: SoundOption): Promise<void> => {
     if (sound === 'silent') return
     console.log('[cocina] playSound llamado, sound:', sound, 'unlocked:', audioUnlockedRef.current)
@@ -700,7 +688,6 @@ export default function CocinaPage() {
       }
 
       if (sound === 'loud') {
-        // Alarma fuerte: 6 beeps cortos y agresivos tipo timer de cocina comercial
         const beepDuration = 0.09
         const beepGap = 0.10
         const numBeeps = 6
@@ -770,7 +757,6 @@ export default function CocinaPage() {
     soundOptionRef.current = s
     setSoundOption(s)
     saveSound(s)
-    // Reproducir preview del sonido seleccionado (viene de un click → siempre desbloqueado)
     if (s !== 'silent') {
       await playSoundWithRef(s)
     }
@@ -798,7 +784,6 @@ export default function CocinaPage() {
 
       setOrders(data)
 
-      // Fallback polling: si el count subió (y no es el primer fetch), sonar
       if (prevCountRef.current > 0 && data.length > prevCountRef.current) {
         console.log('[cocina] Polling fallback: pedidos aumentaron de', prevCountRef.current, 'a', data.length)
         await playBeep()
@@ -908,20 +893,20 @@ export default function CocinaPage() {
   // ─────────────────────────────────────────────────────────────────────────────
 
   return (
-    <div className="min-h-screen bg-gray-950 text-white flex flex-col select-none">
+    <div className="min-h-screen bg-gray-100 text-gray-900 flex flex-col select-none">
       {/* ── Barra superior ── */}
-      <header className="flex items-center justify-between px-4 py-3 bg-gray-900 border-b border-gray-800 shrink-0">
+      <header className="flex items-center justify-between px-4 py-3 bg-teal-500 shrink-0 shadow-md">
         <div className="flex items-center gap-3">
           <Image
             src="/logo-sumak.png"
             alt="Sumak"
             width={80}
             height={32}
-            className="h-8 w-auto object-contain"
+            className="h-8 w-auto object-contain brightness-0 invert"
           />
           <div>
-            <h1 className="text-xl font-black leading-none">COCINA</h1>
-            <p className="text-gray-400 text-xs">
+            <h1 className="text-xl font-black leading-none text-white">COCINA</h1>
+            <p className="text-teal-100 text-xs">
               {activeTab === 'cocina' ? (
                 <>
                   {activeOrders.length} pedidos activos
@@ -938,36 +923,36 @@ export default function CocinaPage() {
           </div>
         </div>
 
-        <div className="flex items-center gap-2 text-xs text-gray-500">
+        <div className="flex items-center gap-2 text-xs text-teal-100">
           {lastCount > 0 && (
             <span
-              className="bg-purple-700 text-white px-2 py-1 rounded-full text-xs font-bold cursor-pointer"
+              className="bg-yellow-400 text-yellow-900 px-2 py-1 rounded-full text-xs font-bold cursor-pointer"
               onClick={() => setLastCount(0)}
             >
               +{lastCount} nuevos
             </span>
           )}
           <SoundSelector value={soundOption} onChange={handleSoundChange} />
-          <span className="hidden sm:inline">Actualiza cada 15s</span>
-          <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
+          <span className="hidden sm:inline text-teal-100">Actualiza cada 15s</span>
+          <span className="w-2 h-2 rounded-full bg-green-300 animate-pulse" />
         </div>
       </header>
 
       {/* ── Tabs principales + Filtro de origen ── */}
-      <div className="flex items-center justify-between px-4 py-2 bg-gray-900 border-b border-gray-800 shrink-0 gap-3">
+      <div className="flex items-center justify-between px-4 py-2 bg-white border-b border-gray-200 shrink-0 gap-3 shadow-sm">
         {/* Tabs */}
-        <div className="flex bg-gray-800 rounded-xl p-1 gap-1">
+        <div className="flex bg-gray-100 rounded-xl p-1 gap-1">
           <button
             onClick={() => setActiveTab('cocina')}
             className={`px-4 py-2 rounded-lg text-sm font-bold transition-all flex items-center gap-1.5 ${
               activeTab === 'cocina'
-                ? 'bg-white text-gray-900'
-                : 'text-gray-400 hover:text-white'
+                ? 'bg-teal-500 text-white shadow-sm'
+                : 'text-gray-500 hover:text-gray-800'
             }`}
           >
             En cocina
             {orders.length > 0 && (
-              <span className={`text-xs px-1.5 py-0.5 rounded-full font-black ${activeTab === 'cocina' ? 'bg-gray-900 text-white' : 'bg-gray-600 text-gray-200'}`}>
+              <span className={`text-xs px-1.5 py-0.5 rounded-full font-black ${activeTab === 'cocina' ? 'bg-white/20 text-white' : 'bg-gray-200 text-gray-600'}`}>
                 {orders.length}
               </span>
             )}
@@ -976,13 +961,13 @@ export default function CocinaPage() {
             onClick={() => setActiveTab('entregados')}
             className={`px-4 py-2 rounded-lg text-sm font-bold transition-all flex items-center gap-1.5 ${
               activeTab === 'entregados'
-                ? 'bg-white text-gray-900'
-                : 'text-gray-400 hover:text-white'
+                ? 'bg-teal-500 text-white shadow-sm'
+                : 'text-gray-500 hover:text-gray-800'
             }`}
           >
             Entregados
             {deliveredOrders.length > 0 && (
-              <span className={`text-xs px-1.5 py-0.5 rounded-full font-black ${activeTab === 'entregados' ? 'bg-gray-900 text-white' : 'bg-green-700 text-green-100'}`}>
+              <span className={`text-xs px-1.5 py-0.5 rounded-full font-black ${activeTab === 'entregados' ? 'bg-white/20 text-white' : 'bg-green-100 text-green-700'}`}>
                 {deliveredOrders.length}
               </span>
             )}
@@ -991,15 +976,15 @@ export default function CocinaPage() {
 
         {/* Filtro origen + Refrescar */}
         <div className="flex items-center gap-2">
-          <div className="flex gap-1 bg-gray-800 rounded-xl p-1">
+          <div className="flex gap-1 bg-gray-100 rounded-xl p-1">
             {(['ALL', 'WEB', 'LOCAL'] as FilterSource[]).map((s) => (
               <button
                 key={s}
                 onClick={() => setFilterSource(s)}
                 className={`px-3 py-1 rounded-lg text-sm font-bold transition-all ${
                   filterSource === s
-                    ? 'bg-white text-gray-900'
-                    : 'text-gray-400 hover:text-white'
+                    ? 'bg-white text-gray-900 shadow-sm border border-gray-200'
+                    : 'text-gray-500 hover:text-gray-800'
                 }`}
               >
                 {s === 'ALL' ? 'Todos' : s}
@@ -1013,7 +998,7 @@ export default function CocinaPage() {
               setRefreshing(false)
             }}
             disabled={refreshing}
-            className={`px-3 py-1.5 bg-gray-700 hover:bg-gray-600 rounded-lg text-sm font-bold transition-all ${refreshing ? 'opacity-60' : ''}`}
+            className={`px-3 py-1.5 bg-white hover:bg-gray-50 border border-gray-200 rounded-lg text-sm font-bold transition-all text-gray-700 shadow-sm ${refreshing ? 'opacity-60' : ''}`}
             title="Refrescar pedidos"
           >
             <span className={refreshing ? 'inline-block animate-spin' : 'inline-block'}>↻</span>
@@ -1029,17 +1014,18 @@ export default function CocinaPage() {
               <div className="text-gray-400 text-xl animate-pulse">Cargando pedidos...</div>
             </div>
           ) : activeOrders.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-full gap-4 text-gray-600">
+            <div className="flex flex-col items-center justify-center h-full gap-4 text-gray-400">
               <span className="text-6xl">🍽️</span>
-              <p className="text-xl font-semibold">Sin pedidos activos</p>
-              <p className="text-sm">Los nuevos pedidos aparecen automáticamente</p>
+              <p className="text-xl font-semibold text-gray-500">Sin pedidos activos</p>
+              <p className="text-sm text-gray-400">Los nuevos pedidos aparecen automáticamente</p>
             </div>
           ) : (
             <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-              {activeOrders.map((order) => (
+              {activeOrders.map((order, index) => (
                 <OrderCard
                   key={order.id}
                   order={order}
+                  orderIndex={index}
                   onDeliver={handleDeliver}
                 />
               ))}
@@ -1047,17 +1033,18 @@ export default function CocinaPage() {
           )
         ) : (
           filteredDelivered.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-full gap-4 text-gray-600">
+            <div className="flex flex-col items-center justify-center h-full gap-4 text-gray-400">
               <span className="text-6xl">✅</span>
-              <p className="text-xl font-semibold">Sin pedidos entregados aún</p>
-              <p className="text-sm">Los pedidos marcados como entregados aparecen aquí</p>
+              <p className="text-xl font-semibold text-gray-500">Sin pedidos entregados aún</p>
+              <p className="text-sm text-gray-400">Los pedidos marcados como entregados aparecen aquí</p>
             </div>
           ) : (
             <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-              {filteredDelivered.map((order) => (
+              {filteredDelivered.map((order, index) => (
                 <OrderCard
                   key={order.id}
                   order={order}
+                  orderIndex={index}
                   onRecover={handleRecover}
                   isDelivered
                 />
