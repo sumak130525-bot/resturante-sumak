@@ -237,14 +237,21 @@
 
 @media print {
   /* Hide everything except the ticket */
-  body > * {
-    display: none !important;
+  body * {
+    visibility: hidden;
   }
 
-  /* Re-show the ticket */
+  /* Re-show the ticket and its contents */
   #print-ticket,
-  .print-only {
+  #print-ticket * {
+    visibility: visible !important;
     display: block !important;
+  }
+
+  #print-ticket {
+    position: absolute;
+    left: 0;
+    top: 0;
   }
 
   /* Page setup: no margins, 80mm width */

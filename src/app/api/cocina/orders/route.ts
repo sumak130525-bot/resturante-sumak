@@ -75,7 +75,7 @@ async function getWebOrders(): Promise<KdsOrder[]> {
       status: o.status,
       channel: (o.channel === 'whatsapp' ? 'whatsapp' : o.channel === 'pos' ? 'pos' : 'web') as 'web' | 'whatsapp' | 'pos',
       customer_phone: o.customer_phone ?? null,
-      tableNumber: o.table_number ?? o.mesa ?? null,
+      tableNumber: o.table_number ?? o.mesa ?? (isPOS && o.notes ? (o.notes.match(/Mesa (\d+)/)?.[0] ?? null) : null),
       diningOption: o.dining_option ?? undefined,
       paymentMethod: o.payment_method ?? undefined,
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
