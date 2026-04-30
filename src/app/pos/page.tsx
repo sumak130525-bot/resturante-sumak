@@ -80,40 +80,10 @@ function printTicketPopup(data: PrintData): void {
     '',
   ].filter((l) => l !== '').join('\n')
 
-  const html = `<!DOCTYPE html>
-<html>
-<head>
-<meta charset="utf-8">
-<style>
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-  body {
-    font-family: 'Courier New', Courier, monospace;
-    font-size: 12px;
-    line-height: 1.4;
-    color: #000;
-    background: #fff;
-    width: 80mm;
-    padding: 4mm 2mm;
-  }
-  pre {
-    white-space: pre-wrap;
-    word-break: break-all;
-  }
-</style>
-</head>
-<body>
-<pre>${ticketText}</pre>
-</body>
-</html>`
-
-  const win = window.open('', '_blank', 'width=320,height=600')
-  if (!win) return
-  win.document.write(html)
-  win.document.close()
-  setTimeout(() => {
-    win.print()
-    setTimeout(() => win.close(), 1000)
-  }, 500)
+  // Save ticket text to sessionStorage and navigate to dedicated print page
+  // (avoids Chrome on Android blocking window.open popups)
+  sessionStorage.setItem('pos_ticket', ticketText)
+  window.location.href = '/pos/ticket'
 }
 
 // ─── Frequent Customer type ───────────────────────────────────────────────────
