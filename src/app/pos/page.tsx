@@ -574,7 +574,8 @@ export default function POSPage() {
   }, [])
 
   const handlePrint = useCallback(() => {
-    window.print()
+    alert('Botón funcionando, ahora intentará imprimir...')
+    setTimeout(() => window.print(), 100)
   }, [])
 
   const handleBackFromPrint = useCallback(() => {
