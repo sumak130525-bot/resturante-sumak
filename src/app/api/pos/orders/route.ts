@@ -27,6 +27,7 @@ export async function POST(request: NextRequest) {
       table_number,
       payment_method,
       customer_name,
+      notes: customNotes,
     } = body
 
     if (!items || !Array.isArray(items) || items.length === 0) {
@@ -38,12 +39,8 @@ export async function POST(request: NextRequest) {
 
     const supabase = getAdminClient()
 
-    // Nota de respaldo con datos operativos del POS
-    const noteParts: string[] = []
-    if (dining_option) noteParts.push(dining_option)
-    if (table_number) noteParts.push(`Mesa ${table_number}`)
-    if (payment_method) noteParts.push(payment_method)
-    const notes = noteParts.length > 0 ? noteParts.join(' · ') : null
+    // Usar nota personalizada del usuario (o null si no hay)
+    const notes = customNotes && String(customNotes).trim() ? String(customNotes).trim() : null
 
     // Crear el pedido en la tabla orders
     const { data: order, error: orderError } = await supabase

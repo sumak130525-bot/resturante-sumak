@@ -289,6 +289,7 @@ function TicketPanel({
   tableNumber,
   paymentMethod,
   customerName,
+  orderNotes,
   customers,
   onUpdateQty,
   onRemove,
@@ -296,6 +297,7 @@ function TicketPanel({
   onTableChange,
   onPaymentChange,
   onCustomerChange,
+  onNotesChange,
   onSubmit,
   submitting,
 }: {
@@ -304,6 +306,7 @@ function TicketPanel({
   tableNumber: string
   paymentMethod: PaymentMethod
   customerName: string
+  orderNotes: string
   customers: FrequentCustomer[]
   onUpdateQty: (id: string, delta: number) => void
   onRemove: (id: string) => void
@@ -311,6 +314,7 @@ function TicketPanel({
   onTableChange: (v: string) => void
   onPaymentChange: (v: PaymentMethod) => void
   onCustomerChange: (v: string) => void
+  onNotesChange: (v: string) => void
   onSubmit: () => void
   submitting: boolean
 }) {
@@ -450,6 +454,18 @@ function TicketPanel({
           />
         </div>
 
+        {/* Order notes */}
+        <div>
+          <p className="text-xs font-bold text-gray-500 mb-1 px-1">Nota del pedido</p>
+          <input
+            type="text"
+            value={orderNotes}
+            onChange={(e) => onNotesChange(e.target.value)}
+            placeholder="Nota del pedido (opcional)"
+            className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm font-semibold text-gray-900 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-teal-400"
+          />
+        </div>
+
         {/* Submit */}
         <button
           onClick={onSubmit}
@@ -488,6 +504,7 @@ export default function POSPage() {
   const [tableNumber, setTableNumber] = useState('')
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('Efectivo')
   const [customerName, setCustomerName] = useState('')
+  const [orderNotes, setOrderNotes] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [toast, setToast] = useState<string | null>(null)
   const [showPrintBtn, setShowPrintBtn] = useState(false)
@@ -550,6 +567,7 @@ export default function POSPage() {
           table_number: diningOption === 'Comer dentro' && tableNumber ? Number(tableNumber) : null,
           payment_method: paymentMethod,
           customer_name: customerName || 'POS',
+          notes: orderNotes.trim() || null,
         }),
       })
       const data = await res.json()
@@ -576,6 +594,7 @@ export default function POSPage() {
       setTicketItems([])
       setTableNumber('')
       setCustomerName('')
+      setOrderNotes('')
       setTicketOpen(false)
       setToast('Pedido enviado a cocina')
 
@@ -588,7 +607,7 @@ export default function POSPage() {
     } finally {
       setSubmitting(false)
     }
-  }, [ticketItems, diningOption, tableNumber, paymentMethod, customerName])
+  }, [ticketItems, diningOption, tableNumber, paymentMethod, customerName, orderNotes])
 
   const ticketCount = ticketItems.reduce((s, i) => s + i.quantity, 0)
 
@@ -670,6 +689,7 @@ export default function POSPage() {
               tableNumber={tableNumber}
               paymentMethod={paymentMethod}
               customerName={customerName}
+              orderNotes={orderNotes}
               customers={customers}
               onUpdateQty={handleUpdateQty}
               onRemove={handleRemove}
@@ -677,6 +697,7 @@ export default function POSPage() {
               onTableChange={setTableNumber}
               onPaymentChange={setPaymentMethod}
               onCustomerChange={setCustomerName}
+              onNotesChange={setOrderNotes}
               onSubmit={handleSubmit}
               submitting={submitting}
             />
