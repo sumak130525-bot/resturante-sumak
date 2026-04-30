@@ -380,7 +380,7 @@ function TicketPanel({
       </div>
 
       {/* Controls */}
-      <div className="px-3 pb-3 pt-2 flex flex-col gap-2.5 border-t border-gray-100 shrink-0">
+      <div className="px-3 pb-3 pt-2 flex flex-col gap-2.5 border-t border-gray-100 shrink-0 overflow-y-auto" style={{ maxHeight: '60vh' }}>
         {/* Total */}
         <div className="flex items-center justify-between px-1">
           <span className="text-gray-500 text-sm font-semibold">Total</span>
