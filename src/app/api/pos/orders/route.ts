@@ -48,12 +48,14 @@ export async function POST(request: NextRequest) {
       .insert({
         customer_name: customer_name || 'POS',
         customer_phone: null,
-        notes,
+        notes: [
+          table_number ? `Mesa ${table_number}` : '',
+          notes || '',
+        ].filter(Boolean).join(' | ') || null,
         total: total ?? 0,
         status: 'pending',
         channel: 'pos',
         dining_option: dining_option || null,
-        table_number: table_number || null,
         payment_method: payment_method || null,
       })
       .select()

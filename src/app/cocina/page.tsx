@@ -515,11 +515,14 @@ function OrderCard({
         </ul>
 
         {/* Notas */}
-        {order.notes && (
-          <p className="text-sm text-gray-600 italic border-t border-gray-100 pt-2">
-            Nota: {order.notes}
-          </p>
-        )}
+        {order.notes && (() => {
+          const note = order.notes.includes(' | ') ? order.notes.split(' | ').slice(1).join(' | ') : order.notes.replace(/^Mesa \d+$/, '')
+          return note.trim() ? (
+            <p className="text-sm text-gray-600 italic border-t border-gray-100 pt-2">
+              Nota: {note.trim()}
+            </p>
+          ) : null
+        })()}
       </div>
 
       {/* ── Botón Recuperar (solo en tab Entregados) ── */}
