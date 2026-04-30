@@ -281,45 +281,156 @@ function CustomerCombobox({
   )
 }
 
-// ─── Ticket Panel ─────────────────────────────────────────────────────────────
+// ─── Confirm Modal ────────────────────────────────────────────────────────────
 
-function TicketPanel({
-  items,
+function ConfirmModal({
   diningOption,
   tableNumber,
   paymentMethod,
   customerName,
   orderNotes,
   customers,
-  onUpdateQty,
-  onRemove,
-  onDiningChange,
+  submitting,
   onTableChange,
   onPaymentChange,
   onCustomerChange,
   onNotesChange,
-  onSubmit,
-  submitting,
+  onCancel,
+  onConfirm,
 }: {
-  items: TicketItem[]
   diningOption: DiningOption
   tableNumber: string
   paymentMethod: PaymentMethod
   customerName: string
   orderNotes: string
   customers: FrequentCustomer[]
-  onUpdateQty: (id: string, delta: number) => void
-  onRemove: (id: string) => void
-  onDiningChange: (v: DiningOption) => void
+  submitting: boolean
   onTableChange: (v: string) => void
   onPaymentChange: (v: PaymentMethod) => void
   onCustomerChange: (v: string) => void
   onNotesChange: (v: string) => void
-  onSubmit: () => void
-  submitting: boolean
+  onCancel: () => void
+  onConfirm: () => void
+}) {
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+      onClick={(e) => { if (e.target === e.currentTarget) onCancel() }}
+    >
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm mx-4 flex flex-col overflow-hidden">
+        {/* Modal header */}
+        <div className="px-5 py-4 bg-teal-600">
+          <h3 className="text-white font-black text-lg leading-none">Confirmar pedido</h3>
+        </div>
+
+        {/* Modal body */}
+        <div className="px-5 py-4 flex flex-col gap-4">
+          {/* Table number (only if Comer dentro) */}
+          {diningOption === 'Comer dentro' && (
+            <div>
+              <p className="text-xs font-bold text-gray-500 mb-1">Número de mesa</p>
+              <input
+                type="number"
+                inputMode="numeric"
+                min={1}
+                max={99}
+                value={tableNumber}
+                onChange={(e) => onTableChange(e.target.value)}
+                placeholder="Mesa #"
+                className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-base font-bold text-gray-900 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-teal-400 tabular-nums"
+              />
+            </div>
+          )}
+
+          {/* Payment method */}
+          <div>
+            <p className="text-xs font-bold text-gray-500 mb-1">Método de pago</p>
+            <div className="grid grid-cols-2 gap-1.5">
+              {(['Efectivo', 'Transferencia'] as PaymentMethod[]).map((pm) => (
+                <button
+                  key={pm}
+                  onClick={() => onPaymentChange(pm)}
+                  className={`py-2.5 rounded-xl font-bold text-sm transition-all active:scale-95 ${
+                    paymentMethod === pm
+                      ? 'bg-teal-600 text-white shadow-sm'
+                      : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                  }`}
+                >
+                  {pm === 'Efectivo' ? '💵 Efectivo' : '📲 Transfer'}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Customer */}
+          <div>
+            <p className="text-xs font-bold text-gray-500 mb-1">Cliente</p>
+            <CustomerCombobox
+              value={customerName}
+              onChange={onCustomerChange}
+              customers={customers}
+            />
+          </div>
+
+          {/* Order notes */}
+          <div>
+            <p className="text-xs font-bold text-gray-500 mb-1">Nota del pedido</p>
+            <input
+              type="text"
+              value={orderNotes}
+              onChange={(e) => onNotesChange(e.target.value)}
+              placeholder="Nota del pedido (opcional)"
+              className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm font-semibold text-gray-900 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-teal-400"
+            />
+          </div>
+        </div>
+
+        {/* Modal footer */}
+        <div className="px-5 pb-5 flex gap-3">
+          <button
+            onClick={onCancel}
+            disabled={submitting}
+            className="flex-1 py-3 rounded-xl font-bold text-sm bg-gray-100 text-gray-700 hover:bg-gray-200 active:scale-95 transition-all"
+          >
+            Cancelar
+          </button>
+          <button
+            onClick={onConfirm}
+            disabled={submitting}
+            className={`flex-1 py-3 rounded-xl font-bold text-sm transition-all active:scale-95 shadow-md ${
+              submitting
+                ? 'bg-gray-300 text-gray-400 cursor-not-allowed'
+                : 'bg-green-500 hover:bg-green-600 text-white cursor-pointer'
+            }`}
+          >
+            {submitting ? 'Enviando...' : 'Confirmar y Enviar'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── Ticket Panel ─────────────────────────────────────────────────────────────
+
+function TicketPanel({
+  items,
+  diningOption,
+  onUpdateQty,
+  onRemove,
+  onDiningChange,
+  onOpenConfirm,
+}: {
+  items: TicketItem[]
+  diningOption: DiningOption
+  onUpdateQty: (id: string, delta: number) => void
+  onRemove: (id: string) => void
+  onDiningChange: (v: DiningOption) => void
+  onOpenConfirm: () => void
 }) {
   const total = items.reduce((s, i) => s + i.price * i.quantity, 0)
   const isEmpty = items.length === 0
+  const itemCount = items.reduce((s, i) => s + i.quantity, 0)
 
   return (
     <div className="flex flex-col h-full bg-white" style={{ minHeight: 0 }}>
@@ -327,11 +438,23 @@ function TicketPanel({
       <div className="px-4 py-3 bg-teal-600 shrink-0">
         <h2 className="text-white font-black text-lg leading-none">Ticket</h2>
         {!isEmpty && (
-          <p className="text-teal-100 text-xs mt-0.5">{items.reduce((s, i) => s + i.quantity, 0)} items</p>
+          <p className="text-teal-100 text-xs mt-0.5">{itemCount} items</p>
         )}
       </div>
 
-      {/* Items list */}
+      {/* Dining option — compact select */}
+      <div className="px-3 pt-2.5 pb-1.5 shrink-0 border-b border-gray-100">
+        <select
+          value={diningOption}
+          onChange={(e) => onDiningChange(e.target.value as DiningOption)}
+          className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm font-semibold text-gray-900 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-teal-400 cursor-pointer"
+        >
+          <option value="Comer dentro">🪑 Comer dentro</option>
+          <option value="Para llevar">🛍️ Para llevar</option>
+        </select>
+      </div>
+
+      {/* Items list — flex-1, scrollable */}
       <div className="flex-1 overflow-y-auto px-3 py-2" style={{ minHeight: 0 }}>
         {isEmpty ? (
           <div className="flex flex-col items-center justify-center h-full text-gray-400 gap-2 py-8">
@@ -340,34 +463,37 @@ function TicketPanel({
             <p className="text-xs">Tocá un plato para agregar</p>
           </div>
         ) : (
-          <ul className="flex flex-col gap-2">
+          <ul className="flex flex-col gap-1">
             {items.map((item) => (
-              <li key={item.menu_item_id} className="flex items-center gap-2 bg-gray-50 rounded-xl px-3 py-2 border border-gray-100">
+              <li
+                key={item.menu_item_id}
+                className="flex items-center gap-1.5 bg-gray-50 rounded-xl px-2.5 py-1.5 border border-gray-100"
+              >
                 <div className="flex-1 min-w-0">
                   <p className="font-semibold text-gray-900 text-sm leading-tight truncate">{item.name}</p>
                   <p className="text-teal-600 font-bold text-xs tabular-nums">
                     {formatARS(item.price)} × {item.quantity} = {formatARS(item.price * item.quantity)}
                   </p>
                 </div>
-                <div className="flex items-center gap-1 shrink-0">
+                <div className="flex items-center gap-0.5 shrink-0">
                   <button
                     onClick={() => onUpdateQty(item.menu_item_id, -1)}
-                    className="w-8 h-8 rounded-lg bg-gray-200 hover:bg-gray-300 active:scale-90 flex items-center justify-center font-black text-gray-700 text-base transition-all"
+                    className="w-6 h-6 rounded-md bg-gray-200 hover:bg-gray-300 active:scale-90 flex items-center justify-center font-black text-gray-700 text-sm transition-all"
                     aria-label="Quitar uno"
                   >
                     −
                   </button>
-                  <span className="w-8 text-center font-black text-gray-900 tabular-nums text-base">{item.quantity}</span>
+                  <span className="w-6 text-center font-black text-gray-900 tabular-nums text-sm">{item.quantity}</span>
                   <button
                     onClick={() => onUpdateQty(item.menu_item_id, +1)}
-                    className="w-8 h-8 rounded-lg bg-teal-100 hover:bg-teal-200 active:scale-90 flex items-center justify-center font-black text-teal-700 text-base transition-all"
+                    className="w-6 h-6 rounded-md bg-teal-100 hover:bg-teal-200 active:scale-90 flex items-center justify-center font-black text-teal-700 text-sm transition-all"
                     aria-label="Agregar uno"
                   >
                     +
                   </button>
                   <button
                     onClick={() => onRemove(item.menu_item_id)}
-                    className="w-8 h-8 rounded-lg bg-red-100 hover:bg-red-200 active:scale-90 flex items-center justify-center text-red-600 font-black text-sm transition-all ml-1"
+                    className="w-6 h-6 rounded-md bg-red-100 hover:bg-red-200 active:scale-90 flex items-center justify-center text-red-600 font-black text-xs transition-all ml-0.5"
                     aria-label="Eliminar"
                   >
                     ✕
@@ -379,105 +505,23 @@ function TicketPanel({
         )}
       </div>
 
-      {/* Controls */}
-      <div className="px-3 pb-3 pt-2 flex flex-col gap-2.5 border-t border-gray-100 shrink-0 overflow-y-auto" style={{ maxHeight: '60vh' }}>
-        {/* Total */}
-        <div className="flex items-center justify-between px-1">
+      {/* Bottom fixed bar */}
+      <div className="px-3 pb-3 pt-3 border-t border-gray-200 shrink-0 bg-white">
+        <div className="flex items-center justify-between mb-3 px-1">
           <span className="text-gray-500 text-sm font-semibold">Total</span>
-          <span className="text-gray-900 font-black text-xl tabular-nums">{formatARS(total)}</span>
+          <span className="text-gray-900 font-black text-2xl tabular-nums">{formatARS(total)}</span>
         </div>
-
-        {/* Dining option toggle */}
-        <div>
-          <p className="text-xs font-bold text-gray-500 mb-1 px-1">Modalidad</p>
-          <div className="grid grid-cols-2 gap-1.5">
-            {(['Comer dentro', 'Para llevar'] as DiningOption[]).map((opt) => (
-              <button
-                key={opt}
-                onClick={() => onDiningChange(opt)}
-                className={`py-2.5 rounded-xl font-bold text-sm transition-all active:scale-95 ${
-                  diningOption === opt
-                    ? 'bg-teal-600 text-white shadow-sm'
-                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                }`}
-              >
-                {opt === 'Comer dentro' ? '🪑 Dentro' : '🛍️ Llevar'}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Table number (only if Comer dentro) */}
-        {diningOption === 'Comer dentro' && (
-          <div>
-            <p className="text-xs font-bold text-gray-500 mb-1 px-1">Número de mesa</p>
-            <input
-              type="number"
-              inputMode="numeric"
-              min={1}
-              max={99}
-              value={tableNumber}
-              onChange={(e) => onTableChange(e.target.value)}
-              placeholder="Mesa #"
-              className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-base font-bold text-gray-900 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-teal-400 tabular-nums"
-            />
-          </div>
-        )}
-
-        {/* Payment method */}
-        <div>
-          <p className="text-xs font-bold text-gray-500 mb-1 px-1">Pago</p>
-          <div className="grid grid-cols-2 gap-1.5">
-            {(['Efectivo', 'Transferencia'] as PaymentMethod[]).map((pm) => (
-              <button
-                key={pm}
-                onClick={() => onPaymentChange(pm)}
-                className={`py-2.5 rounded-xl font-bold text-sm transition-all active:scale-95 ${
-                  paymentMethod === pm
-                    ? 'bg-teal-600 text-white shadow-sm'
-                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                }`}
-              >
-                {pm === 'Efectivo' ? '💵 Efectivo' : '📲 Transfer'}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Customer */}
-        <div>
-          <p className="text-xs font-bold text-gray-500 mb-1 px-1">Cliente</p>
-          <CustomerCombobox
-            value={customerName}
-            onChange={onCustomerChange}
-            customers={customers}
-          />
-        </div>
-
-        {/* Order notes */}
-        <div>
-          <p className="text-xs font-bold text-gray-500 mb-1 px-1">Nota del pedido</p>
-          <input
-            type="text"
-            value={orderNotes}
-            onChange={(e) => onNotesChange(e.target.value)}
-            placeholder="Nota del pedido (opcional)"
-            className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm font-semibold text-gray-900 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-teal-400"
-          />
-        </div>
-
-        {/* Submit */}
         <button
-          onClick={onSubmit}
-          disabled={isEmpty || submitting}
+          onClick={onOpenConfirm}
+          disabled={isEmpty}
           className={`w-full py-4 rounded-2xl font-black text-lg tracking-wide transition-all active:scale-95 shadow-md ${
-            isEmpty || submitting
+            isEmpty
               ? 'bg-gray-300 text-gray-400 cursor-not-allowed'
               : 'bg-green-500 hover:bg-green-600 text-white cursor-pointer'
           }`}
           style={{ minHeight: 56 }}
         >
-          {submitting ? 'Enviando...' : 'ENVIAR PEDIDO'}
+          ENVIAR PEDIDO
         </button>
       </div>
     </div>
@@ -508,6 +552,7 @@ export default function POSPage() {
   const [submitting, setSubmitting] = useState(false)
   const [toast, setToast] = useState<string | null>(null)
   const [showPrintBtn, setShowPrintBtn] = useState(false)
+  const [showConfirmModal, setShowConfirmModal] = useState(false)
 
   // Ticket panel open/close
   const [ticketOpen, setTicketOpen] = useState(false)
@@ -596,6 +641,7 @@ export default function POSPage() {
       setCustomerName('')
       setOrderNotes('')
       setTicketOpen(false)
+      setShowConfirmModal(false)
       setToast('Pedido enviado a cocina')
 
       // Print ticket via popup window
@@ -686,24 +732,33 @@ export default function POSPage() {
             <TicketPanel
               items={ticketItems}
               diningOption={diningOption}
-              tableNumber={tableNumber}
-              paymentMethod={paymentMethod}
-              customerName={customerName}
-              orderNotes={orderNotes}
-              customers={customers}
               onUpdateQty={handleUpdateQty}
               onRemove={handleRemove}
               onDiningChange={setDiningOption}
-              onTableChange={setTableNumber}
-              onPaymentChange={setPaymentMethod}
-              onCustomerChange={setCustomerName}
-              onNotesChange={setOrderNotes}
-              onSubmit={handleSubmit}
-              submitting={submitting}
+              onOpenConfirm={() => setShowConfirmModal(true)}
             />
           )}
         </aside>
       </div>
+
+      {/* ── Confirm Modal ── */}
+      {showConfirmModal && (
+        <ConfirmModal
+          diningOption={diningOption}
+          tableNumber={tableNumber}
+          paymentMethod={paymentMethod}
+          customerName={customerName}
+          orderNotes={orderNotes}
+          customers={customers}
+          submitting={submitting}
+          onTableChange={setTableNumber}
+          onPaymentChange={setPaymentMethod}
+          onCustomerChange={setCustomerName}
+          onNotesChange={setOrderNotes}
+          onCancel={() => setShowConfirmModal(false)}
+          onConfirm={handleSubmit}
+        />
+      )}
 
       {/* ── Toast ── */}
       {toast && (
