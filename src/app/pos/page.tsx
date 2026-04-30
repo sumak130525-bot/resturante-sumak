@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useCallback, useEffect, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import Image from 'next/image'
 import { useMenuRealtime } from '@/hooks/useMenuRealtime'
 import type { MenuItem } from '@/lib/types'
@@ -34,12 +35,15 @@ function formatTicketMoney(amount: number): string {
 }
 
 function PrintTicket({ data }: { data: PrintData | null }) {
-  if (!data) return null
+  const [mounted, setMounted] = useState(false)
+  useEffect(() => { setMounted(true) }, [])
+
+  if (!data || !mounted) return null
 
   const LINE = '================================'
   const total = formatTicketMoney(data.total)
 
-  return (
+  const ticket = (
     <div id="print-ticket" className="print-only">
       <p style={{ textAlign: 'center', fontWeight: 'bold', fontSize: '16px', marginBottom: '4px' }}>SUMAK</p>
       <p style={{ textAlign: 'center', fontSize: '11px', marginBottom: '8px' }}>Restaurante</p>
@@ -55,7 +59,6 @@ function PrintTicket({ data }: { data: PrintData | null }) {
         const qty = String(item.quantity)
         const name = item.name
         const sub = formatTicketMoney(item.price * item.quantity)
-        // Format: "2x Nombre ............ $sub"
         const prefix = qty + 'x ' + name
         const maxPrefix = 48 - sub.length - 1
         const dots = maxPrefix > prefix.length
@@ -80,6 +83,9 @@ function PrintTicket({ data }: { data: PrintData | null }) {
       <p>&nbsp;</p>
     </div>
   )
+
+  // Render as direct child of body using Portal
+  return createPortal(ticket, document.body)
 }
 
 // ─── Frequent Customer type ───────────────────────────────────────────────────
