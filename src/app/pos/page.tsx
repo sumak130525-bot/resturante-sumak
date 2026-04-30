@@ -535,8 +535,7 @@ export default function POSPage() {
     setTicketItems((prev) => prev.filter((i) => i.menu_item_id !== id))
   }, [])
 
-  // Print ticket using React state
-  const [showPrintView, setShowPrintView] = useState(false)
+  // Print ticket - keep POS visible, print from hidden div
   const [printContent, setPrintContent] = useState('')
 
   const printTicket = useCallback((data: PrintData) => {
@@ -570,14 +569,11 @@ export default function POSPage() {
     lines.push('')
 
     setPrintContent(lines.join('\n'))
-    setShowPrintView(true)
-    // Call print after React renders the content
-    setTimeout(() => window.print(), 300)
-  }, [])
-
-  const handleBackFromPrint = useCallback(() => {
-    setShowPrintView(false)
-    setPrintContent('')
+    // Give React time to render, then print
+    setTimeout(() => {
+      window.print()
+      setTimeout(() => setPrintContent(''), 1000)
+    }, 500)
   }, [])
 
   const handleSubmit = useCallback(async () => {
@@ -635,25 +631,6 @@ export default function POSPage() {
   }, [ticketItems, diningOption, tableNumber, paymentMethod, customerName])
 
   const ticketCount = ticketItems.reduce((s, i) => s + i.quantity, 0)
-
-  // If in print view, show only the ticket
-  if (showPrintView) {
-    return (
-      <>
-        <div id="pos-print-ticket" style={{ fontFamily: "'Courier New', monospace", fontSize: '12px', lineHeight: '1.4', margin: 0, padding: '2mm', width: '80mm', whiteSpace: 'pre-wrap' }}>
-          {printContent}
-        </div>
-        <div style={{ marginTop: '16px', padding: '8px' }} className="no-print">
-          <button
-            onClick={handleBackFromPrint}
-            style={{ fontSize: '20px', padding: '12px 24px', background: '#6b7280', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer' }}
-          >
-            ← VOLVER AL POS
-          </button>
-        </div>
-      </>
-    )
-  }
 
   return (
     <div className="fixed inset-0 flex flex-col bg-gray-100 overflow-hidden select-none" style={{ fontFamily: "'Inter', sans-serif" }}>
@@ -762,6 +739,28 @@ export default function POSPage() {
           <span className="text-xl">🧾</span>
           <span>Ver Ticket ({ticketCount})</span>
         </button>
+      )}
+
+      {/* ── Print ticket div: off-screen but rendered for printing ── */}
+      {printContent && (
+        <div
+          id="pos-print-ticket"
+          style={{
+            position: 'fixed',
+            left: '-9999px',
+            top: 0,
+            fontFamily: "'Courier New', monospace",
+            fontSize: '12px',
+            lineHeight: '1.4',
+            width: '80mm',
+            padding: '2mm',
+            whiteSpace: 'pre-wrap',
+            color: '#000',
+            background: '#fff',
+          }}
+        >
+          {printContent}
+        </div>
       )}
 
     </div>
