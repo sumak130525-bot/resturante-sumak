@@ -80,10 +80,15 @@ function printTicketPopup(data: PrintData): void {
     '',
   ].filter((l) => l !== '').join('\n')
 
-  // Save ticket text to sessionStorage and navigate to dedicated print page
-  // (avoids Chrome on Android blocking window.open popups)
-  sessionStorage.setItem('pos_ticket', ticketText)
-  window.location.href = '/pos/ticket'
+  // Replace body content with ticket, print, then restore
+  const originalContent = document.body.innerHTML
+  document.body.innerHTML = `
+    <pre style="font-family: 'Courier New', monospace; font-size: 12px; line-height: 1.4; width: 80mm; margin: 0; padding: 2mm; color: black; white-space: pre-wrap; word-break: break-all;">${ticketText}</pre>
+  `
+  window.print()
+  // Restore after print dialog closes (print() is synchronous on most browsers)
+  document.body.innerHTML = originalContent
+  window.location.reload()
 }
 
 // ─── Frequent Customer type ───────────────────────────────────────────────────
