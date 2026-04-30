@@ -699,8 +699,10 @@ export default function POSPage() {
                 const ticket = (window as any).__pendingTicket
                 if (ticket) {
                   document.body.innerHTML = `<pre style="font-family:'Courier New',monospace;font-size:12px;line-height:1.4;width:80mm;margin:0;padding:2mm;color:black;white-space:pre-wrap;">${ticket}</pre>`
-                  window.print()
-                  window.location.reload()
+                  setTimeout(() => {
+                    window.print()
+                    setTimeout(() => window.location.reload(), 1000)
+                  }, 300)
                 }
               }}
               className="px-8 py-4 bg-green-500 text-white text-2xl font-bold rounded-xl shadow-lg active:scale-95"
