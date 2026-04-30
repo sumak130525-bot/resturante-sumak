@@ -70,7 +70,6 @@ export async function POST(request: NextRequest) {
       menu_item_id: item.menu_item_id,
       quantity: item.quantity,
       unit_price: Math.round(item.price),
-      subtotal: Math.round(item.price * item.quantity),
     }))
 
     const { error: itemsError } = await supabase
