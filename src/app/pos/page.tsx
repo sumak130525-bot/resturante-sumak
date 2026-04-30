@@ -535,7 +535,7 @@ export default function POSPage() {
     setTicketItems((prev) => prev.filter((i) => i.menu_item_id !== id))
   }, [])
 
-  // Print ticket using React state (keeps JS context alive)
+  // Print ticket using React state
   const [showPrintView, setShowPrintView] = useState(false)
   const [printContent, setPrintContent] = useState('')
 
@@ -571,11 +571,8 @@ export default function POSPage() {
 
     setPrintContent(lines.join('\n'))
     setShowPrintView(true)
-  }, [])
-
-  const handlePrint = useCallback(() => {
-    alert('Botón funcionando, ahora intentará imprimir...')
-    setTimeout(() => window.print(), 100)
+    // Call print after React renders the content
+    setTimeout(() => window.print(), 300)
   }, [])
 
   const handleBackFromPrint = useCallback(() => {
@@ -642,24 +639,19 @@ export default function POSPage() {
   // If in print view, show only the ticket
   if (showPrintView) {
     return (
-      <div style={{ padding: '4mm 2mm', background: '#fff', minHeight: '100vh' }}>
-        <pre style={{ fontFamily: "'Courier New', monospace", fontSize: '12px', lineHeight: '1.4', margin: 0, width: '80mm' }}>
+      <>
+        <div id="pos-print-ticket" style={{ fontFamily: "'Courier New', monospace", fontSize: '12px', lineHeight: '1.4', margin: 0, padding: '2mm', width: '80mm', whiteSpace: 'pre-wrap' }}>
           {printContent}
-        </pre>
-        <br />
-        <button
-          onClick={handlePrint}
-          style={{ fontSize: '20px', padding: '12px 24px', background: '#0d9488', color: 'white', border: 'none', borderRadius: '8px', margin: '8px 4px', cursor: 'pointer' }}
-        >
-          🖨️ IMPRIMIR
-        </button>
-        <button
-          onClick={handleBackFromPrint}
-          style={{ fontSize: '20px', padding: '12px 24px', background: '#6b7280', color: 'white', border: 'none', borderRadius: '8px', margin: '8px 4px', cursor: 'pointer' }}
-        >
-          ← VOLVER AL POS
-        </button>
-      </div>
+        </div>
+        <div style={{ marginTop: '16px', padding: '8px' }} className="no-print">
+          <button
+            onClick={handleBackFromPrint}
+            style={{ fontSize: '20px', padding: '12px 24px', background: '#6b7280', color: 'white', border: 'none', borderRadius: '8px', cursor: 'pointer' }}
+          >
+            ← VOLVER AL POS
+          </button>
+        </div>
+      </>
     )
   }
 
