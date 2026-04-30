@@ -1,24 +1,11 @@
 'use client'
 
 import { useState, useCallback, useEffect, useRef } from 'react'
-import { createPortal } from 'react-dom'
 import Image from 'next/image'
 import { useMenuRealtime } from '@/hooks/useMenuRealtime'
 import type { MenuItem } from '@/lib/types'
 
-// ─── Print Ticket ─────────────────────────────────────────────────────────────
-
-type PrintData = {
-  orderNumber: number
-  dateStr: string
-  timeStr: string
-  items: TicketItem[]
-  total: number
-  diningOption: DiningOption
-  tableNumber: string
-  paymentMethod: PaymentMethod
-  customerName: string
-}
+// ─── Ticket helpers ───────────────────────────────────────────────────────────
 
 function pad(str: string, width: number, right = false): string {
   const s = String(str)
@@ -34,58 +21,99 @@ function formatTicketMoney(amount: number): string {
   }).format(amount)
 }
 
-function PrintTicket({ data }: { data: PrintData | null }) {
-  const [mounted, setMounted] = useState(false)
-  useEffect(() => { setMounted(true) }, [])
+type PrintData = {
+  orderNumber: number
+  dateStr: string
+  timeStr: string
+  items: TicketItem[]
+  total: number
+  diningOption: DiningOption
+  tableNumber: string
+  paymentMethod: PaymentMethod
+  customerName: string
+}
 
-  if (!data || !mounted) return null
-
+function printTicketPopup(data: PrintData): void {
   const LINE = '================================'
   const total = formatTicketMoney(data.total)
 
-  const ticket = (
-    <div id="print-ticket" className="print-only">
-      <p style={{ textAlign: 'center', fontWeight: 'bold', fontSize: '16px', marginBottom: '4px' }}>SUMAK</p>
-      <p style={{ textAlign: 'center', fontSize: '11px', marginBottom: '8px' }}>Restaurante</p>
-      <p>{LINE}</p>
-      <p>{data.dateStr}  {data.timeStr}</p>
-      <p>Pedido: P-{String(data.orderNumber).padStart(3, '0')}</p>
-      {data.diningOption === 'Comer dentro' && data.tableNumber && (
-        <p>Mesa: {data.tableNumber}</p>
-      )}
-      <p>Modalidad: {data.diningOption}</p>
-      <p>{LINE}</p>
-      {data.items.map((item) => {
-        const qty = String(item.quantity)
-        const name = item.name
-        const sub = formatTicketMoney(item.price * item.quantity)
-        const prefix = qty + 'x ' + name
-        const maxPrefix = 48 - sub.length - 1
-        const dots = maxPrefix > prefix.length
-          ? '.'.repeat(maxPrefix - prefix.length)
-          : ' '
-        return (
-          <p key={item.menu_item_id}>{prefix}{dots}{sub}</p>
-        )
-      })}
-      <p>{LINE}</p>
-      <p style={{ fontWeight: 'bold', fontSize: '14px' }}>
-        {pad('TOTAL:', 10)}{pad(total, 38 - 10, true)}
-      </p>
-      <p>Pago: {data.paymentMethod.toUpperCase()}{data.paymentMethod === 'Efectivo' ? ' [ABRIR CAJON]' : ''}</p>
-      {data.customerName && data.customerName !== 'POS' && (
-        <p>Cliente: {data.customerName}</p>
-      )}
-      <p>{LINE}</p>
-      <p style={{ textAlign: 'center' }}>Gracias por su visita!</p>
-      <p style={{ textAlign: 'center' }}>Restaurante Sumak</p>
-      <p>&nbsp;</p>
-      <p>&nbsp;</p>
-    </div>
-  )
+  const itemLines = data.items.map((item) => {
+    const qty = String(item.quantity)
+    const name = item.name
+    const sub = formatTicketMoney(item.price * item.quantity)
+    const prefix = qty + 'x ' + name
+    const maxPrefix = 48 - sub.length - 1
+    const dots = maxPrefix > prefix.length
+      ? '.'.repeat(maxPrefix - prefix.length)
+      : ' '
+    return prefix + dots + sub
+  }).join('\n')
 
-  // Render as direct child of body using Portal
-  return createPortal(ticket, document.body)
+  const mesaLine = data.diningOption === 'Comer dentro' && data.tableNumber
+    ? `Mesa: ${data.tableNumber}\n`
+    : ''
+
+  const clienteLine = data.customerName && data.customerName !== 'POS'
+    ? `Cliente: ${data.customerName}\n`
+    : ''
+
+  const totalLine = pad('TOTAL:', 10) + pad(total, 38 - 10, true)
+
+  const ticketText = [
+    '          SUMAK',
+    '        Restaurante',
+    LINE,
+    `${data.dateStr}  ${data.timeStr}`,
+    `Pedido: P-${String(data.orderNumber).padStart(3, '0')}`,
+    mesaLine.trimEnd(),
+    `Modalidad: ${data.diningOption}`,
+    LINE,
+    itemLines,
+    LINE,
+    totalLine,
+    `Pago: ${data.paymentMethod.toUpperCase()}${data.paymentMethod === 'Efectivo' ? ' [ABRIR CAJON]' : ''}`,
+    clienteLine.trimEnd(),
+    LINE,
+    '     Gracias por su visita!',
+    '      Restaurante Sumak',
+    '',
+    '',
+  ].filter((l) => l !== '').join('\n')
+
+  const html = `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 12px;
+    line-height: 1.4;
+    color: #000;
+    background: #fff;
+    width: 80mm;
+    padding: 4mm 2mm;
+  }
+  pre {
+    white-space: pre-wrap;
+    word-break: break-all;
+  }
+</style>
+</head>
+<body>
+<pre>${ticketText}</pre>
+</body>
+</html>`
+
+  const win = window.open('', '_blank', 'width=320,height=600')
+  if (!win) return
+  win.document.write(html)
+  win.document.close()
+  setTimeout(() => {
+    win.print()
+    setTimeout(() => win.close(), 1000)
+  }, 500)
 }
 
 // ─── Frequent Customer type ───────────────────────────────────────────────────
@@ -538,17 +566,6 @@ export default function POSPage() {
     setTicketItems((prev) => prev.filter((i) => i.menu_item_id !== id))
   }, [])
 
-  // Print ticket - original approach that triggered the printer
-  const [printData, setPrintData] = useState<PrintData | null>(null)
-
-  const printTicket = useCallback((data: PrintData) => {
-    setPrintData(data)
-    setTimeout(() => {
-      window.print()
-      setTimeout(() => setPrintData(null), 1000)
-    }, 500)
-  }, [])
-
   const handleSubmit = useCallback(async () => {
     if (ticketItems.length === 0) return
     setSubmitting(true)
@@ -593,8 +610,8 @@ export default function POSPage() {
       setTicketOpen(false)
       setToast('Pedido enviado a cocina')
 
-      // Print ticket in a new window
-      printTicket(snapshot)
+      // Print ticket via popup window
+      printTicketPopup(snapshot)
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Error al enviar pedido'
       setToast(`Error: ${msg}`)
@@ -713,9 +730,6 @@ export default function POSPage() {
           <span>Ver Ticket ({ticketCount})</span>
         </button>
       )}
-
-      {/* ── Print Ticket (hidden on screen, visible only on print) ── */}
-      <PrintTicket data={printData} />
 
     </div>
   )
