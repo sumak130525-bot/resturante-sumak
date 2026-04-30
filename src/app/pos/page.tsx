@@ -80,15 +80,8 @@ function printTicketPopup(data: PrintData): void {
     '',
   ].filter((l) => l !== '').join('\n')
 
-  // Replace body content with ticket, print, then restore
-  const originalContent = document.body.innerHTML
-  document.body.innerHTML = `
-    <pre style="font-family: 'Courier New', monospace; font-size: 12px; line-height: 1.4; width: 80mm; margin: 0; padding: 2mm; color: black; white-space: pre-wrap; word-break: break-all;">${ticketText}</pre>
-  `
-  window.print()
-  // Restore after print dialog closes (print() is synchronous on most browsers)
-  document.body.innerHTML = originalContent
-  window.location.reload()
+  // Save ticket text globally so the print button can use it
+  ;(window as any).__pendingTicket = ticketText
 }
 
 // ─── Frequent Customer type ───────────────────────────────────────────────────
@@ -497,6 +490,7 @@ export default function POSPage() {
   const [customerName, setCustomerName] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [toast, setToast] = useState<string | null>(null)
+  const [showPrintBtn, setShowPrintBtn] = useState(false)
 
   // Ticket panel open/close
   const [ticketOpen, setTicketOpen] = useState(false)
@@ -587,6 +581,7 @@ export default function POSPage() {
 
       // Print ticket via popup window
       printTicketPopup(snapshot)
+      setShowPrintBtn(true)
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Error al enviar pedido'
       setToast(`Error: ${msg}`)
@@ -692,6 +687,34 @@ export default function POSPage() {
       {/* ── Toast ── */}
       {toast && (
         <Toast message={toast} onDone={() => setToast(null)} />
+      )}
+
+      {/* ── PRINT BUTTON (shown after order sent) ── */}
+      {showPrintBtn && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="bg-white rounded-2xl p-8 flex flex-col items-center gap-4 shadow-2xl">
+            <p className="text-lg font-bold text-green-600">✅ Pedido enviado</p>
+            <button
+              onClick={() => {
+                const ticket = (window as any).__pendingTicket
+                if (ticket) {
+                  document.body.innerHTML = `<pre style="font-family:'Courier New',monospace;font-size:12px;line-height:1.4;width:80mm;margin:0;padding:2mm;color:black;white-space:pre-wrap;">${ticket}</pre>`
+                  window.print()
+                  window.location.reload()
+                }
+              }}
+              className="px-8 py-4 bg-green-500 text-white text-2xl font-bold rounded-xl shadow-lg active:scale-95"
+            >
+              🖨️ IMPRIMIR TICKET
+            </button>
+            <button
+              onClick={() => setShowPrintBtn(false)}
+              className="px-6 py-2 text-gray-500 text-base underline"
+            >
+              Omitir
+            </button>
+          </div>
+        </div>
       )}
 
       {/* ── Floating ticket button (mobile fallback, shown when panel closed and has items) ── */}
