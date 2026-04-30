@@ -567,18 +567,14 @@ export default function POSPage() {
     lines.push('')
     lines.push('')
 
-    // Save current body and replace with ticket
-    const originalContent = document.body.innerHTML
-    document.body.innerHTML = `<pre style="font-family:'Courier New',monospace;font-size:12px;line-height:1.4;margin:0;padding:2mm;width:80mm;">${lines.join('\n')}</pre>`
-    
-    setTimeout(() => {
-      window.print()
-      // Wait for user to finish printing, then reload
-      setTimeout(() => {
-        document.body.innerHTML = originalContent
-        window.location.reload()
-      }, 5000)
-    }, 300)
+    // Save current body and replace with ticket + back button
+    document.body.innerHTML = `
+      <div style="padding:4mm 2mm;">
+        <pre style="font-family:'Courier New',monospace;font-size:12px;line-height:1.4;margin:0;width:80mm;">${lines.join('\n')}</pre>
+        <br/>
+        <button onclick="window.print()" style="font-size:20px;padding:12px 24px;background:#0d9488;color:white;border:none;border-radius:8px;margin:8px 4px;cursor:pointer;">🖨️ IMPRIMIR</button>
+        <button onclick="window.location.reload()" style="font-size:20px;padding:12px 24px;background:#6b7280;color:white;border:none;border-radius:8px;margin:8px 4px;cursor:pointer;">← VOLVER AL POS</button>
+      </div>`
   }, [])
 
   const handleSubmit = useCallback(async () => {
