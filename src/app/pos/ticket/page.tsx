@@ -32,9 +32,7 @@ export default function TicketPage() {
         background: 'white',
       }}
     >
-      <pre style={{ margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
-        {ticketText}
-      </pre>
+      <pre style={{ margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>{ticketText}</pre>
       <br />
       <br />
       <button
