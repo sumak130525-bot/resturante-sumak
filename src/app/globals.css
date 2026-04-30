@@ -236,34 +236,44 @@
 }
 
 @media print {
-  /* Hide the POS UI */
-  body * {
-    visibility: hidden;
+  /* Hide everything except the ticket */
+  body > * {
+    display: none !important;
   }
 
-  /* Show only the ticket */
-  #pos-print-ticket,
-  #pos-print-ticket * {
-    visibility: visible !important;
+  /* Re-show the ticket */
+  #print-ticket,
+  .print-only {
+    display: block !important;
   }
 
-  #pos-print-ticket {
-    position: fixed !important;
-    left: 0 !important;
-    top: 0 !important;
+  /* Page setup: no margins, 80mm width */
+  @page {
+    size: 80mm auto;
+    margin: 0;
+  }
+
+  html, body {
+    margin: 0 !important;
+    padding: 0 !important;
+    background: #fff !important;
     width: 80mm !important;
+  }
+
+  #print-ticket {
     font-family: 'Courier New', Courier, monospace !important;
     font-size: 12px !important;
     line-height: 1.4 !important;
     color: #000 !important;
-    background: #fff !important;
-    padding: 2mm !important;
+    width: 80mm !important;
+    padding: 4mm 2mm !important;
     margin: 0 !important;
-    white-space: pre-wrap !important;
+    white-space: pre-wrap;
+    word-break: break-all;
   }
 
-  @page {
-    size: 80mm auto;
-    margin: 0;
+  #print-ticket p {
+    margin: 0 !important;
+    padding: 0 !important;
   }
 }

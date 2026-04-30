@@ -492,9 +492,6 @@ export default function POSPage() {
   // Ticket panel open/close
   const [ticketOpen, setTicketOpen] = useState(false)
 
-  // Print ticket data (unused - using popup now)
-  const [printData] = useState<PrintData | null>(null)
-
   // Only display items with display_order > 0, capped at 24
   const displayItems = menuItems.slice(0, MAX_VISIBLE)
 
@@ -535,44 +532,14 @@ export default function POSPage() {
     setTicketItems((prev) => prev.filter((i) => i.menu_item_id !== id))
   }, [])
 
-  // Print ticket - keep POS visible, print from hidden div
-  const [printContent, setPrintContent] = useState('')
+  // Print ticket - original approach that triggered the printer
+  const [printData, setPrintData] = useState<PrintData | null>(null)
 
   const printTicket = useCallback((data: PrintData) => {
-    const LINE = '================================'
-    const total = formatTicketMoney(data.total)
-    const lines: string[] = []
-    lines.push('         SUMAK')
-    lines.push('        Restaurante')
-    lines.push(LINE)
-    lines.push(`${data.dateStr}  ${data.timeStr}`)
-    lines.push(`Pedido: P-${String(data.orderNumber).padStart(3, '0')}`)
-    if (data.diningOption === 'Comer dentro' && data.tableNumber) lines.push(`Mesa: ${data.tableNumber}`)
-    lines.push(`Modalidad: ${data.diningOption}`)
-    lines.push(LINE)
-    data.items.forEach((item) => {
-      const qty = String(item.quantity)
-      const name = item.name
-      const sub = formatTicketMoney(item.price * item.quantity)
-      const prefix = qty + 'x ' + name
-      const maxPrefix = 48 - sub.length - 1
-      const dots = maxPrefix > prefix.length ? '.'.repeat(maxPrefix - prefix.length) : ' '
-      lines.push(`${prefix}${dots}${sub}`)
-    })
-    lines.push(LINE)
-    lines.push(`TOTAL:${' '.repeat(Math.max(1, 42 - 6 - total.length))}${total}`)
-    lines.push(`Pago: ${data.paymentMethod.toUpperCase()}${data.paymentMethod === 'Efectivo' ? ' [ABRIR CAJON]' : ''}`)
-    if (data.customerName && data.customerName !== 'POS') lines.push(`Cliente: ${data.customerName}`)
-    lines.push(LINE)
-    lines.push('       Gracias por su visita!')
-    lines.push('       Restaurante Sumak')
-    lines.push('')
-
-    setPrintContent(lines.join('\n'))
-    // Give React time to render, then print
+    setPrintData(data)
     setTimeout(() => {
       window.print()
-      setTimeout(() => setPrintContent(''), 1000)
+      setTimeout(() => setPrintData(null), 1000)
     }, 500)
   }, [])
 
@@ -741,27 +708,8 @@ export default function POSPage() {
         </button>
       )}
 
-      {/* ── Print ticket div: off-screen but rendered for printing ── */}
-      {printContent && (
-        <div
-          id="pos-print-ticket"
-          style={{
-            position: 'fixed',
-            left: '-9999px',
-            top: 0,
-            fontFamily: "'Courier New', monospace",
-            fontSize: '12px',
-            lineHeight: '1.4',
-            width: '80mm',
-            padding: '2mm',
-            whiteSpace: 'pre-wrap',
-            color: '#000',
-            background: '#fff',
-          }}
-        >
-          {printContent}
-        </div>
-      )}
+      {/* ── Print Ticket (hidden on screen, visible only on print) ── */}
+      <PrintTicket data={printData} />
 
     </div>
   )
