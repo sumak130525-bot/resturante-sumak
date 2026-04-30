@@ -572,9 +572,16 @@ export default function POSPage() {
       <div style="padding:4mm 2mm;">
         <pre style="font-family:'Courier New',monospace;font-size:12px;line-height:1.4;margin:0;width:80mm;">${lines.join('\n')}</pre>
         <br/>
-        <button onclick="window.print()" style="font-size:20px;padding:12px 24px;background:#0d9488;color:white;border:none;border-radius:8px;margin:8px 4px;cursor:pointer;">🖨️ IMPRIMIR</button>
-        <button onclick="window.location.reload()" style="font-size:20px;padding:12px 24px;background:#6b7280;color:white;border:none;border-radius:8px;margin:8px 4px;cursor:pointer;">← VOLVER AL POS</button>
+        <button id="pos-back-btn" style="font-size:20px;padding:12px 24px;background:#6b7280;color:white;border:none;border-radius:8px;margin:8px 4px;cursor:pointer;">← VOLVER AL POS</button>
       </div>`
+    
+    // Add event listener for back button
+    document.getElementById('pos-back-btn')?.addEventListener('click', () => {
+      window.location.reload()
+    })
+
+    // Trigger print automatically
+    setTimeout(() => window.print(), 500)
   }, [])
 
   const handleSubmit = useCallback(async () => {
