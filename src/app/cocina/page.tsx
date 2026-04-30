@@ -416,7 +416,7 @@ function OrderCard({
             <span className="text-white font-black text-2xl leading-none tracking-tight drop-shadow truncate">
               {orderLabel}
             </span>
-            {(order.source === 'WEB' || order.source === 'POS') && order.tableNumber && (
+            {(order.source === 'WEB' || order.source === 'POS') && order.customer && order.customer !== 'POS' && (
               <span className="text-white/80 font-semibold text-xs truncate hidden sm:inline">
                 {order.customer}
               </span>

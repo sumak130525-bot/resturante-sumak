@@ -53,6 +53,7 @@ export async function POST(request: NextRequest) {
         status: 'pending',
         channel: 'pos',
         dining_option: dining_option || null,
+        table_number: table_number || null,
         payment_method: payment_method || null,
       })
       .select()
