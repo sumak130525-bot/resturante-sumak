@@ -573,10 +573,11 @@ export default function POSPage() {
     
     setTimeout(() => {
       window.print()
+      // Wait for user to finish printing, then reload
       setTimeout(() => {
         document.body.innerHTML = originalContent
         window.location.reload()
-      }, 1000)
+      }, 5000)
     }, 300)
   }, [])
 
