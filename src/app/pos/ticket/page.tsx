@@ -17,31 +17,31 @@ export default function TicketPage() {
   if (ticketText === null) return null
 
   return (
-    <div
-      style={{
+    <div style={{ background: 'white', margin: 0, padding: '4mm', minHeight: '100vh' }}>
+      <pre style={{
         fontFamily: "'Courier New', Courier, monospace",
         fontSize: '12px',
         lineHeight: '1.4',
-        width: '80mm',
-        padding: '2mm',
         color: 'black',
-        background: 'white',
-      }}
-    >
-      <pre style={{ margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>{ticketText}</pre>
-      <div style={{ marginTop: '20px', display: 'flex', gap: '10px' }}>
+        margin: 0,
+        whiteSpace: 'pre-wrap',
+        wordBreak: 'break-all',
+      }}>{ticketText}</pre>
+
+      <div style={{ marginTop: '24px', display: 'flex', gap: '12px', flexDirection: 'column', alignItems: 'center' }}>
         <button
-          onClick={() => { window.print() }}
+          onClick={() => window.print()}
           style={{
-            padding: '16px 32px',
-            fontSize: '22px',
+            padding: '18px 40px',
+            fontSize: '24px',
             fontWeight: 'bold',
-            border: '2px solid black',
-            background: '#4CAF50',
+            background: '#22c55e',
             color: 'white',
+            border: 'none',
+            borderRadius: '12px',
             cursor: 'pointer',
-            borderRadius: '8px',
-            flex: 1,
+            width: '100%',
+            maxWidth: '300px',
           }}
         >
           🖨️ IMPRIMIR
@@ -49,15 +49,16 @@ export default function TicketPage() {
         <button
           onClick={() => { window.location.href = '/pos' }}
           style={{
-            padding: '16px 24px',
-            fontSize: '18px',
-            border: '1px solid black',
+            padding: '12px 24px',
+            fontSize: '16px',
             background: 'white',
-            cursor: 'pointer',
+            color: '#666',
+            border: '1px solid #ccc',
             borderRadius: '8px',
+            cursor: 'pointer',
           }}
         >
-          ← Volver
+          ← Volver al POS
         </button>
       </div>
     </div>
