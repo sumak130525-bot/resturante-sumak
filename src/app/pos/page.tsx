@@ -492,8 +492,8 @@ export default function POSPage() {
   // Ticket panel open/close
   const [ticketOpen, setTicketOpen] = useState(false)
 
-  // Print ticket data
-  const [printData, setPrintData] = useState<PrintData | null>(null)
+  // Print ticket data (unused - using popup now)
+  const [printData] = useState<PrintData | null>(null)
 
   // Only display items with display_order > 0, capped at 24
   const displayItems = menuItems.slice(0, MAX_VISIBLE)
@@ -533,6 +533,53 @@ export default function POSPage() {
 
   const handleRemove = useCallback((id: string) => {
     setTicketItems((prev) => prev.filter((i) => i.menu_item_id !== id))
+  }, [])
+
+  // Print ticket in a popup window
+  const printTicket = useCallback((data: PrintData) => {
+    const LINE = '================================'
+    const total = formatTicketMoney(data.total)
+    const lines: string[] = []
+    lines.push('<pre style="font-family:Courier New,monospace;font-size:12px;line-height:1.4;margin:0;padding:4mm 2mm;width:80mm;">')
+    lines.push(`<b style="font-size:16px;">         SUMAK</b>`)
+    lines.push(`        Restaurante`)
+    lines.push(LINE)
+    lines.push(`${data.dateStr}  ${data.timeStr}`)
+    lines.push(`Pedido: P-${String(data.orderNumber).padStart(3, '0')}`)
+    if (data.diningOption === 'Comer dentro' && data.tableNumber) lines.push(`Mesa: ${data.tableNumber}`)
+    lines.push(`Modalidad: ${data.diningOption}`)
+    lines.push(LINE)
+    data.items.forEach((item) => {
+      const qty = String(item.quantity)
+      const name = item.name
+      const sub = formatTicketMoney(item.price * item.quantity)
+      const prefix = qty + 'x ' + name
+      const maxPrefix = 48 - sub.length - 1
+      const dots = maxPrefix > prefix.length ? '.'.repeat(maxPrefix - prefix.length) : ' '
+      lines.push(`${prefix}${dots}${sub}`)
+    })
+    lines.push(LINE)
+    lines.push(`<b>TOTAL:${' '.repeat(Math.max(1, 42 - 6 - total.length))}${total}</b>`)
+    lines.push(`Pago: ${data.paymentMethod.toUpperCase()}${data.paymentMethod === 'Efectivo' ? ' [ABRIR CAJON]' : ''}`)
+    if (data.customerName && data.customerName !== 'POS') lines.push(`Cliente: ${data.customerName}`)
+    lines.push(LINE)
+    lines.push(`       Gracias por su visita!`)
+    lines.push(`       Restaurante Sumak`)
+    lines.push('')
+    lines.push('')
+    lines.push('</pre>')
+
+    const w = window.open('', '_blank', 'width=320,height=500')
+    if (w) {
+      w.document.write('<html><head><title>Ticket</title></head><body style="margin:0;padding:0;">')
+      w.document.write(lines.join('\n'))
+      w.document.write('</body></html>')
+      w.document.close()
+      setTimeout(() => {
+        w.print()
+        setTimeout(() => w.close(), 2000)
+      }, 300)
+    }
   }, [])
 
   const handleSubmit = useCallback(async () => {
@@ -579,13 +626,8 @@ export default function POSPage() {
       setTicketOpen(false)
       setToast('Pedido enviado a cocina')
 
-      // Render ticket and print
-      setPrintData(snapshot)
-      setTimeout(() => {
-        window.print()
-        // Clear print data after printing
-        setTimeout(() => setPrintData(null), 1000)
-      }, 500)
+      // Print ticket in a new window
+      printTicket(snapshot)
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Error al enviar pedido'
       setToast(`Error: ${msg}`)

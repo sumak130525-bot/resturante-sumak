@@ -335,7 +335,7 @@ function elapsedColor(created_at: string): string {
 
 function getOrderLabel(order: KdsOrder): string {
   if (order.source === 'LOCAL' && order.orderNumber) return order.orderNumber
-  if (order.source === 'WEB' && order.tableNumber) return `MESA ${order.tableNumber}`
+  if ((order.source === 'WEB' || order.source === 'POS') && order.tableNumber) return `MESA ${order.tableNumber}`
   if (order.source === 'WEB') return order.customer
   return order.number
 }
@@ -416,7 +416,7 @@ function OrderCard({
             <span className="text-white font-black text-2xl leading-none tracking-tight drop-shadow truncate">
               {orderLabel}
             </span>
-            {order.source === 'WEB' && order.tableNumber && (
+            {(order.source === 'WEB' || order.source === 'POS') && order.tableNumber && (
               <span className="text-white/80 font-semibold text-xs truncate hidden sm:inline">
                 {order.customer}
               </span>
