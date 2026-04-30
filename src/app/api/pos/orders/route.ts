@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { createServerClient, type CookieOptions } from '@supabase/ssr'
-import { cookies } from 'next/headers'
+import { createClient } from '@supabase/supabase-js'
 
 export const dynamic = 'force-dynamic'
 
@@ -11,22 +10,11 @@ type PosOrderItem = {
   menu_item_id: string
 }
 
-async function getServiceClient() {
-  const cookieStore = await cookies()
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return createServerClient(
+function getAdminClient() {
+  return createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        getAll() { return cookieStore.getAll() },
-        setAll(cookiesToSet: { name: string; value: string; options: CookieOptions }[]) {
-          try { cookiesToSet.forEach(({ name, value, options }) => cookieStore.set(name, value, options)) } catch {}
-        },
-      },
-    }
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  ) as any
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  )
 }
 
 export async function POST(request: NextRequest) {
@@ -48,7 +36,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const supabase = await getServiceClient()
+    const supabase = getAdminClient()
 
     // Nota de respaldo con datos operativos del POS
     const noteParts: string[] = []
@@ -67,15 +55,13 @@ export async function POST(request: NextRequest) {
         total: total ?? 0,
         status: 'pending',
         channel: 'pos',
-        // Campos extra que pueden existir en la tabla
-        ...(table_number != null ? { table_number: String(table_number) } : {}),
-        ...(dining_option ? { dining_option } : {}),
-        ...(payment_method ? { payment_method } : {}),
+        dining_option: dining_option || null,
+        payment_method: payment_method || null,
       })
       .select()
       .single()
 
-    if (orderError) throw new Error(orderError.message)
+    if (orderError) throw new Error(`Order insert: ${orderError.message}`)
     if (!order) throw new Error('No se pudo crear el pedido')
 
     // Crear order_items para cada producto
@@ -83,18 +69,20 @@ export async function POST(request: NextRequest) {
       order_id: order.id,
       menu_item_id: item.menu_item_id,
       quantity: item.quantity,
-      unit_price: item.price,
+      unit_price: Math.round(item.price),
+      subtotal: Math.round(item.price * item.quantity),
     }))
 
     const { error: itemsError } = await supabase
       .from('order_items')
       .insert(orderItems)
 
-    if (itemsError) throw new Error(itemsError.message)
+    if (itemsError) throw new Error(`Items insert: ${itemsError.message}`)
 
     return NextResponse.json({ success: true, order_id: order.id }, { status: 201 })
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Error interno'
+    console.error('[POS orders]', message)
     return NextResponse.json({ error: message }, { status: 500 })
   }
 }
