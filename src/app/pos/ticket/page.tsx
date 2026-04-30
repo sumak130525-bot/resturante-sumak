@@ -18,6 +18,7 @@ export default function TicketPage() {
 
   return (
     <div style={{ background: 'white', margin: 0, padding: '4mm', minHeight: '100vh' }}>
+      <style>{`@media print { .no-print { display: none !important; } }`}</style>
       <pre style={{
         fontFamily: "'Courier New', Courier, monospace",
         fontSize: '12px',
@@ -28,7 +29,7 @@ export default function TicketPage() {
         wordBreak: 'break-all',
       }}>{ticketText}</pre>
 
-      <div style={{ marginTop: '24px', display: 'flex', gap: '12px', flexDirection: 'column', alignItems: 'center' }}>
+      <div className="no-print" style={{ marginTop: '24px', display: 'flex', gap: '12px', flexDirection: 'column', alignItems: 'center' }}>
         <button
           onClick={() => window.print()}
           style={{

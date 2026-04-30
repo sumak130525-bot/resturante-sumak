@@ -559,7 +559,7 @@ export default function POSPage() {
       const now = new Date()
       const dateStr = now.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' })
       const timeStr = now.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })
-      const orderNumber: number = data.order?.order_number ?? data.order?.id ?? data.order_id ?? 0
+      const orderNumber: number = Date.now() % 1000
       const snapshot: PrintData = {
         orderNumber,
         dateStr,
