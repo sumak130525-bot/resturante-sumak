@@ -535,7 +535,10 @@ export default function POSPage() {
     setTicketItems((prev) => prev.filter((i) => i.menu_item_id !== id))
   }, [])
 
-  // Print ticket by temporarily replacing body content
+  // Print ticket using React state (keeps JS context alive)
+  const [showPrintView, setShowPrintView] = useState(false)
+  const [printContent, setPrintContent] = useState('')
+
   const printTicket = useCallback((data: PrintData) => {
     const LINE = '================================'
     const total = formatTicketMoney(data.total)
@@ -565,23 +568,18 @@ export default function POSPage() {
     lines.push('       Gracias por su visita!')
     lines.push('       Restaurante Sumak')
     lines.push('')
-    lines.push('')
 
-    // Save current body and replace with ticket + back button
-    document.body.innerHTML = `
-      <div style="padding:4mm 2mm;">
-        <pre style="font-family:'Courier New',monospace;font-size:12px;line-height:1.4;margin:0;width:80mm;">${lines.join('\n')}</pre>
-        <br/>
-        <button id="pos-back-btn" style="font-size:20px;padding:12px 24px;background:#6b7280;color:white;border:none;border-radius:8px;margin:8px 4px;cursor:pointer;">← VOLVER AL POS</button>
-      </div>`
-    
-    // Add event listener for back button
-    document.getElementById('pos-back-btn')?.addEventListener('click', () => {
-      window.location.reload()
-    })
+    setPrintContent(lines.join('\n'))
+    setShowPrintView(true)
+  }, [])
 
-    // Trigger print automatically
-    setTimeout(() => window.print(), 500)
+  const handlePrint = useCallback(() => {
+    window.print()
+  }, [])
+
+  const handleBackFromPrint = useCallback(() => {
+    setShowPrintView(false)
+    setPrintContent('')
   }, [])
 
   const handleSubmit = useCallback(async () => {
@@ -639,6 +637,30 @@ export default function POSPage() {
   }, [ticketItems, diningOption, tableNumber, paymentMethod, customerName])
 
   const ticketCount = ticketItems.reduce((s, i) => s + i.quantity, 0)
+
+  // If in print view, show only the ticket
+  if (showPrintView) {
+    return (
+      <div style={{ padding: '4mm 2mm', background: '#fff', minHeight: '100vh' }}>
+        <pre style={{ fontFamily: "'Courier New', monospace", fontSize: '12px', lineHeight: '1.4', margin: 0, width: '80mm' }}>
+          {printContent}
+        </pre>
+        <br />
+        <button
+          onClick={handlePrint}
+          style={{ fontSize: '20px', padding: '12px 24px', background: '#0d9488', color: 'white', border: 'none', borderRadius: '8px', margin: '8px 4px', cursor: 'pointer' }}
+        >
+          🖨️ IMPRIMIR
+        </button>
+        <button
+          onClick={handleBackFromPrint}
+          style={{ fontSize: '20px', padding: '12px 24px', background: '#6b7280', color: 'white', border: 'none', borderRadius: '8px', margin: '8px 4px', cursor: 'pointer' }}
+        >
+          ← VOLVER AL POS
+        </button>
+      </div>
+    )
+  }
 
   return (
     <div className="fixed inset-0 flex flex-col bg-gray-100 overflow-hidden select-none" style={{ fontFamily: "'Inter', sans-serif" }}>
@@ -749,8 +771,6 @@ export default function POSPage() {
         </button>
       )}
 
-      {/* ── Print Ticket (hidden on screen, visible only on print) ── */}
-      <PrintTicket data={printData} />
     </div>
   )
 }
