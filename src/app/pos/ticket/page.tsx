@@ -12,10 +12,6 @@ export default function TicketPage() {
       return
     }
     setTicketText(text)
-    const timer = setTimeout(() => {
-      window.print()
-    }, 800)
-    return () => clearTimeout(timer)
   }, [])
 
   if (ticketText === null) return null
@@ -33,20 +29,37 @@ export default function TicketPage() {
       }}
     >
       <pre style={{ margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>{ticketText}</pre>
-      <br />
-      <br />
-      <button
-        onClick={() => { window.location.href = '/pos' }}
-        style={{
-          padding: '12px 24px',
-          fontSize: '18px',
-          border: '1px solid black',
-          background: 'white',
-          cursor: 'pointer',
-        }}
-      >
-        &larr; Volver al POS
-      </button>
+      <div style={{ marginTop: '20px', display: 'flex', gap: '10px' }}>
+        <button
+          onClick={() => { window.print() }}
+          style={{
+            padding: '16px 32px',
+            fontSize: '22px',
+            fontWeight: 'bold',
+            border: '2px solid black',
+            background: '#4CAF50',
+            color: 'white',
+            cursor: 'pointer',
+            borderRadius: '8px',
+            flex: 1,
+          }}
+        >
+          🖨️ IMPRIMIR
+        </button>
+        <button
+          onClick={() => { window.location.href = '/pos' }}
+          style={{
+            padding: '16px 24px',
+            fontSize: '18px',
+            border: '1px solid black',
+            background: 'white',
+            cursor: 'pointer',
+            borderRadius: '8px',
+          }}
+        >
+          ← Volver
+        </button>
+      </div>
     </div>
   )
 }
