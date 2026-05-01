@@ -461,6 +461,11 @@ function OrderCard({
               {order.paymentMethod}
             </span>
           )}
+          {(order.source === 'WEB' || order.source === 'POS') && order.customer && order.customer !== 'POS' && (
+            <span className="text-sm font-bold px-2 py-0.5 rounded-full bg-white/40 text-white">
+              👤 {order.customer}
+            </span>
+          )}
         </div>
 
         {/* Fila 3: Teléfono (solo si existe) */}
