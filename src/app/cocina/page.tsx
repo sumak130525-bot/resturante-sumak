@@ -416,11 +416,6 @@ function OrderCard({
             <span className="text-white font-black text-2xl leading-none tracking-tight drop-shadow truncate">
               {orderLabel}
             </span>
-            {(order.source === 'WEB' || order.source === 'POS') && order.customer && order.customer !== 'POS' && (
-              <span className="text-white/80 font-semibold text-xs truncate hidden sm:inline">
-                {order.customer}
-              </span>
-            )}
           </div>
           <div className={`flex items-center gap-1 text-sm font-mono font-bold shrink-0 ${elapsedColor(order.created_at)} bg-white/40 rounded-lg px-2 py-0.5`}>
             <span>{elapsed(order.created_at)}</span>
