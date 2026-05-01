@@ -21,8 +21,9 @@ export default function TicketPage() {
       <style>{`@media print { .no-print { display: none !important; } }`}</style>
       <pre style={{
         fontFamily: "'Courier New', Courier, monospace",
-        fontSize: '12px',
-        lineHeight: '1.4',
+        fontSize: '16px',
+        fontWeight: 'bold',
+        lineHeight: '1.5',
         color: 'black',
         margin: 0,
         whiteSpace: 'pre-wrap',
