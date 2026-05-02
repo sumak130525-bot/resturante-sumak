@@ -3,6 +3,8 @@ export type Category = {
   name: string
   slug: string
   order_pos: number
+  name_en?: string | null
+  name_qu?: string | null
 }
 
 export type MenuItem = {
