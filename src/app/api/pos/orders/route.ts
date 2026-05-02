@@ -40,8 +40,19 @@ export async function POST(request: NextRequest) {
 
     const supabase = getAdminClient()
 
+    // Ensure line_note column exists (runs once, idempotent)
+    await supabase.rpc('exec_sql', {
+      query: "ALTER TABLE order_items ADD COLUMN IF NOT EXISTS line_note text;"
+    }).then(() => {}, () => {}) // ignore errors if rpc doesn't exist
+
     // Usar nota personalizada del usuario (o null si no hay)
     const notes = customNotes && String(customNotes).trim() ? String(customNotes).trim() : null
+
+    // Build notes: Mesa + user note (NO modifiers - those go in line_note per item)
+    const orderNotes = [
+      table_number ? `Mesa ${table_number}` : '',
+      notes || '',
+    ].filter(Boolean).join(' | ') || null
 
     // Crear el pedido en la tabla orders
     const { data: order, error: orderError } = await supabase
@@ -49,10 +60,7 @@ export async function POST(request: NextRequest) {
       .insert({
         customer_name: customer_name || 'POS',
         customer_phone: null,
-        notes: [
-          table_number ? `Mesa ${table_number}` : '',
-          notes || '',
-        ].filter(Boolean).join(' | ') || null,
+        notes: orderNotes,
         total: total ?? 0,
         status: 'pending',
         channel: 'pos',
@@ -65,21 +73,14 @@ export async function POST(request: NextRequest) {
     if (orderError) throw new Error(`Order insert: ${orderError.message}`)
     if (!order) throw new Error('No se pudo crear el pedido')
 
-    // Crear order_items para cada producto (incluye line_note si existe la columna)
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const orderItems = (items as PosOrderItem[]).map((item): any => {
-      const base = {
-        order_id: order.id,
-        menu_item_id: item.menu_item_id,
-        quantity: item.quantity,
-        unit_price: Math.round(item.price),
-      }
-      // Include line_note when available (column may not exist in older schemas)
-      if (item.line_note) {
-        return { ...base, line_note: item.line_note }
-      }
-      return base
-    })
+    // Crear order_items con line_note para modificadores
+    const orderItems = (items as PosOrderItem[]).map((item) => ({
+      order_id: order.id,
+      menu_item_id: item.menu_item_id,
+      quantity: item.quantity,
+      unit_price: Math.round(item.price),
+      line_note: item.line_note || null,
+    }))
 
     const { error: itemsError } = await supabase
       .from('order_items')
@@ -87,13 +88,8 @@ export async function POST(request: NextRequest) {
 
     if (itemsError) {
       // If line_note column doesn't exist, retry without it
-      if (itemsError.message.includes('line_note') || itemsError.code === 'PGRST204' || itemsError.message.includes('column')) {
-        const fallbackItems = (items as PosOrderItem[]).map((item) => ({
-          order_id: order.id,
-          menu_item_id: item.menu_item_id,
-          quantity: item.quantity,
-          unit_price: Math.round(item.price),
-        }))
+      if (itemsError.message.includes('line_note') || itemsError.message.includes('column')) {
+        const fallbackItems = orderItems.map(({ line_note, ...rest }) => rest)
         const { error: fallbackError } = await supabase
           .from('order_items')
           .insert(fallbackItems)

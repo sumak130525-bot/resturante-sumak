@@ -882,15 +882,8 @@ export default function POSPage() {
         line_note: buildLineNote(item.modifiers ?? []),
       }))
 
-      // Build modifier notes per item for kitchen display
-      const modNotes = ticketItems
-        .filter((i) => i.modifiers && i.modifiers.length > 0)
-        .map((i) => `${i.name}: ${i.modifiers!.map((m) => m.optionName).join(', ')}`)
-        .join(' | ')
-
       const finalNotes = [
         diningOption === 'Comer dentro' && tableNumber ? `Mesa ${tableNumber}` : '',
-        modNotes,
         orderNotes.trim(),
       ].filter(Boolean).join(' | ') || null
 
