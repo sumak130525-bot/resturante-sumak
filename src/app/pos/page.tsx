@@ -121,6 +121,16 @@ type FrequentCustomer = {
   phone: string | null
 }
 
+// ─── Category icons (same as public menu) ────────────────────────────────────
+
+const CATEGORY_ICONS: Record<string, string> = {
+  sopas:               '🍲',
+  'platos-principales':'🍽️',
+  empanadas:           '🥟',
+  acompanamientos:     '🥗',
+  bebidas:             '🥤',
+}
+
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const MAX_VISIBLE = 24 // 6 × 4 grid
@@ -343,7 +353,7 @@ function POSDishCard({ item, onAdd }: { item: MenuItem; onAdd: (item: MenuItem) 
       className={`relative w-full h-full rounded-xl overflow-hidden select-none transition-all duration-150 ${
         isUnavailable
           ? 'opacity-50 cursor-not-allowed'
-          : 'cursor-pointer active:scale-95 hover:ring-2 hover:ring-teal-400'
+          : 'cursor-pointer active:scale-95 hover:ring-2 hover:ring-sumak-gold'
       } ${pressed ? 'scale-95 brightness-90' : ''}`}
       style={{ touchAction: 'manipulation' }}
     >
@@ -375,7 +385,7 @@ function POSDishCard({ item, onAdd }: { item: MenuItem; onAdd: (item: MenuItem) 
           {item.name}
         </p>
         <p
-          className="font-bold tabular-nums text-[clamp(0.75rem,1.3vw,1rem)] text-teal-300"
+          className="font-bold tabular-nums text-[clamp(0.75rem,1.3vw,1rem)] text-sumak-gold-light"
           style={{ textShadow: '0 1px 3px rgba(0,0,0,0.9)' }}
         >
           {formatARS(item.price)}
@@ -733,7 +743,7 @@ function TicketPanel({
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function POSPage() {
-  const { menuItems, loading } = useMenuRealtime()
+  const { menuItems, categories, loading } = useMenuRealtime()
 
   // Frequent customers
   const [customers, setCustomers] = useState<FrequentCustomer[]>([])
@@ -777,8 +787,17 @@ export default function POSPage() {
   // Ticket panel open/close
   const [ticketOpen, setTicketOpen] = useState(false)
 
+  // Category filter
+  const [activeCategory, setActiveCategory] = useState('all')
+
   // Only display items with display_order > 0, capped at 24
-  const displayItems = menuItems.slice(0, MAX_VISIBLE)
+  const filteredItems = activeCategory === 'all'
+    ? menuItems
+    : menuItems.filter((item) => {
+        const cat = categories.find((c) => c.slug === activeCategory)
+        return cat ? item.category_id === cat.id : true
+      })
+  const displayItems = filteredItems.slice(0, MAX_VISIBLE)
 
   // Add item to ticket (called after modifier selection or directly)
   const addItemToTicket = useCallback((item: MenuItem, modifiers?: SelectedModifier[]) => {
@@ -943,35 +962,35 @@ export default function POSPage() {
   const ticketCount = ticketItems.reduce((s, i) => s + i.quantity, 0)
 
   return (
-    <div className="fixed inset-0 flex flex-col bg-gray-100 overflow-hidden select-none" style={{ fontFamily: "'Inter', sans-serif" }}>
+    <div className="fixed inset-0 flex flex-col bg-sumak-cream overflow-hidden select-none" style={{ fontFamily: "'Inter', sans-serif" }}>
       {/* ── Header ── */}
-      <header className="shrink-0 flex items-center gap-3 px-4 py-3 bg-teal-600 shadow-md">
+      <header className="shrink-0 flex items-center gap-3 px-4 py-3 bg-sumak-brown shadow-md">
         <Image
           src="/logo-sumak.png"
           alt="Sumak"
           width={36}
           height={36}
-          className="rounded-full border-2 border-white/30 object-cover shrink-0"
+          className="rounded-full border-2 border-sumak-gold/40 object-cover shrink-0"
           priority
         />
         <div className="flex-1 min-w-0">
-          <h1 className="text-white font-black text-xl leading-none">Punto de Venta</h1>
-          <p className="text-teal-100 text-xs mt-0.5">Sumak</p>
+          <h1 className="text-sumak-gold font-black text-xl leading-none">Punto de Venta</h1>
+          <p className="text-sumak-gold/60 text-xs mt-0.5">Sumak</p>
         </div>
         {/* Ticket toggle button */}
         <button
           onClick={() => setTicketOpen((o) => !o)}
           className={`relative flex items-center gap-2 px-4 py-2.5 rounded-2xl font-bold text-base transition-all active:scale-95 shadow-md ${
             ticketOpen
-              ? 'bg-white text-teal-700'
-              : 'bg-teal-700 text-white hover:bg-teal-800'
+              ? 'bg-sumak-gold text-sumak-brown'
+              : 'bg-sumak-brown-mid text-sumak-gold hover:bg-sumak-brown-light'
           }`}
           style={{ minHeight: 48 }}
         >
           <span className="text-xl">🧾</span>
           <span className="hidden sm:inline">Ticket</span>
           {ticketCount > 0 && (
-            <span className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-green-400 text-gray-900 text-xs font-black flex items-center justify-center">
+            <span className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-sumak-gold text-sumak-brown text-xs font-black flex items-center justify-center">
               {ticketCount}
             </span>
           )}
@@ -980,7 +999,43 @@ export default function POSPage() {
 
       {/* ── Main content: grid + ticket panel ── */}
       <div className="flex-1 flex min-h-0 overflow-hidden">
-        {/* ── Left: Dish Grid ── */}
+        {/* ── Left: Category Tabs + Dish Grid ── */}
+        <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
+          {/* Category Tabs */}
+          <div className="shrink-0 bg-sumak-cream/90 backdrop-blur border-b border-sumak-cream-dark/60 shadow-sm">
+            <div
+              className="flex gap-2 overflow-x-auto px-3 py-2"
+              style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+            >
+              {/* Todos tab */}
+              <button
+                onClick={() => setActiveCategory('all')}
+                className={`flex items-center gap-1.5 whitespace-nowrap px-4 py-2 rounded-pill text-sm font-semibold transition-all duration-200 shrink-0 ${
+                  activeCategory === 'all'
+                    ? 'bg-sumak-brown text-sumak-gold shadow-premium scale-[1.02]'
+                    : 'bg-white/80 text-sumak-brown-mid border border-sumak-cream-dark hover:bg-white hover:border-sumak-gold/40 hover:text-sumak-brown'
+                }`}
+              >
+                Todos
+              </button>
+              {categories.map((cat) => (
+                <button
+                  key={cat.id}
+                  onClick={() => setActiveCategory(cat.slug)}
+                  className={`flex items-center gap-1.5 whitespace-nowrap px-4 py-2 rounded-pill text-sm font-semibold transition-all duration-200 shrink-0 ${
+                    activeCategory === cat.slug
+                      ? 'bg-sumak-brown text-sumak-gold shadow-premium scale-[1.02]'
+                      : 'bg-white/80 text-sumak-brown-mid border border-sumak-cream-dark hover:bg-white hover:border-sumak-gold/40 hover:text-sumak-brown'
+                  }`}
+                >
+                  <span className="text-base leading-none">{CATEGORY_ICONS[cat.slug] ?? '🍴'}</span>
+                  {cat.name}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Dish Grid */}
         <main
           className="flex-1 min-w-0 p-2 overflow-hidden"
           style={{
@@ -992,19 +1047,21 @@ export default function POSPage() {
         >
           {loading ? (
             Array.from({ length: MAX_VISIBLE }).map((_, i) => (
-              <div key={i} className="w-full h-full rounded-xl bg-gray-200 animate-pulse" />
+              <div key={i} className="w-full h-full rounded-xl bg-sumak-cream-dark animate-pulse" />
             ))
           ) : (
             Array.from({ length: MAX_VISIBLE }).map((_, gridIndex) => {
               const position = gridIndex + 1
               const item = displayItems.find((i) => i.display_order === position)
+                ?? (activeCategory !== 'all' ? displayItems[gridIndex] : undefined)
               if (item) {
                 return <POSDishCard key={item.id} item={item} onAdd={handleAddItem} />
               }
-              return <div key={`empty-${gridIndex}`} className="w-full h-full rounded-xl bg-gray-200/60" />
+              return <div key={`empty-${gridIndex}`} className="w-full h-full rounded-xl bg-sumak-cream-dark/40" />
             })
           )}
         </main>
+        </div>
 
         {/* ── Right: Ticket Panel (slide-in) ── */}
         <aside
@@ -1091,7 +1148,7 @@ export default function POSPage() {
       {!ticketOpen && ticketCount > 0 && (
         <button
           onClick={() => setTicketOpen(true)}
-          className="fixed bottom-6 right-6 z-40 flex items-center gap-2 px-5 py-3.5 bg-green-500 hover:bg-green-600 text-white rounded-2xl shadow-2xl font-black text-base transition-all active:scale-95"
+          className="fixed bottom-6 right-6 z-40 flex items-center gap-2 px-5 py-3.5 bg-sumak-brown hover:bg-sumak-brown-mid text-sumak-gold rounded-2xl shadow-2xl font-black text-base transition-all active:scale-95"
           style={{ minHeight: 56 }}
         >
           <span className="text-xl">🧾</span>
