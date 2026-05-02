@@ -193,27 +193,31 @@ function ModifierModal({
   onConfirm: (selections: SelectedModifier[]) => void
   onCancel: () => void
 }) {
-  // State: modifierId → optionId selected (single selection per modifier)
-  const [selections, setSelections] = useState<Record<string, string>>({})
+  // State: modifierId → array of selected optionIds (multi-select per modifier)
+  const [selections, setSelections] = useState<Record<string, string[]>>({})
 
   const handleOptionToggle = (modifierId: string, optionId: string) => {
     setSelections((prev) => {
-      if (prev[modifierId] === optionId) {
-        // Deselect
-        const next = { ...prev }
-        delete next[modifierId]
-        return next
+      const current = prev[modifierId] ?? []
+      if (current.includes(optionId)) {
+        const next = current.filter((id) => id !== optionId)
+        if (next.length === 0) {
+          const copy = { ...prev }
+          delete copy[modifierId]
+          return copy
+        }
+        return { ...prev, [modifierId]: next }
       }
-      return { ...prev, [modifierId]: optionId }
+      return { ...prev, [modifierId]: [...current, optionId] }
     })
   }
 
   const handleConfirm = () => {
     const result: SelectedModifier[] = []
     for (const mod of modifiers) {
-      const selectedOptionId = selections[mod.id]
-      if (selectedOptionId) {
-        const opt = mod.options.find((o) => o.id === selectedOptionId)
+      const selectedOptionIds = selections[mod.id] ?? []
+      for (const optId of selectedOptionIds) {
+        const opt = mod.options.find((o) => o.id === optId)
         if (opt) {
           result.push({
             modifierId: mod.id,
@@ -228,10 +232,12 @@ function ModifierModal({
     onConfirm(result)
   }
 
-  const extraTotal = Object.entries(selections).reduce((sum, [modId, optId]) => {
+  const extraTotal = Object.entries(selections).reduce((sum, [modId, optIds]) => {
     const mod = modifiers.find((m) => m.id === modId)
-    const opt = mod?.options.find((o) => o.id === optId)
-    return sum + (opt?.price ?? 0)
+    return sum + (optIds as string[]).reduce((s, optId) => {
+      const opt = mod?.options.find((o) => o.id === optId)
+      return s + (opt?.price ?? 0)
+    }, 0)
   }, 0)
 
   return (
@@ -255,7 +261,7 @@ function ModifierModal({
               </p>
               <div className="flex flex-col gap-1">
                 {mod.options.map((opt) => {
-                  const checked = selections[mod.id] === opt.id
+                  const checked = (selections[mod.id] ?? []).includes(opt.id)
                   return (
                     <button
                       key={opt.id}
@@ -876,6 +882,18 @@ export default function POSPage() {
         line_note: buildLineNote(item.modifiers ?? []),
       }))
 
+      // Build modifier notes per item for kitchen display
+      const modNotes = ticketItems
+        .filter((i) => i.modifiers && i.modifiers.length > 0)
+        .map((i) => `${i.name}: ${i.modifiers!.map((m) => m.optionName).join(', ')}`)
+        .join(' | ')
+
+      const finalNotes = [
+        diningOption === 'Comer dentro' && tableNumber ? `Mesa ${tableNumber}` : '',
+        modNotes,
+        orderNotes.trim(),
+      ].filter(Boolean).join(' | ') || null
+
       const res = await fetch('/api/pos/orders', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -886,7 +904,7 @@ export default function POSPage() {
           table_number: diningOption === 'Comer dentro' && tableNumber ? Number(tableNumber) : null,
           payment_method: paymentMethod,
           customer_name: customerName || 'POS',
-          notes: orderNotes.trim() || null,
+          notes: finalNotes,
         }),
       })
       const data = await res.json()
