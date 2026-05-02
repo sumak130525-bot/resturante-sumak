@@ -1,7 +1,6 @@
 'use client'
 
 import { useState, useCallback, useEffect, useRef } from 'react'
-import Image from 'next/image'
 import { useMenuRealtime } from '@/hooks/useMenuRealtime'
 import type { MenuItem } from '@/lib/types'
 
@@ -336,6 +335,19 @@ function ModifierModal({
 
 // ─── POS Dish Card ────────────────────────────────────────────────────────────
 
+// ─── Clock ─────────────────────────────────────────────────────────────────────
+function POSClock() {
+  const [time, setTime] = useState('')
+  useEffect(() => {
+    const tick = () => setTime(new Date().toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false }))
+    tick()
+    const id = setInterval(tick, 30000)
+    return () => clearInterval(id)
+  }, [])
+  return <span className="text-sumak-gold/70 text-xs font-mono shrink-0">{time}</span>
+}
+
+// ─── Dish Card ──────────────────────────────────────────────────────────────────
 function POSDishCard({ item, onAdd }: { item: MenuItem; onAdd: (item: MenuItem) => void }) {
   const isUnavailable = item.available === 0
   const [pressed, setPressed] = useState(false)
@@ -962,35 +974,56 @@ export default function POSPage() {
   const ticketCount = ticketItems.reduce((s, i) => s + i.quantity, 0)
 
   return (
-    <div className="fixed inset-0 flex flex-col bg-sumak-cream overflow-hidden select-none" style={{ fontFamily: "'Inter', sans-serif" }}>
-      {/* ── Header ── */}
-      <header className="shrink-0 flex items-center gap-3 px-4 py-3 bg-sumak-brown shadow-md">
-        <Image
-          src="/logo-sumak.png"
-          alt="Sumak"
-          width={36}
-          height={36}
-          className="rounded-full border-2 border-sumak-gold/40 object-cover shrink-0"
-          priority
-        />
-        <div className="flex-1 min-w-0">
-          <h1 className="text-sumak-gold font-black text-xl leading-none">Punto de Venta</h1>
-          <p className="text-sumak-gold/60 text-xs mt-0.5">Sumak</p>
+    <div className="fixed inset-0 flex flex-col bg-black overflow-hidden select-none" style={{ fontFamily: "'Inter', sans-serif" }}>
+      {/* ── Top Bar: POS + Categories + Language + Clock + Ticket ── */}
+      <header className="shrink-0 flex items-center gap-2 px-3 py-1.5 bg-sumak-brown shadow-md">
+        <h1 className="text-sumak-gold font-black text-lg leading-none shrink-0">POS</h1>
+        <div className="h-5 w-px bg-sumak-gold/30 shrink-0" />
+        {/* Category Tabs inline */}
+        <div
+          className="flex-1 flex gap-1.5 overflow-x-auto min-w-0"
+          style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+        >
+          <button
+            onClick={() => setActiveCategory('all')}
+            className={`flex items-center gap-1 whitespace-nowrap px-3 py-1 rounded-pill text-xs font-semibold transition-all shrink-0 ${
+              activeCategory === 'all'
+                ? 'bg-sumak-gold text-sumak-brown'
+                : 'bg-white/20 text-sumak-gold/80 hover:bg-white/30'
+            }`}
+          >
+            Todos
+          </button>
+          {categories.map((cat) => (
+            <button
+              key={cat.id}
+              onClick={() => setActiveCategory(cat.slug)}
+              className={`flex items-center gap-1 whitespace-nowrap px-3 py-1 rounded-pill text-xs font-semibold transition-all shrink-0 ${
+                activeCategory === cat.slug
+                  ? 'bg-sumak-gold text-sumak-brown'
+                  : 'bg-white/20 text-sumak-gold/80 hover:bg-white/30'
+              }`}
+            >
+              <span className="text-sm leading-none">{CATEGORY_ICONS[cat.slug] ?? '🍴'}</span>
+              {cat.name}
+            </button>
+          ))}
         </div>
+        <div className="h-5 w-px bg-sumak-gold/30 shrink-0" />
+        {/* Clock */}
+        <POSClock />
         {/* Ticket toggle button */}
         <button
           onClick={() => setTicketOpen((o) => !o)}
-          className={`relative flex items-center gap-2 px-4 py-2.5 rounded-2xl font-bold text-base transition-all active:scale-95 shadow-md ${
+          className={`relative flex items-center gap-1.5 px-3 py-1.5 rounded-xl font-bold text-sm transition-all active:scale-95 shadow-md shrink-0 ${
             ticketOpen
               ? 'bg-sumak-gold text-sumak-brown'
               : 'bg-sumak-brown-mid text-sumak-gold hover:bg-sumak-brown-light'
           }`}
-          style={{ minHeight: 48 }}
         >
-          <span className="text-xl">🧾</span>
-          <span className="hidden sm:inline">Ticket</span>
+          <span className="text-base">🧾</span>
           {ticketCount > 0 && (
-            <span className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-sumak-gold text-sumak-brown text-xs font-black flex items-center justify-center">
+            <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-sumak-gold text-sumak-brown text-[10px] font-black flex items-center justify-center">
               {ticketCount}
             </span>
           )}
@@ -999,42 +1032,8 @@ export default function POSPage() {
 
       {/* ── Main content: grid + ticket panel ── */}
       <div className="flex-1 flex min-h-0 overflow-hidden">
-        {/* ── Left: Category Tabs + Dish Grid ── */}
+        {/* ── Left: Dish Grid ── */}
         <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
-          {/* Category Tabs */}
-          <div className="shrink-0 bg-sumak-cream/90 backdrop-blur border-b border-sumak-cream-dark/60 shadow-sm">
-            <div
-              className="flex gap-2 overflow-x-auto px-3 py-2"
-              style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
-            >
-              {/* Todos tab */}
-              <button
-                onClick={() => setActiveCategory('all')}
-                className={`flex items-center gap-1.5 whitespace-nowrap px-4 py-2 rounded-pill text-sm font-semibold transition-all duration-200 shrink-0 ${
-                  activeCategory === 'all'
-                    ? 'bg-sumak-brown text-sumak-gold shadow-premium scale-[1.02]'
-                    : 'bg-white/80 text-sumak-brown-mid border border-sumak-cream-dark hover:bg-white hover:border-sumak-gold/40 hover:text-sumak-brown'
-                }`}
-              >
-                Todos
-              </button>
-              {categories.map((cat) => (
-                <button
-                  key={cat.id}
-                  onClick={() => setActiveCategory(cat.slug)}
-                  className={`flex items-center gap-1.5 whitespace-nowrap px-4 py-2 rounded-pill text-sm font-semibold transition-all duration-200 shrink-0 ${
-                    activeCategory === cat.slug
-                      ? 'bg-sumak-brown text-sumak-gold shadow-premium scale-[1.02]'
-                      : 'bg-white/80 text-sumak-brown-mid border border-sumak-cream-dark hover:bg-white hover:border-sumak-gold/40 hover:text-sumak-brown'
-                  }`}
-                >
-                  <span className="text-base leading-none">{CATEGORY_ICONS[cat.slug] ?? '🍴'}</span>
-                  {cat.name}
-                </button>
-              ))}
-            </div>
-          </div>
-
           {/* Dish Grid */}
         <main
           className="flex-1 min-w-0 p-2 overflow-hidden"
