@@ -154,8 +154,8 @@ type PaymentMethod = 'Efectivo' | 'Transferencia'
 
 function buildLineNote(modifiers: SelectedModifier[]): string | null {
   if (!modifiers || modifiers.length === 0) return null
-  // Group by modifier name
-  const parts = modifiers.map((m) => `${m.modifierName}: ${m.optionName}`)
+  // Only option names, no modifier group name
+  const parts = modifiers.map((m) => m.optionName)
   return parts.join(' · ')
 }
 
@@ -882,10 +882,10 @@ export default function POSPage() {
         line_note: buildLineNote(item.modifiers ?? []),
       }))
 
-      const finalNotes = [
-        diningOption === 'Comer dentro' && tableNumber ? `Mesa ${tableNumber}` : '',
-        orderNotes.trim(),
-      ].filter(Boolean).join(' | ') || null
+      // Mesa goes in notes for kitchen extraction (header), user note is separate
+      const mesaPart = diningOption === 'Comer dentro' && tableNumber ? `Mesa ${tableNumber}` : ''
+      const userNote = orderNotes.trim()
+      const finalNotes = [mesaPart, userNote].filter(Boolean).join(' | ') || null
 
       const res = await fetch('/api/pos/orders', {
         method: 'POST',
