@@ -1,67 +1,45 @@
 import { NextResponse } from 'next/server'
+import { createClient } from '@supabase/supabase-js'
 
 export const dynamic = 'force-dynamic'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type LoyverseModifierOption = {
+type ModifierOption = {
   id: string
   name: string
   price: number
 }
 
-type LoyverseModifier = {
+type Modifier = {
   id: string
   name: string
-  options: LoyverseModifierOption[]
+  options: ModifierOption[]
 }
 
-// ─── Module-level cache (TTL 10 min) ─────────────────────────────────────────
-
-let modifiersCache: { data: LoyverseModifier[]; expiry: number } | null = null
-
-async function fetchModifiersFromLoyverse(): Promise<LoyverseModifier[]> {
-  const token = process.env.LOYVERSE_ACCESS_TOKEN
-  if (!token) return []
-
-  const res = await fetch('https://api.loyverse.com/v1.0/modifiers?limit=250', {
-    headers: { Authorization: `Bearer ${token}` },
-    cache: 'no-store',
-  })
-
-  if (!res.ok) return []
-
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const data: any = await res.json()
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const raw: any[] = data.modifiers ?? []
-
-  return raw.map((m) => ({
-    id: m.id as string,
-    name: m.name as string,
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    options: (m.modifier_options ?? []).map((o: any) => ({
-      id: o.id as string,
-      name: o.name as string,
-      price: Number(o.price ?? 0),
-    })),
-  }))
-}
-
-async function getCachedModifiers(): Promise<LoyverseModifier[]> {
-  if (modifiersCache && Date.now() < modifiersCache.expiry) {
-    return modifiersCache.data
-  }
-  const data = await fetchModifiersFromLoyverse()
-  modifiersCache = { data, expiry: Date.now() + 10 * 60 * 1000 }
-  return data
+function getAdminClient() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  )
 }
 
 // ─── GET handler ──────────────────────────────────────────────────────────────
 
 export async function GET() {
   try {
-    const modifiers = await getCachedModifiers()
+    const supabase = getAdminClient()
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data, error } = await (supabase as any)
+      .from('settings')
+      .select('value')
+      .eq('key', 'pos_modifiers')
+      .maybeSingle()
+
+    if (error) throw new Error(error.message)
+
+    const modifiers: Modifier[] = data?.value ? JSON.parse(data.value) : []
+
     return NextResponse.json({ modifiers })
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Error interno'

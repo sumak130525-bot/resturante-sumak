@@ -820,7 +820,6 @@ export default function POSPage() {
 
   const handleAddItem = useCallback((item: MenuItem) => {
     const modifierIds = itemModifierMap[item.id] ?? []
-    console.log('[POS] handleAddItem', item.id, item.name, 'modifierIds:', modifierIds, 'allModifiers:', allModifiers.length, 'map:', JSON.stringify(itemModifierMap))
     if (modifierIds.length === 0) {
       // No modifiers — add directly
       addItemToTicket(item)
