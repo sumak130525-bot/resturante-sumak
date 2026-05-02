@@ -45,14 +45,8 @@ export async function POST(request: NextRequest) {
       query: "ALTER TABLE order_items ADD COLUMN IF NOT EXISTS line_note text;"
     }).then(() => {}, () => {}) // ignore errors if rpc doesn't exist
 
-    // Usar nota personalizada del usuario (o null si no hay)
-    const notes = customNotes && String(customNotes).trim() ? String(customNotes).trim() : null
-
-    // Build notes: Mesa + user note (NO modifiers - those go in line_note per item)
-    const orderNotes = [
-      table_number ? `Mesa ${table_number}` : '',
-      notes || '',
-    ].filter(Boolean).join(' | ') || null
+    // Usar nota personalizada del usuario tal cual viene del POS
+    const orderNotes = customNotes && String(customNotes).trim() ? String(customNotes).trim() : null
 
     // Crear el pedido en la tabla orders
     const { data: order, error: orderError } = await supabase
