@@ -391,10 +391,33 @@ function CashMovementsModal({ onClose }: { onClose: () => void }) {
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error ?? 'Error')
+
+      // Print receipt to open cash drawer
+      const now = new Date()
+      const dateStr = now.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' })
+      const timeStr = now.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false })
+      const receiptText = [
+        '================================',
+        tab === 'ingreso' ? '     INGRESO DE EFECTIVO' : '     EGRESO DE EFECTIVO',
+        '================================',
+        `Fecha: ${dateStr}  ${timeStr}`,
+        '',
+        `Monto: $${parsed.toLocaleString('es-AR')}`,
+        description.trim() ? `Detalle: ${description.trim()}` : '',
+        '',
+        '================================',
+      ].filter(Boolean).join('\n')
+      sessionStorage.setItem('pos_ticket', receiptText)
+      sessionStorage.setItem('pos_ticket_payment', tab === 'ingreso' ? 'Efectivo' : 'Efectivo')
+
       setAmount('')
       setDescription('')
       setSuccess(`${tab === 'ingreso' ? 'Ingreso' : 'Egreso'} registrado`)
-      setTimeout(() => setSuccess(null), 2500)
+      setTimeout(() => {
+        setSuccess(null)
+        // Navigate to ticket page to print and open drawer
+        window.location.href = '/pos/ticket'
+      }, 500)
       loadMovements()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error')
