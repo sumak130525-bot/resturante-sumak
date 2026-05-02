@@ -994,7 +994,7 @@ export default function POSPage() {
                 : 'bg-white/20 text-sumak-gold/80 hover:bg-white/30'
             }`}
           >
-            Todos
+            {locale === 'en' ? 'All' : locale === 'qu' ? 'Llipin' : 'Todos'}
           </button>
           {categories.map((cat) => (
             <button
@@ -1007,7 +1007,7 @@ export default function POSPage() {
               }`}
             >
               <span className="text-sm leading-none">{CATEGORY_ICONS[cat.slug] ?? '🍴'}</span>
-              {cat.name}
+              {locale === 'en' && cat.name_en ? cat.name_en : locale === 'qu' && cat.name_qu ? cat.name_qu : cat.name}
             </button>
           ))}
         </div>
