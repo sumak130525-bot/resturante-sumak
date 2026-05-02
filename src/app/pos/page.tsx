@@ -3,6 +3,7 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
 import { useMenuRealtime } from '@/hooks/useMenuRealtime'
 import type { MenuItem } from '@/lib/types'
+import { useTranslation, type Locale } from '@/lib/i18n'
 
 // ─── Ticket helpers ───────────────────────────────────────────────────────────
 
@@ -756,6 +757,7 @@ function TicketPanel({
 
 export default function POSPage() {
   const { menuItems, categories, loading } = useMenuRealtime()
+  const { locale, setLocale } = useTranslation()
 
   // Frequent customers
   const [customers, setCustomers] = useState<FrequentCustomer[]>([])
@@ -1010,6 +1012,22 @@ export default function POSPage() {
           ))}
         </div>
         <div className="h-5 w-px bg-sumak-gold/30 shrink-0" />
+        {/* Language selector */}
+        <div className="flex items-center gap-0.5 shrink-0">
+          {(['es', 'en', 'qu'] as Locale[]).map((lang) => (
+            <button
+              key={lang}
+              onClick={() => setLocale(lang)}
+              className={`px-1.5 py-0.5 rounded text-[0.65rem] font-bold uppercase transition-all ${
+                locale === lang
+                  ? 'bg-sumak-gold text-sumak-brown'
+                  : 'text-sumak-gold/40 hover:text-sumak-gold/70'
+              }`}
+            >
+              {lang}
+            </button>
+          ))}
+        </div>
         {/* Clock */}
         <POSClock />
         {/* Ticket toggle button */}
