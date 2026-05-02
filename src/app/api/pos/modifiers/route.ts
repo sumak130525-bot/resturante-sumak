@@ -40,7 +40,7 @@ async function fetchModifiersFromLoyverse(): Promise<LoyverseModifier[]> {
     id: m.id as string,
     name: m.name as string,
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    options: (m.options ?? []).map((o: any) => ({
+    options: (m.modifier_options ?? []).map((o: any) => ({
       id: o.id as string,
       name: o.name as string,
       price: Number(o.price ?? 0),
