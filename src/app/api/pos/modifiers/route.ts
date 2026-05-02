@@ -4,13 +4,13 @@ export const dynamic = 'force-dynamic'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-export type LoyverseModifierOption = {
+type LoyverseModifierOption = {
   id: string
   name: string
   price: number
 }
 
-export type LoyverseModifier = {
+type LoyverseModifier = {
   id: string
   name: string
   options: LoyverseModifierOption[]
@@ -48,7 +48,7 @@ async function fetchModifiersFromLoyverse(): Promise<LoyverseModifier[]> {
   }))
 }
 
-export async function getCachedModifiers(): Promise<LoyverseModifier[]> {
+async function getCachedModifiers(): Promise<LoyverseModifier[]> {
   if (modifiersCache && Date.now() < modifiersCache.expiry) {
     return modifiersCache.data
   }
