@@ -3,7 +3,7 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
 import { useMenuRealtime } from '@/hooks/useMenuRealtime'
 import type { MenuItem } from '@/lib/types'
-import { useTranslation, type Locale } from '@/lib/i18n'
+import { useTranslation, getItemName, type Locale } from '@/lib/i18n'
 
 // ─── Ticket helpers ───────────────────────────────────────────────────────────
 
@@ -349,7 +349,7 @@ function POSClock() {
 }
 
 // ─── Dish Card ──────────────────────────────────────────────────────────────────
-function POSDishCard({ item, onAdd }: { item: MenuItem; onAdd: (item: MenuItem) => void }) {
+function POSDishCard({ item, onAdd, locale }: { item: MenuItem; onAdd: (item: MenuItem) => void; locale: Locale }) {
   const isUnavailable = item.available === 0
   const [pressed, setPressed] = useState(false)
 
@@ -395,7 +395,7 @@ function POSDishCard({ item, onAdd }: { item: MenuItem; onAdd: (item: MenuItem) 
           className="font-bold leading-tight text-white text-[clamp(0.7rem,1.2vw,0.95rem)] truncate"
           style={{ textShadow: '0 1px 3px rgba(0,0,0,0.9)' }}
         >
-          {item.name}
+          {getItemName(item, locale)}
         </p>
         <p
           className="font-bold tabular-nums text-[clamp(0.75rem,1.3vw,1rem)] text-sumak-gold-light"
@@ -1072,7 +1072,7 @@ export default function POSPage() {
               const item = displayItems.find((i) => i.display_order === position)
                 ?? (activeCategory !== 'all' ? displayItems[gridIndex] : undefined)
               if (item) {
-                return <POSDishCard key={item.id} item={item} onAdd={handleAddItem} />
+                return <POSDishCard key={item.id} item={item} onAdd={handleAddItem} locale={locale} />
               }
               return <div key={`empty-${gridIndex}`} className="w-full h-full rounded-xl bg-sumak-cream-dark/40" />
             })
