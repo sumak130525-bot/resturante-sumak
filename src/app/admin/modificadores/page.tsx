@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { AdminLayoutClient } from '@/components/admin/AdminLayoutClient'
-import { RefreshCw, Check, Sliders } from 'lucide-react'
+import { createClient } from '@/lib/supabase/client'
 
 type ModifierOption = {
   id: string
@@ -16,9 +16,9 @@ type Modifier = {
   options: ModifierOption[]
 }
 
-type LoyverseItem = {
+type AdminItem = {
   id: string
-  item_name: string
+  name: string
 }
 
 function formatARS(price: number): string {
@@ -31,11 +31,11 @@ function formatARS(price: number): string {
 }
 
 export default function AdminModificadoresPage() {
-  const [items, setItems] = useState<LoyverseItem[]>([])
+  const [items, setItems] = useState<AdminItem[]>([])
   const [modifiers, setModifiers] = useState<Modifier[]>([])
   const [mappings, setMappings] = useState<Record<string, string[]>>({})
   const [loading, setLoading] = useState(true)
-  const [selectedItem, setSelectedItem] = useState<LoyverseItem | null>(null)
+  const [selectedItem, setSelectedItem] = useState<AdminItem | null>(null)
   const [saving, setSaving] = useState(false)
   const [savedItemId, setSavedItemId] = useState<string | null>(null)
 
@@ -43,13 +43,12 @@ export default function AdminModificadoresPage() {
     setLoading(true)
     try {
       const [itemsRes, modifiersRes, mappingsRes] = await Promise.all([
-        fetch('/api/loyverse/items'),
+        createClient().from('menu_items').select('id, name').eq('active', true).order('name'),
         fetch('/api/pos/modifiers'),
         fetch('/api/admin/item-modifiers'),
       ])
-      if (itemsRes.ok) {
-        const d = await itemsRes.json()
-        setItems(d.items ?? [])
+      if (itemsRes.data) {
+        setItems(itemsRes.data)
       }
       if (modifiersRes.ok) {
         const d = await modifiersRes.json()
@@ -152,7 +151,7 @@ export default function AdminModificadoresPage() {
                         }`}
                       >
                         <span className="flex-1 text-sm font-medium text-gray-900 truncate">
-                          {item.item_name}
+                          {item.name}
                         </span>
                         {hasModifiers && (
                           <span className="text-xs bg-teal-100 text-teal-700 px-2 py-0.5 rounded-full font-medium shrink-0">
@@ -181,7 +180,7 @@ export default function AdminModificadoresPage() {
                   <div className="px-5 py-4 border-b border-gray-100">
                     <h2 className="text-sm font-semibold text-gray-700">
                       Modificadores para:{' '}
-                      <span className="text-sumak-brown">{selectedItem.item_name}</span>
+                      <span className="text-sumak-brown">{selectedItem.name}</span>
                     </h2>
                     <p className="text-xs text-gray-400 mt-0.5">
                       Marcá los modificadores que aplican a este item
