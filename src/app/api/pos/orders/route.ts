@@ -8,6 +8,7 @@ type PosOrderItem = {
   quantity: number
   price: number
   menu_item_id: string
+  line_note?: string | null
 }
 
 function getAdminClient() {
@@ -64,19 +65,43 @@ export async function POST(request: NextRequest) {
     if (orderError) throw new Error(`Order insert: ${orderError.message}`)
     if (!order) throw new Error('No se pudo crear el pedido')
 
-    // Crear order_items para cada producto
-    const orderItems = (items as PosOrderItem[]).map((item) => ({
-      order_id: order.id,
-      menu_item_id: item.menu_item_id,
-      quantity: item.quantity,
-      unit_price: Math.round(item.price),
-    }))
+    // Crear order_items para cada producto (incluye line_note si existe la columna)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const orderItems = (items as PosOrderItem[]).map((item): any => {
+      const base = {
+        order_id: order.id,
+        menu_item_id: item.menu_item_id,
+        quantity: item.quantity,
+        unit_price: Math.round(item.price),
+      }
+      // Include line_note when available (column may not exist in older schemas)
+      if (item.line_note) {
+        return { ...base, line_note: item.line_note }
+      }
+      return base
+    })
 
     const { error: itemsError } = await supabase
       .from('order_items')
       .insert(orderItems)
 
-    if (itemsError) throw new Error(`Items insert: ${itemsError.message}`)
+    if (itemsError) {
+      // If line_note column doesn't exist, retry without it
+      if (itemsError.message.includes('line_note') || itemsError.code === 'PGRST204' || itemsError.message.includes('column')) {
+        const fallbackItems = (items as PosOrderItem[]).map((item) => ({
+          order_id: order.id,
+          menu_item_id: item.menu_item_id,
+          quantity: item.quantity,
+          unit_price: Math.round(item.price),
+        }))
+        const { error: fallbackError } = await supabase
+          .from('order_items')
+          .insert(fallbackItems)
+        if (fallbackError) throw new Error(`Items insert: ${fallbackError.message}`)
+      } else {
+        throw new Error(`Items insert: ${itemsError.message}`)
+      }
+    }
 
     return NextResponse.json({ success: true, order_id: order.id }, { status: 201 })
   } catch (err: unknown) {

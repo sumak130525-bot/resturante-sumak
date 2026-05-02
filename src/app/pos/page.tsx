@@ -21,6 +21,29 @@ function formatTicketMoney(amount: number): string {
   }).format(amount)
 }
 
+// ─── Modifier types ───────────────────────────────────────────────────────────
+
+type ModifierOption = {
+  id: string
+  name: string
+  price: number
+}
+
+type Modifier = {
+  id: string
+  name: string
+  options: ModifierOption[]
+}
+
+// Selected modifier choice: one modifier → one option chosen
+type SelectedModifier = {
+  modifierId: string
+  modifierName: string
+  optionId: string
+  optionName: string
+  price: number
+}
+
 type PrintData = {
   orderNumber: number
   dateStr: string
@@ -37,7 +60,7 @@ function printTicketPopup(data: PrintData): void {
   const LINE = '================================'
   const total = formatTicketMoney(data.total)
 
-  const itemLines = data.items.map((item) => {
+  const itemLines = data.items.flatMap((item) => {
     const qty = String(item.quantity)
     const name = item.name
     const sub = formatTicketMoney(item.price * item.quantity)
@@ -46,8 +69,14 @@ function printTicketPopup(data: PrintData): void {
     const dots = maxPrefix > prefix.length
       ? '.'.repeat(maxPrefix - prefix.length)
       : ' '
-    return prefix + dots + sub
-  }).join('\n')
+    const mainLine = prefix + dots + sub
+
+    // Modifier lines under item
+    const modLines = (item.modifiers ?? []).map(
+      (m) => `  > ${m.optionName}${m.price > 0 ? ' (+)' : ''}`
+    )
+    return [mainLine, ...modLines]
+  })
 
   const mesaLine = data.diningOption === 'Comer dentro' && data.tableNumber
     ? `Mesa: ${data.tableNumber}\n`
@@ -68,7 +97,7 @@ function printTicketPopup(data: PrintData): void {
     mesaLine.trimEnd(),
     `Modalidad: ${data.diningOption}`,
     LINE,
-    itemLines,
+    ...itemLines,
     LINE,
     totalLine,
     `Pago: ${data.paymentMethod.toUpperCase()}${data.paymentMethod === 'Efectivo' ? ' [ABRIR CAJON]' : ''}`,
@@ -115,10 +144,20 @@ type TicketItem = {
   price: number
   quantity: number
   image_url?: string | null
+  modifiers?: SelectedModifier[]
 }
 
 type DiningOption = 'Comer dentro' | 'Para llevar'
 type PaymentMethod = 'Efectivo' | 'Transferencia'
+
+// ─── Build line_note string from modifiers (Loyverse format) ─────────────────
+
+function buildLineNote(modifiers: SelectedModifier[]): string | null {
+  if (!modifiers || modifiers.length === 0) return null
+  // Group by modifier name
+  const parts = modifiers.map((m) => `${m.modifierName}: ${m.optionName}`)
+  return parts.join(' · ')
+}
 
 // ─── Toast ────────────────────────────────────────────────────────────────────
 
@@ -137,6 +176,144 @@ function Toast({ message, onDone }: { message: string; onDone: () => void }) {
       >
         ✕
       </button>
+    </div>
+  )
+}
+
+// ─── Modifier Modal ───────────────────────────────────────────────────────────
+
+function ModifierModal({
+  item,
+  modifiers,
+  onConfirm,
+  onCancel,
+}: {
+  item: MenuItem
+  modifiers: Modifier[]
+  onConfirm: (selections: SelectedModifier[]) => void
+  onCancel: () => void
+}) {
+  // State: modifierId → optionId selected (single selection per modifier)
+  const [selections, setSelections] = useState<Record<string, string>>({})
+
+  const handleOptionToggle = (modifierId: string, optionId: string) => {
+    setSelections((prev) => {
+      if (prev[modifierId] === optionId) {
+        // Deselect
+        const next = { ...prev }
+        delete next[modifierId]
+        return next
+      }
+      return { ...prev, [modifierId]: optionId }
+    })
+  }
+
+  const handleConfirm = () => {
+    const result: SelectedModifier[] = []
+    for (const mod of modifiers) {
+      const selectedOptionId = selections[mod.id]
+      if (selectedOptionId) {
+        const opt = mod.options.find((o) => o.id === selectedOptionId)
+        if (opt) {
+          result.push({
+            modifierId: mod.id,
+            modifierName: mod.name,
+            optionId: opt.id,
+            optionName: opt.name,
+            price: opt.price,
+          })
+        }
+      }
+    }
+    onConfirm(result)
+  }
+
+  const extraTotal = Object.entries(selections).reduce((sum, [modId, optId]) => {
+    const mod = modifiers.find((m) => m.id === modId)
+    const opt = mod?.options.find((o) => o.id === optId)
+    return sum + (opt?.price ?? 0)
+  }, 0)
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+      onClick={(e) => { if (e.target === e.currentTarget) onCancel() }}
+    >
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm mx-4 flex flex-col overflow-hidden max-h-[90vh]">
+        {/* Header */}
+        <div className="px-5 py-4 bg-teal-600 shrink-0">
+          <h3 className="text-white font-black text-lg leading-none">{item.name}</h3>
+          <p className="text-teal-100 text-xs mt-0.5">Seleccioná las opciones</p>
+        </div>
+
+        {/* Modifiers list */}
+        <div className="flex-1 overflow-y-auto px-5 py-3">
+          {modifiers.map((mod) => (
+            <div key={mod.id} className="mb-4">
+              <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-2">
+                {mod.name}
+              </p>
+              <div className="flex flex-col gap-1">
+                {mod.options.map((opt) => {
+                  const checked = selections[mod.id] === opt.id
+                  return (
+                    <button
+                      key={opt.id}
+                      onClick={() => handleOptionToggle(mod.id, opt.id)}
+                      className={`flex items-center gap-3 px-3 py-2.5 rounded-xl border transition-all text-left ${
+                        checked
+                          ? 'border-teal-500 bg-teal-50'
+                          : 'border-gray-200 bg-gray-50 hover:border-gray-300'
+                      }`}
+                    >
+                      <div
+                        className={`w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 transition-all ${
+                          checked
+                            ? 'border-teal-500 bg-teal-500'
+                            : 'border-gray-300'
+                        }`}
+                      >
+                        {checked && (
+                          <div className="w-1.5 h-1.5 rounded-full bg-white" />
+                        )}
+                      </div>
+                      <span className="flex-1 text-sm font-medium text-gray-900">{opt.name}</span>
+                      {opt.price > 0 && (
+                        <span className="text-xs font-bold text-teal-600 shrink-0">
+                          +{formatARS(opt.price)}
+                        </span>
+                      )}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Footer */}
+        <div className="px-5 pb-5 pt-3 border-t border-gray-100 shrink-0">
+          {extraTotal > 0 && (
+            <p className="text-xs text-gray-500 mb-2 text-right">
+              Extras: <span className="font-bold text-teal-600">+{formatARS(extraTotal)}</span>
+            </p>
+          )}
+          <div className="flex gap-3">
+            <button
+              onClick={onCancel}
+              className="flex-1 py-3 rounded-xl font-bold text-sm bg-gray-100 text-gray-700 hover:bg-gray-200 active:scale-95 transition-all"
+            >
+              Cancelar
+            </button>
+            <button
+              onClick={handleConfirm}
+              className="flex-1 py-3 rounded-xl font-bold text-sm bg-teal-600 hover:bg-teal-700 text-white active:scale-95 transition-all shadow-md"
+            >
+              Agregar
+            </button>
+          </div>
+        </div>
+      </div>
     </div>
   )
 }
@@ -428,7 +605,10 @@ function TicketPanel({
   onDiningChange: (v: DiningOption) => void
   onOpenConfirm: () => void
 }) {
-  const total = items.reduce((s, i) => s + i.price * i.quantity, 0)
+  const total = items.reduce((s, i) => {
+    const modExtra = (i.modifiers ?? []).reduce((ms, m) => ms + m.price, 0)
+    return s + (i.price + modExtra) * i.quantity
+  }, 0)
   const isEmpty = items.length === 0
   const itemCount = items.reduce((s, i) => s + i.quantity, 0)
 
@@ -464,43 +644,59 @@ function TicketPanel({
           </div>
         ) : (
           <ul className="flex flex-col gap-1">
-            {items.map((item) => (
-              <li
-                key={item.menu_item_id}
-                className="flex items-center gap-1.5 bg-gray-50 rounded-xl px-2.5 py-1.5 border border-gray-100"
-              >
-                <div className="flex-1 min-w-0">
-                  <p className="font-semibold text-gray-900 text-sm leading-tight truncate">{item.name}</p>
-                  <p className="text-teal-600 font-bold text-xs tabular-nums">
-                    {formatARS(item.price)} × {item.quantity} = {formatARS(item.price * item.quantity)}
-                  </p>
-                </div>
-                <div className="flex items-center gap-0.5 shrink-0">
-                  <button
-                    onClick={() => onUpdateQty(item.menu_item_id, -1)}
-                    className="w-6 h-6 rounded-md bg-gray-200 hover:bg-gray-300 active:scale-90 flex items-center justify-center font-black text-gray-700 text-sm transition-all"
-                    aria-label="Quitar uno"
-                  >
-                    −
-                  </button>
-                  <span className="w-6 text-center font-black text-gray-900 tabular-nums text-sm">{item.quantity}</span>
-                  <button
-                    onClick={() => onUpdateQty(item.menu_item_id, +1)}
-                    className="w-6 h-6 rounded-md bg-teal-100 hover:bg-teal-200 active:scale-90 flex items-center justify-center font-black text-teal-700 text-sm transition-all"
-                    aria-label="Agregar uno"
-                  >
-                    +
-                  </button>
-                  <button
-                    onClick={() => onRemove(item.menu_item_id)}
-                    className="w-6 h-6 rounded-md bg-red-100 hover:bg-red-200 active:scale-90 flex items-center justify-center text-red-600 font-black text-xs transition-all ml-0.5"
-                    aria-label="Eliminar"
-                  >
-                    ✕
-                  </button>
-                </div>
-              </li>
-            ))}
+            {items.map((item) => {
+              const modExtra = (item.modifiers ?? []).reduce((ms, m) => ms + m.price, 0)
+              const unitTotal = item.price + modExtra
+              return (
+                <li
+                  key={item.menu_item_id}
+                  className="flex items-start gap-1.5 bg-gray-50 rounded-xl px-2.5 py-1.5 border border-gray-100"
+                >
+                  <div className="flex-1 min-w-0">
+                    <p className="font-semibold text-gray-900 text-sm leading-tight truncate">{item.name}</p>
+                    {(item.modifiers ?? []).length > 0 && (
+                      <div className="mt-0.5">
+                        {item.modifiers!.map((m, idx) => (
+                          <p key={idx} className="text-gray-500 text-xs leading-tight pl-2">
+                            · {m.optionName}
+                            {m.price > 0 && (
+                              <span className="text-teal-600"> +{formatARS(m.price)}</span>
+                            )}
+                          </p>
+                        ))}
+                      </div>
+                    )}
+                    <p className="text-teal-600 font-bold text-xs tabular-nums mt-0.5">
+                      {formatARS(unitTotal)} × {item.quantity} = {formatARS(unitTotal * item.quantity)}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-0.5 shrink-0 mt-0.5">
+                    <button
+                      onClick={() => onUpdateQty(item.menu_item_id, -1)}
+                      className="w-6 h-6 rounded-md bg-gray-200 hover:bg-gray-300 active:scale-90 flex items-center justify-center font-black text-gray-700 text-sm transition-all"
+                      aria-label="Quitar uno"
+                    >
+                      −
+                    </button>
+                    <span className="w-6 text-center font-black text-gray-900 tabular-nums text-sm">{item.quantity}</span>
+                    <button
+                      onClick={() => onUpdateQty(item.menu_item_id, +1)}
+                      className="w-6 h-6 rounded-md bg-teal-100 hover:bg-teal-200 active:scale-90 flex items-center justify-center font-black text-teal-700 text-sm transition-all"
+                      aria-label="Agregar uno"
+                    >
+                      +
+                    </button>
+                    <button
+                      onClick={() => onRemove(item.menu_item_id)}
+                      className="w-6 h-6 rounded-md bg-red-100 hover:bg-red-200 active:scale-90 flex items-center justify-center text-red-600 font-black text-xs transition-all ml-0.5"
+                      aria-label="Eliminar"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                </li>
+              )
+            })}
           </ul>
         )}
       </div>
@@ -542,6 +738,24 @@ export default function POSPage() {
       .catch(() => {})
   }, [])
 
+  // Modifiers data (fetched once on load)
+  const [allModifiers, setAllModifiers] = useState<Modifier[]>([])
+  const [itemModifierMap, setItemModifierMap] = useState<Record<string, string[]>>({})
+
+  useEffect(() => {
+    Promise.all([
+      fetch('/api/pos/modifiers').then((r) => r.ok ? r.json() : { modifiers: [] }),
+      fetch('/api/admin/item-modifiers').then((r) => r.ok ? r.json() : { mappings: {} }),
+    ]).then(([modData, mapData]) => {
+      setAllModifiers(modData.modifiers ?? [])
+      setItemModifierMap(mapData.mappings ?? {})
+    }).catch(() => {})
+  }, [])
+
+  // Modifier modal state
+  const [pendingItem, setPendingItem] = useState<MenuItem | null>(null)
+  const [pendingModifiers, setPendingModifiers] = useState<Modifier[]>([])
+
   // Ticket state
   const [ticketItems, setTicketItems] = useState<TicketItem[]>([])
   const [diningOption, setDiningOption] = useState<DiningOption>('Comer dentro')
@@ -560,14 +774,35 @@ export default function POSPage() {
   // Only display items with display_order > 0, capped at 24
   const displayItems = menuItems.slice(0, MAX_VISIBLE)
 
-  const handleAddItem = useCallback((item: MenuItem) => {
+  // Add item to ticket (called after modifier selection or directly)
+  const addItemToTicket = useCallback((item: MenuItem, modifiers?: SelectedModifier[]) => {
     setTicketItems((prev) => {
-      const existing = prev.find((i) => i.menu_item_id === item.id)
-      if (existing) {
-        return prev.map((i) =>
-          i.menu_item_id === item.id ? { ...i, quantity: i.quantity + 1 } : i
+      // Items with modifiers are always added as new entries (unique combo)
+      // Items without modifiers can be merged by menu_item_id
+      if (!modifiers || modifiers.length === 0) {
+        const existing = prev.find(
+          (i) => i.menu_item_id === item.id && (!i.modifiers || i.modifiers.length === 0)
         )
+        if (existing) {
+          return prev.map((i) =>
+            i.menu_item_id === item.id && (!i.modifiers || i.modifiers.length === 0)
+              ? { ...i, quantity: i.quantity + 1 }
+              : i
+          )
+        }
+        return [
+          ...prev,
+          {
+            menu_item_id: item.id,
+            name: item.name,
+            price: item.price,
+            quantity: 1,
+            image_url: item.image_url,
+          },
+        ]
       }
+
+      // With modifiers: always new entry (unique modifier combination)
       return [
         ...prev,
         {
@@ -576,11 +811,37 @@ export default function POSPage() {
           price: item.price,
           quantity: 1,
           image_url: item.image_url,
+          modifiers,
         },
       ]
     })
-    // Auto-open ticket when first item added
     setTicketOpen(true)
+  }, [])
+
+  const handleAddItem = useCallback((item: MenuItem) => {
+    const modifierIds = itemModifierMap[item.id] ?? []
+    if (modifierIds.length === 0) {
+      // No modifiers — add directly
+      addItemToTicket(item)
+      return
+    }
+
+    // Has modifiers — show modal
+    const modifiersForItem = allModifiers.filter((m) => modifierIds.includes(m.id))
+    setPendingItem(item)
+    setPendingModifiers(modifiersForItem)
+  }, [itemModifierMap, allModifiers, addItemToTicket])
+
+  const handleModifierConfirm = useCallback((selections: SelectedModifier[]) => {
+    if (!pendingItem) return
+    addItemToTicket(pendingItem, selections)
+    setPendingItem(null)
+    setPendingModifiers([])
+  }, [pendingItem, addItemToTicket])
+
+  const handleModifierCancel = useCallback(() => {
+    setPendingItem(null)
+    setPendingModifiers([])
   }, [])
 
   const handleUpdateQty = useCallback((id: string, delta: number) => {
@@ -601,12 +862,25 @@ export default function POSPage() {
     if (ticketItems.length === 0) return
     setSubmitting(true)
     try {
-      const total = ticketItems.reduce((s, i) => s + i.price * i.quantity, 0)
+      const total = ticketItems.reduce((s, i) => {
+        const modExtra = (i.modifiers ?? []).reduce((ms, m) => ms + m.price, 0)
+        return s + (i.price + modExtra) * i.quantity
+      }, 0)
+
+      // Build items with line_note for modifiers
+      const itemsPayload = ticketItems.map((item) => ({
+        menu_item_id: item.menu_item_id,
+        name: item.name,
+        quantity: item.quantity,
+        price: item.price + (item.modifiers ?? []).reduce((s, m) => s + m.price, 0),
+        line_note: buildLineNote(item.modifiers ?? []),
+      }))
+
       const res = await fetch('/api/pos/orders', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          items: ticketItems,
+          items: itemsPayload,
           total,
           dining_option: diningOption,
           table_number: diningOption === 'Comer dentro' && tableNumber ? Number(tableNumber) : null,
@@ -740,6 +1014,16 @@ export default function POSPage() {
           )}
         </aside>
       </div>
+
+      {/* ── Modifier Modal ── */}
+      {pendingItem && (
+        <ModifierModal
+          item={pendingItem}
+          modifiers={pendingModifiers}
+          onConfirm={handleModifierConfirm}
+          onCancel={handleModifierCancel}
+        />
+      )}
 
       {/* ── Confirm Modal ── */}
       {showConfirmModal && (

@@ -3,13 +3,13 @@
 import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
-import { ChefHat, LayoutGrid, ShoppingBag, LogOut, Menu as MenuIcon, X, ChevronLeft, ChevronRight, QrCode, Store, Bell, Tag, ArrowUpDown, Users, Settings } from 'lucide-react'
+import { ChefHat, LayoutGrid, ShoppingBag, LogOut, Menu as MenuIcon, X, ChevronLeft, ChevronRight, QrCode, Store, Bell, Tag, ArrowUpDown, Users, Settings, Sliders } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { User } from '@supabase/supabase-js'
 
 interface AdminLayoutClientProps {
   children: React.ReactNode
-  active: 'dashboard' | 'menu' | 'categorias' | 'ordenar' | 'orders' | 'qr' | 'loyverse' | 'notificaciones' | 'clientes' | 'configuracion'
+  active: 'dashboard' | 'menu' | 'categorias' | 'ordenar' | 'orders' | 'qr' | 'loyverse' | 'notificaciones' | 'clientes' | 'configuracion' | 'modificadores'
 }
 
 const NAV_ITEMS = [
@@ -21,12 +21,13 @@ const NAV_ITEMS = [
   { href: '/admin/clientes', label: 'Clientes', icon: Users, key: 'clientes' as const },
   { href: '/admin/qr', label: 'Códigos QR', icon: QrCode, key: 'qr' as const },
   { href: '/admin/loyverse', label: 'Loyverse', icon: Store, key: 'loyverse' as const },
+  { href: '/admin/modificadores', label: 'Modificadores', icon: Sliders, key: 'modificadores' as const },
   { href: '/admin/notificaciones', label: 'Notificaciones', icon: Bell, key: 'notificaciones' as const },
   { href: '/admin/configuracion', label: 'Configuración', icon: Settings, key: 'configuracion' as const },
 ]
 
 interface SidebarProps {
-  active: 'dashboard' | 'menu' | 'categorias' | 'ordenar' | 'orders' | 'qr' | 'loyverse' | 'notificaciones' | 'clientes' | 'configuracion'
+  active: 'dashboard' | 'menu' | 'categorias' | 'ordenar' | 'orders' | 'qr' | 'loyverse' | 'notificaciones' | 'clientes' | 'configuracion' | 'modificadores'
   user: User | null
   onLogout: () => void
   collapsed: boolean
