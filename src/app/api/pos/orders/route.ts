@@ -93,6 +93,44 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // ── Auto-record cash movement for the sale ────────────────────────────────
+    try {
+      const movementType =
+        (payment_method === 'Efectivo') ? 'venta_efectivo' : 'venta_transferencia'
+
+      // Get current open shift (if any)
+      let shiftId: string | null = null
+      const { data: openShift } = await supabase
+        .from('cash_shifts')
+        .select('id')
+        .eq('status', 'open')
+        .order('opened_at', { ascending: false })
+        .limit(1)
+        .single()
+
+      if (openShift) {
+        shiftId = openShift.id
+      } else {
+        // Auto-create shift so sales are always tracked
+        const { data: newShift } = await supabase
+          .from('cash_shifts')
+          .insert({ opening_amount: 0, status: 'open' })
+          .select('id')
+          .single()
+        shiftId = newShift?.id ?? null
+      }
+
+      await supabase.from('cash_movements').insert({
+        type: movementType,
+        amount: total ?? 0,
+        description: `Pedido POS #${order.id.slice(-6)}`,
+        shift_id: shiftId,
+      })
+    } catch (cashErr) {
+      // Non-fatal: don't fail the order if cash movement fails
+      void cashErr
+    }
+
     return NextResponse.json({ success: true, order_id: order.id }, { status: 201 })
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Error interno'

@@ -336,6 +336,200 @@ function ModifierModal({
 
 // ─── POS Dish Card ────────────────────────────────────────────────────────────
 
+// ─── ARS formatter ───────────────────────────────────────────────────────────
+
+function formatCashARS(amount: number): string {
+  return new Intl.NumberFormat('es-AR', {
+    style: 'currency',
+    currency: 'ARS',
+    minimumFractionDigits: 0,
+  }).format(amount)
+}
+
+// ─── Cash Movement Modal ──────────────────────────────────────────────────────
+
+type CashMovement = {
+  id: string
+  type: 'ingreso' | 'egreso' | 'venta_efectivo' | 'venta_transferencia'
+  amount: number
+  description: string | null
+  created_at: string
+}
+
+function CashMovementsModal({ onClose }: { onClose: () => void }) {
+  const [tab, setTab] = useState<'ingreso' | 'egreso'>('ingreso')
+  const [amount, setAmount] = useState('')
+  const [description, setDescription] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+  const [movements, setMovements] = useState<CashMovement[]>([])
+  const [loadingMovements, setLoadingMovements] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+  const [success, setSuccess] = useState<string | null>(null)
+
+  const loadMovements = async () => {
+    setLoadingMovements(true)
+    try {
+      const res = await fetch('/api/pos/cash-movements')
+      const data = await res.json()
+      setMovements(data.movements ?? [])
+    } catch (e) { void e }
+    setLoadingMovements(false)
+  }
+
+  useEffect(() => { loadMovements() }, [])
+
+  const handleSubmit = async () => {
+    const parsed = parseFloat(amount.replace(',', '.'))
+    if (!parsed || parsed <= 0) { setError('Ingresá un monto válido'); return }
+    setSubmitting(true)
+    setError(null)
+    try {
+      const res = await fetch('/api/pos/cash-movements', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: tab, amount: parsed, description: description.trim() || null }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error ?? 'Error')
+      setAmount('')
+      setDescription('')
+      setSuccess(`${tab === 'ingreso' ? 'Ingreso' : 'Egreso'} registrado`)
+      setTimeout(() => setSuccess(null), 2500)
+      loadMovements()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Error')
+    }
+    setSubmitting(false)
+  }
+
+  const manualMovements = movements.filter((m) => m.type === 'ingreso' || m.type === 'egreso')
+  const totalIngresos = manualMovements.filter((m) => m.type === 'ingreso').reduce((s, m) => s + Number(m.amount), 0)
+  const totalEgresos = manualMovements.filter((m) => m.type === 'egreso').reduce((s, m) => s + Number(m.amount), 0)
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+      onClick={(e) => { if (e.target === e.currentTarget) onClose() }}
+    >
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm mx-4 flex flex-col overflow-hidden max-h-[90vh]">
+        {/* Header */}
+        <div className="px-5 py-4 bg-teal-600 flex items-center justify-between shrink-0">
+          <div>
+            <h3 className="text-white font-black text-lg leading-none">Movimientos de caja</h3>
+            <p className="text-teal-100 text-xs mt-0.5">Registrar ingresos y egresos manuales</p>
+          </div>
+          <button onClick={onClose} className="text-white/70 hover:text-white text-xl leading-none">✕</button>
+        </div>
+
+        {/* Body */}
+        <div className="flex-1 overflow-y-auto px-5 py-4 flex flex-col gap-4" style={{ minHeight: 0 }}>
+          {/* Tabs */}
+          <div className="grid grid-cols-2 gap-1.5 bg-gray-100 rounded-xl p-1">
+            {(['ingreso', 'egreso'] as const).map((t) => (
+              <button
+                key={t}
+                onClick={() => setTab(t)}
+                className={`py-2 rounded-lg font-bold text-sm transition-all ${
+                  tab === t
+                    ? t === 'ingreso' ? 'bg-green-500 text-white shadow-sm' : 'bg-red-500 text-white shadow-sm'
+                    : 'text-gray-600 hover:bg-gray-200'
+                }`}
+              >
+                {t === 'ingreso' ? '↑ Ingreso' : '↓ Egreso'}
+              </button>
+            ))}
+          </div>
+
+          {/* Amount */}
+          <div>
+            <p className="text-xs font-bold text-gray-500 mb-1">Monto</p>
+            <input
+              type="number"
+              inputMode="numeric"
+              min={0}
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+              placeholder="$ 0"
+              className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-xl font-bold text-gray-900 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-teal-400 tabular-nums"
+            />
+          </div>
+
+          {/* Description */}
+          <div>
+            <p className="text-xs font-bold text-gray-500 mb-1">Descripción (opcional)</p>
+            <input
+              type="text"
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="Ej: Cambio de caja, pago proveedor..."
+              className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm font-medium text-gray-900 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-teal-400"
+            />
+          </div>
+
+          {/* Feedback */}
+          {error && <p className="text-red-600 text-sm font-semibold">{error}</p>}
+          {success && <p className="text-green-600 text-sm font-semibold">{success}</p>}
+
+          {/* Submit */}
+          <button
+            onClick={handleSubmit}
+            disabled={submitting}
+            className={`w-full py-3 rounded-xl font-bold text-sm transition-all active:scale-95 shadow-md text-white ${
+              submitting
+                ? 'bg-gray-300 cursor-not-allowed'
+                : tab === 'ingreso'
+                  ? 'bg-green-500 hover:bg-green-600'
+                  : 'bg-red-500 hover:bg-red-600'
+            }`}
+          >
+            {submitting ? 'Registrando...' : `Registrar ${tab === 'ingreso' ? 'Ingreso' : 'Egreso'}`}
+          </button>
+
+          {/* Summary */}
+          <div className="grid grid-cols-2 gap-2 pt-2 border-t border-gray-100">
+            <div className="bg-green-50 rounded-xl p-3 text-center">
+              <p className="text-xs font-bold text-green-700 mb-1">Ingresos</p>
+              <p className="font-black text-green-700 tabular-nums">{formatCashARS(totalIngresos)}</p>
+            </div>
+            <div className="bg-red-50 rounded-xl p-3 text-center">
+              <p className="text-xs font-bold text-red-700 mb-1">Egresos</p>
+              <p className="font-black text-red-700 tabular-nums">{formatCashARS(totalEgresos)}</p>
+            </div>
+          </div>
+
+          {/* Movements list */}
+          <div>
+            <p className="text-xs font-bold text-gray-500 mb-2">Movimientos del turno</p>
+            {loadingMovements ? (
+              <div className="space-y-2">
+                {[1, 2, 3].map((i) => <div key={i} className="h-10 bg-gray-100 rounded-xl animate-pulse" />)}
+              </div>
+            ) : manualMovements.length === 0 ? (
+              <p className="text-xs text-gray-400 text-center py-4">Sin movimientos manuales aún</p>
+            ) : (
+              <ul className="flex flex-col gap-1">
+                {manualMovements.map((m) => (
+                  <li key={m.id} className={`flex items-center gap-2 px-3 py-2 rounded-xl ${
+                    m.type === 'ingreso' ? 'bg-green-50' : 'bg-red-50'
+                  }`}>
+                    <span className={`font-bold text-sm ${m.type === 'ingreso' ? 'text-green-600' : 'text-red-600'}`}>
+                      {m.type === 'ingreso' ? '↑' : '↓'}
+                    </span>
+                    <span className="flex-1 text-xs text-gray-700 truncate">{m.description ?? (m.type === 'ingreso' ? 'Ingreso' : 'Egreso')}</span>
+                    <span className={`font-black text-sm tabular-nums ${m.type === 'ingreso' ? 'text-green-700' : 'text-red-700'}`}>
+                      {formatCashARS(Number(m.amount))}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ─── Clock ─────────────────────────────────────────────────────────────────────
 function POSClock() {
   const [time, setTime] = useState('')
@@ -797,6 +991,7 @@ export default function POSPage() {
   const [toast, setToast] = useState<string | null>(null)
   const [showPrintBtn, setShowPrintBtn] = useState(false)
   const [showConfirmModal, setShowConfirmModal] = useState(false)
+  const [showCashModal, setShowCashModal] = useState(false)
 
   // Ticket panel open/close
   const [ticketOpen, setTicketOpen] = useState(false)
@@ -1030,6 +1225,14 @@ export default function POSPage() {
         </div>
         {/* Clock */}
         <POSClock />
+        {/* Cash movements button */}
+        <button
+          onClick={() => setShowCashModal(true)}
+          title="Movimientos de caja"
+          className="flex items-center justify-center w-8 h-8 rounded-lg bg-sumak-brown-mid text-sumak-gold hover:bg-sumak-brown-light active:scale-95 transition-all shrink-0 font-bold text-base"
+        >
+          $
+        </button>
         {/* Ticket toggle button */}
         <button
           onClick={() => setTicketOpen((o) => !o)}
@@ -1127,6 +1330,11 @@ export default function POSPage() {
           onCancel={() => setShowConfirmModal(false)}
           onConfirm={handleSubmit}
         />
+      )}
+
+      {/* ── Cash Movements Modal ── */}
+      {showCashModal && (
+        <CashMovementsModal onClose={() => setShowCashModal(false)} />
       )}
 
       {/* ── Toast ── */}
