@@ -12,6 +12,8 @@ export default function TicketPage() {
       return
     }
     setTicketText(text)
+    // Auto-print after a short delay to let content render
+    setTimeout(() => window.print(), 300)
   }, [])
 
   if (ticketText === null) return null
