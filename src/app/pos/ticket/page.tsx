@@ -24,7 +24,7 @@ export default function TicketPage() {
     <div style={{ background: 'white', margin: 0, padding: 0, minHeight: '100vh', maxWidth: '72mm' }}>
       <style>{`@page { margin: 0; padding: 0; size: 72mm auto; } @media print { .no-print { display: none !important; } body, html { margin: 0; padding: 0; } }`}</style>
       {logoUrl && (
-        <div style={{ textAlign: 'center', margin: 0, padding: 0 }}>
+        <div style={{ textAlign: 'center', margin: 0, padding: '0 0 0 8mm' }}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={logoUrl}
