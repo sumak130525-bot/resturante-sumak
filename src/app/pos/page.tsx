@@ -115,14 +115,7 @@ function buildTicketText(data: PrintData): string {
 
 function triggerPrint(ticketText: string): void {
   sessionStorage.setItem('pos_ticket', ticketText)
-  const isAndroid = /android/i.test(navigator.userAgent)
-  if (isAndroid) {
-    // Use the real ticket page URL with print:// protocol
-    const ticketUrl = window.location.origin + '/pos/ticket'
-    window.location.href = "print://escpos.org/escpos/net/print?srcTp=uri&srcObj=html&numCopies=1&src='" + ticketUrl + "'"
-  } else {
-    window.location.href = '/pos/ticket'
-  }
+  window.location.href = '/pos/ticket'
 }
 
 function printTicketPopup(data: PrintData): void {

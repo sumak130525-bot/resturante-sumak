@@ -12,6 +12,7 @@ export default function TicketPage() {
       return
     }
     setTicketText(text)
+    setTimeout(() => window.print(), 400)
   }, [])
 
   if (ticketText === null) return null
