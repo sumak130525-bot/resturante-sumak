@@ -113,30 +113,14 @@ function buildTicketText(data: PrintData): string {
   ].filter((l) => l !== '').join('\n')
 }
 
-function buildEscPosPrintUrl(ticketText: string): string {
-  const html =
-    `<html><body style="margin:0;padding:0;">` +
-    `<pre style="font-family:'Courier New',Courier,monospace;font-size:14px;font-weight:bold;line-height:1.4;white-space:pre;">` +
-    ticketText
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;') +
-    `</pre></body></html>`
-  const dataUri = 'data:text/html,' + encodeURIComponent(html)
-  return (
-    "print://escpos.org/escpos/net/print" +
-    "?srcTp=uri&srcObj=html&numCopies=1" +
-    "&src=" + encodeURIComponent(dataUri)
-  )
-}
-
 function triggerPrint(ticketText: string): void {
+  sessionStorage.setItem('pos_ticket', ticketText)
   const isAndroid = /android/i.test(navigator.userAgent)
   if (isAndroid) {
-    window.location.href = buildEscPosPrintUrl(ticketText)
+    // Use the real ticket page URL with print:// protocol
+    const ticketUrl = window.location.origin + '/pos/ticket'
+    window.location.href = "print://escpos.org/escpos/net/print?srcTp=uri&srcObj=html&numCopies=1&src='" + ticketUrl + "'"
   } else {
-    // Non-Android fallback: navigate to ticket page
-    sessionStorage.setItem('pos_ticket', ticketText)
     window.location.href = '/pos/ticket'
   }
 }
