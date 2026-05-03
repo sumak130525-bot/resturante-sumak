@@ -113,8 +113,13 @@ function buildTicketText(data: PrintData): string {
   ].filter((l) => l !== '').join('\n')
 }
 
-function triggerPrint(ticketText: string): void {
+function triggerPrint(ticketText: string, logoUrl?: string | null): void {
   sessionStorage.setItem('pos_ticket', ticketText)
+  if (logoUrl) {
+    sessionStorage.setItem('pos_ticket_logo', logoUrl)
+  } else {
+    sessionStorage.removeItem('pos_ticket_logo')
+  }
   window.location.href = '/pos/ticket'
 }
 
@@ -987,6 +992,15 @@ export default function POSPage() {
   const { menuItems, categories, loading } = useMenuRealtime()
   const { locale, setLocale } = useTranslation()
 
+  // Logo (fetched once on load)
+  const [ticketLogo, setTicketLogo] = useState<string | null>(null)
+  useEffect(() => {
+    fetch('/api/admin/settings?key=ticket_logo')
+      .then((r) => r.ok ? r.json() : null)
+      .then((data) => { if (data?.value) setTicketLogo(data.value) })
+      .catch(() => {})
+  }, [])
+
   // Frequent customers
   const [customers, setCustomers] = useState<FrequentCustomer[]>([])
   useEffect(() => {
@@ -1385,7 +1399,7 @@ export default function POSPage() {
               onClick={() => {
                 const ticket = (window as any).__pendingTicket
                 if (ticket) {
-                  triggerPrint(ticket)
+                  triggerPrint(ticket, ticketLogo)
                 }
                 setShowPrintBtn(false)
               }}

@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 
 export default function TicketPage() {
   const [ticketText, setTicketText] = useState<string | null>(null)
+  const [logoUrl, setLogoUrl] = useState<string | null>(null)
 
   useEffect(() => {
     const text = sessionStorage.getItem('pos_ticket')
@@ -12,6 +13,8 @@ export default function TicketPage() {
       return
     }
     setTicketText(text)
+    const logo = sessionStorage.getItem('pos_ticket_logo')
+    if (logo) setLogoUrl(logo)
     setTimeout(() => window.print(), 400)
   }, [])
 
@@ -20,6 +23,14 @@ export default function TicketPage() {
   return (
     <div style={{ background: 'white', margin: 0, padding: 0, minHeight: '100vh' }}>
       <style>{`@page { margin: 0; padding: 0; } @media print { .no-print { display: none !important; } body, html { margin: 0; padding: 0; } }`}</style>
+      {logoUrl && (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={logoUrl}
+          alt="Logo"
+          style={{ display: 'block', margin: '0 auto', maxWidth: '150px' }}
+        />
+      )}
       <pre style={{
         fontFamily: "'Courier New', Courier, monospace",
         fontSize: '16px',
