@@ -56,7 +56,7 @@ type PrintData = {
   customerName: string
 }
 
-function printTicketPopup(data: PrintData): void {
+function buildTicketText(data: PrintData): string {
   const W = 22 // 58mm thermal = ~22 chars
   const LINE = '-'.repeat(W)
   const total = formatTicketMoney(data.total)
@@ -70,13 +70,11 @@ function printTicketPopup(data: PrintData): void {
     const qty = String(item.quantity)
     const sub = formatTicketMoney(item.price * item.quantity)
     const prefix = qty + 'x '
-    // Line 1: QTYx NAME (truncated to fit W)
     const maxNameLen = W - prefix.length
     const name = item.name.length > maxNameLen
       ? item.name.substring(0, maxNameLen)
       : item.name
     const line1 = prefix + name
-    // Line 2: price right-aligned
     const line2 = pad(sub, W, true)
 
     const modLines = (item.modifiers ?? []).map(
@@ -93,7 +91,7 @@ function printTicketPopup(data: PrintData): void {
 
   const paymentLabel = data.paymentMethod === 'Transferencia' ? 'TRANSFER' : data.paymentMethod.toUpperCase()
 
-  const ticketText = [
+  return [
     center('SUMAK'),
     center('Restaurante'),
     LINE,
@@ -113,7 +111,38 @@ function printTicketPopup(data: PrintData): void {
     '',
     '',
   ].filter((l) => l !== '').join('\n')
+}
 
+function buildEscPosPrintUrl(ticketText: string): string {
+  const html =
+    `<html><body style="margin:0;padding:0;">` +
+    `<pre style="font-family:'Courier New',Courier,monospace;font-size:14px;font-weight:bold;line-height:1.4;white-space:pre;">` +
+    ticketText
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;') +
+    `</pre></body></html>`
+  const dataUri = 'data:text/html,' + encodeURIComponent(html)
+  return (
+    "print://escpos.org/escpos/net/print" +
+    "?srcTp=uri&srcObj=html&numCopies=1" +
+    "&src=" + encodeURIComponent(dataUri)
+  )
+}
+
+function triggerPrint(ticketText: string): void {
+  const isAndroid = /android/i.test(navigator.userAgent)
+  if (isAndroid) {
+    window.location.href = buildEscPosPrintUrl(ticketText)
+  } else {
+    // Non-Android fallback: navigate to ticket page
+    sessionStorage.setItem('pos_ticket', ticketText)
+    window.location.href = '/pos/ticket'
+  }
+}
+
+function printTicketPopup(data: PrintData): void {
+  const ticketText = buildTicketText(data)
   // Save ticket text globally so the print button can use it
   ;(window as any).__pendingTicket = ticketText
 }
@@ -1379,9 +1408,9 @@ export default function POSPage() {
               onClick={() => {
                 const ticket = (window as any).__pendingTicket
                 if (ticket) {
-                  sessionStorage.setItem('pos_ticket', ticket)
-                  window.location.href = '/pos/ticket'
+                  triggerPrint(ticket)
                 }
+                setShowPrintBtn(false)
               }}
               className="px-8 py-4 bg-green-500 text-white text-2xl font-bold rounded-xl shadow-lg active:scale-95"
             >

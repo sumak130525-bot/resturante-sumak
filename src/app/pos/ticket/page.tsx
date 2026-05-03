@@ -2,6 +2,32 @@
 
 import { useEffect, useState } from 'react'
 
+function buildEscPosPrintUrl(ticketText: string): string {
+  const html =
+    `<html><body style="margin:0;padding:0;">` +
+    `<pre style="font-family:'Courier New',Courier,monospace;font-size:14px;font-weight:bold;line-height:1.4;white-space:pre;">` +
+    ticketText
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;') +
+    `</pre></body></html>`
+  const dataUri = 'data:text/html,' + encodeURIComponent(html)
+  return (
+    'print://escpos.org/escpos/net/print' +
+    '?srcTp=uri&srcObj=html&numCopies=1' +
+    '&src=' + encodeURIComponent(dataUri)
+  )
+}
+
+function handlePrint(ticketText: string): void {
+  const isAndroid = /android/i.test(navigator.userAgent)
+  if (isAndroid) {
+    window.location.href = buildEscPosPrintUrl(ticketText)
+  } else {
+    window.print()
+  }
+}
+
 export default function TicketPage() {
   const [ticketText, setTicketText] = useState<string | null>(null)
 
@@ -12,8 +38,8 @@ export default function TicketPage() {
       return
     }
     setTicketText(text)
-    // Auto-print after a short delay to let content render
-    setTimeout(() => window.print(), 300)
+    // Auto-trigger print after a short delay to let content render
+    setTimeout(() => handlePrint(text), 300)
   }, [])
 
   if (ticketText === null) return null
@@ -33,7 +59,7 @@ export default function TicketPage() {
 
       <div className="no-print" style={{ marginTop: '24px', display: 'flex', gap: '12px', flexDirection: 'column', alignItems: 'center' }}>
         <button
-          onClick={() => window.print()}
+          onClick={() => handlePrint(ticketText)}
           style={{
             padding: '18px 40px',
             fontSize: '24px',
