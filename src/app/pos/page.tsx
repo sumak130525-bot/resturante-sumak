@@ -1016,7 +1016,7 @@ export default function POSPage() {
 
   useEffect(() => {
     Promise.all([
-      fetch('/api/pos/modifiers').then((r) => r.ok ? r.json() : { modifiers: [] }),
+      fetch('/api/admin/modifiers').then((r) => r.ok ? r.json() : { modifiers: [] }),
       fetch('/api/admin/item-modifiers').then((r) => r.ok ? r.json() : { mappings: {} }),
     ]).then(([modData, mapData]) => {
       setAllModifiers(modData.modifiers ?? [])
@@ -1110,6 +1110,11 @@ export default function POSPage() {
 
     // Has modifiers — show modal
     const modifiersForItem = allModifiers.filter((m) => modifierIds.includes(m.id))
+    if (modifiersForItem.length === 0) {
+      // Modifiers mapped but groups not found — add directly
+      addItemToTicket(item)
+      return
+    }
     setPendingItem(item)
     setPendingModifiers(modifiersForItem)
   }, [itemModifierMap, allModifiers, addItemToTicket])
