@@ -15,7 +15,7 @@ export const config = {
     address: process.env.RESTAURANT_ADDRESS || 'Juan B Alberdi 247, frente a Terminal de Mendoza',
     maps: process.env.RESTAURANT_MAPS || 'https://maps.google.com/?q=-32.8949528,-68.8286573',
     web: process.env.RESTAURANT_WEB || 'https://restaurante-sumak.vercel.app',
-    hours: process.env.HOURS || 'Lunes a Sábado 8:00 - 20:00',
+    hours: process.env.HOURS || 'Lunes a Sábado 8:00 - 22:30',
   },
   // IA: Groq (gratis) — https://console.groq.com/keys
   // Límite gratuito: 30 req/min, 14400 req/día

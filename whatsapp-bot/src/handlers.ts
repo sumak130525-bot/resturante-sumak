@@ -7,6 +7,29 @@ const { restaurant } = config;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
+export function isOpen(): boolean {
+  const now = new Date();
+  const argentinaTime = new Date(now.toLocaleString('en-US', { timeZone: 'America/Argentina/Mendoza' }));
+  const day = argentinaTime.getDay();   // 0 = Sunday
+  const hours = argentinaTime.getHours();
+  const minutes = argentinaTime.getMinutes();
+  const totalMinutes = hours * 60 + minutes;
+
+  if (day === 0) return false; // Sunday — always closed
+  // Monday–Saturday: 8:00 to 22:30
+  return totalMinutes >= 8 * 60 && totalMinutes < 22 * 60 + 30;
+}
+
+export function getClosedMessage(): string {
+  return (
+    'Hola! 👋 En este momento Restaurante Sumak se encuentra *cerrado*.\n\n' +
+    'Nuestro horario de atención es:\n' +
+    '📅 Lunes a Sábado de 8:00 a 22:30\n\n' +
+    'Te esperamos! 🌿\n\n' +
+    '_Sumak Bot 🤖_'
+  );
+}
+
 function normalize(text: string): string {
   return text
     .toLowerCase()
@@ -110,6 +133,8 @@ export function getDefaultMessage(): string {
 // ── Fallback estático (respuestas por keyword matching) ───────────────────────
 
 export async function handleMessageFallback(text: string): Promise<string> {
+  if (!isOpen()) return getClosedMessage();
+
   const t = text.trim();
 
   if (
@@ -183,6 +208,8 @@ export async function handleMessageFallback(text: string): Promise<string> {
 // ── Router principal con IA ───────────────────────────────────────────────────
 
 export async function handleMessage(text: string, phone?: string): Promise<string> {
+  if (!isOpen()) return getClosedMessage();
+
   // Si la IA no está disponible, usar fallback directamente
   if (!isAIAvailable()) {
     console.log('⚠️  Gemini no configurado, usando respuestas estáticas');
