@@ -17,7 +17,7 @@ export default function TicketPage() {
   if (ticketText === null) return null
 
   return (
-    <div style={{ background: 'white', margin: 0, padding: '4mm', minHeight: '100vh' }}>
+    <div style={{ background: 'white', margin: 0, padding: '1mm', minHeight: '100vh' }}>
       <style>{`@media print { .no-print { display: none !important; } }`}</style>
       <pre style={{
         fontFamily: "'Courier New', Courier, monospace",
@@ -26,8 +26,7 @@ export default function TicketPage() {
         lineHeight: '1.5',
         color: 'black',
         margin: 0,
-        whiteSpace: 'pre-wrap',
-        wordBreak: 'break-all',
+        whiteSpace: 'pre',
       }}>{ticketText}</pre>
 
       <div className="no-print" style={{ marginTop: '24px', display: 'flex', gap: '12px', flexDirection: 'column', alignItems: 'center' }}>

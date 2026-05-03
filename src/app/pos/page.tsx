@@ -57,54 +57,59 @@ type PrintData = {
 }
 
 function printTicketPopup(data: PrintData): void {
-  const LINE = '================================'
+  const W = 22 // 58mm thermal = ~22 chars
+  const LINE = '-'.repeat(W)
   const total = formatTicketMoney(data.total)
+
+  const center = (s: string) => {
+    const spaces = Math.max(0, Math.floor((W - s.length) / 2))
+    return ' '.repeat(spaces) + s
+  }
 
   const itemLines = data.items.flatMap((item) => {
     const qty = String(item.quantity)
-    const name = item.name
     const sub = formatTicketMoney(item.price * item.quantity)
-    const prefix = qty + 'x ' + name
-    const maxPrefix = 48 - sub.length - 1
-    const dots = maxPrefix > prefix.length
-      ? '.'.repeat(maxPrefix - prefix.length)
-      : ' '
-    const mainLine = prefix + dots + sub
+    const prefix = qty + 'x '
+    // Line 1: QTYx NAME (truncated to fit W)
+    const maxNameLen = W - prefix.length
+    const name = item.name.length > maxNameLen
+      ? item.name.substring(0, maxNameLen)
+      : item.name
+    const line1 = prefix + name
+    // Line 2: price right-aligned
+    const line2 = pad(sub, W, true)
 
-    // Modifier lines under item
     const modLines = (item.modifiers ?? []).map(
       (m) => `  > ${m.optionName}${m.price > 0 ? ' (+)' : ''}`
     )
-    return [mainLine, ...modLines]
+    return [line1, line2, ...modLines]
   })
 
   const mesaLine = data.diningOption === 'Comer dentro' && data.tableNumber
-    ? `Mesa: ${data.tableNumber}\n`
-    : ''
+    ? `Mesa: ${data.tableNumber}` : ''
 
   const clienteLine = data.customerName && data.customerName !== 'POS'
-    ? `Cliente: ${data.customerName}\n`
-    : ''
+    ? `Cliente: ${data.customerName}` : ''
 
-  const totalLine = pad('TOTAL:', 10) + pad(total, 38 - 10, true)
+  const paymentLabel = data.paymentMethod === 'Transferencia' ? 'TRANSFER' : data.paymentMethod.toUpperCase()
 
   const ticketText = [
-    '          SUMAK',
-    '        Restaurante',
+    center('SUMAK'),
+    center('Restaurante'),
     LINE,
     `${data.dateStr}  ${data.timeStr}`,
     `Pedido: P-${String(data.orderNumber).padStart(3, '0')}`,
-    mesaLine.trimEnd(),
+    mesaLine,
     `Modalidad: ${data.diningOption}`,
     LINE,
     ...itemLines,
     LINE,
-    totalLine,
-    `Pago: ${data.paymentMethod.toUpperCase()}${data.paymentMethod === 'Efectivo' ? ' [ABRIR CAJON]' : ''}`,
-    clienteLine.trimEnd(),
+    `TOTAL: ${total}`,
+    `Pago: ${paymentLabel}`,
+    clienteLine,
     LINE,
-    '     Gracias por su visita!',
-    '      Restaurante Sumak',
+    center('Gracias por su visita!'),
+    center('Restaurante Sumak'),
     '',
     '',
   ].filter((l) => l !== '').join('\n')
@@ -1156,8 +1161,8 @@ export default function POSPage() {
 
       // Capture snapshot for print BEFORE resetting state
       const now = new Date()
-      const dateStr = now.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' })
-      const timeStr = now.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })
+      const dateStr = now.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: '2-digit' })
+      const timeStr = now.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false })
       const orderNumber: number = Date.now() % 1000
       const snapshot: PrintData = {
         orderNumber,
