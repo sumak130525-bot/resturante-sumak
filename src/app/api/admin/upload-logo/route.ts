@@ -1,37 +1,9 @@
-/*
- * ============================================================
- * PASO MANUAL REQUERIDO — Crear bucket en Supabase Storage:
- * ============================================================
- *
- * 1. Ir a Supabase Dashboard → Storage → New bucket
- * 2. Nombre: ticket-logos
- * 3. Marcar como "Public bucket" (para que la URL sea pública)
- * 4. Guardar
- *
- * O ejecutar este SQL:
- * INSERT INTO storage.buckets (id, name, public)
- * VALUES ('ticket-logos', 'ticket-logos', true)
- * ON CONFLICT (id) DO NOTHING;
- *
- * -- Política para que admins puedan subir/eliminar:
- * CREATE POLICY "admin upload" ON storage.objects
- *   FOR INSERT WITH CHECK (bucket_id = 'ticket-logos' AND auth.role() = 'authenticated');
- *
- * CREATE POLICY "admin delete" ON storage.objects
- *   FOR DELETE USING (bucket_id = 'ticket-logos' AND auth.role() = 'authenticated');
- *
- * CREATE POLICY "public read" ON storage.objects
- *   FOR SELECT USING (bucket_id = 'ticket-logos');
- *
- * ============================================================
- */
-
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient, type CookieOptions } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 
-const BUCKET = 'ticket-logos'
 const LOGO_KEY = 'ticket_logo'
+const MAX_FILE_SIZE = 500 * 1024 // 500 KB
 
 async function getClient(useServiceRole = false) {
   const cookieStore = await cookies()
@@ -58,90 +30,46 @@ async function requireAuth() {
   return user
 }
 
-// POST: subir logo a Storage y guardar URL en settings
+// POST: convert file to base64 data URI and save directly in settings table
 export async function POST(request: NextRequest) {
   const formData = await request.formData()
   const file = formData.get('file') as File | null
   if (!file) return NextResponse.json({ error: 'No se recibió archivo' }, { status: 400 })
 
-  // Validar tipo
+  // Validate type
   if (!file.type.startsWith('image/')) {
     return NextResponse.json({ error: 'Solo se permiten imágenes' }, { status: 400 })
   }
 
-  const ext = file.name.split('.').pop() ?? 'png'
-  const fileName = `logo-${Date.now()}.${ext}`
+  // Validate size (500 KB limit before base64 encoding)
+  if (file.size > MAX_FILE_SIZE) {
+    return NextResponse.json({ error: 'El archivo supera el límite de 500 KB' }, { status: 400 })
+  }
 
+  // Convert to base64 data URI
+  const arrayBuffer = await file.arrayBuffer()
+  const base64 = Buffer.from(arrayBuffer).toString('base64')
+  const dataUri = `data:${file.type};base64,${base64}`
+
+  // Use service role to bypass RLS on settings table
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const admin = await getClient(true) as any
 
-  // Eliminar logo anterior si existe
-  const { data: existingSetting } = await admin
-    .from('settings')
-    .select('value')
-    .eq('key', LOGO_KEY)
-    .maybeSingle()
-
-  if (existingSetting?.value) {
-    // Extraer path del storage desde la URL pública
-    const url = existingSetting.value as string
-    const marker = `/object/public/${BUCKET}/`
-    const idx = url.indexOf(marker)
-    if (idx !== -1) {
-      const oldPath = url.slice(idx + marker.length)
-      await admin.storage.from(BUCKET).remove([oldPath])
-    }
-  }
-
-  // Subir nuevo archivo
-  const arrayBuffer = await file.arrayBuffer()
-  const { error: uploadError } = await admin.storage
-    .from(BUCKET)
-    .upload(fileName, arrayBuffer, {
-      contentType: file.type,
-      upsert: true,
-    })
-
-  if (uploadError) {
-    return NextResponse.json({ error: uploadError.message }, { status: 500 })
-  }
-
-  // Obtener URL pública
-  const { data: publicUrlData } = admin.storage.from(BUCKET).getPublicUrl(fileName)
-  const publicUrl = publicUrlData.publicUrl as string
-
-  // Guardar en settings
   const { error: settingsError } = await admin
     .from('settings')
-    .upsert({ key: LOGO_KEY, value: publicUrl, updated_at: new Date().toISOString() }, { onConflict: 'key' })
+    .upsert({ key: LOGO_KEY, value: dataUri, updated_at: new Date().toISOString() }, { onConflict: 'key' })
 
   if (settingsError) {
     return NextResponse.json({ error: settingsError.message }, { status: 500 })
   }
 
-  return NextResponse.json({ url: publicUrl })
+  return NextResponse.json({ url: dataUri })
 }
 
-// DELETE: eliminar logo
+// DELETE: remove logo from settings table
 export async function DELETE() {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const admin = await getClient(true) as any
-
-  const { data: existingSetting } = await admin
-    .from('settings')
-    .select('value')
-    .eq('key', LOGO_KEY)
-    .maybeSingle()
-
-  if (existingSetting?.value) {
-    const url = existingSetting.value as string
-    const marker = `/object/public/${BUCKET}/`
-    const idx = url.indexOf(marker)
-    if (idx !== -1) {
-      const oldPath = url.slice(idx + marker.length)
-      await admin.storage.from(BUCKET).remove([oldPath])
-    }
-  }
 
   await admin.from('settings').delete().eq('key', LOGO_KEY)
 
