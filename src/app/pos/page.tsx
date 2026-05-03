@@ -997,7 +997,7 @@ export default function POSPage() {
   useEffect(() => {
     fetch('/api/admin/settings?key=ticket_logo')
       .then((r) => r.ok ? r.json() : null)
-      .then((data) => { if (data?.value) setTicketLogo(data.value) })
+      .then((data) => { if (Array.isArray(data) && data[0]?.value) setTicketLogo(data[0].value) })
       .catch(() => {})
   }, [])
 
