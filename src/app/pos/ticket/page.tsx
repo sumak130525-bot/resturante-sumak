@@ -24,12 +24,14 @@ export default function TicketPage() {
     <div style={{ background: 'white', margin: 0, padding: 0, minHeight: '100vh', textAlign: 'center' }}>
       <style>{`@page { margin: 0; padding: 0; } @media print { .no-print { display: none !important; } body, html { margin: 0; padding: 0; } }`}</style>
       {logoUrl && (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
-          src={logoUrl}
-          alt="Logo"
-          style={{ display: 'block', margin: '0 auto', maxWidth: '120px', height: 'auto' }}
-        />
+        <div style={{ width: '100%', display: 'flex', justifyContent: 'center', padding: 0, margin: 0 }}>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={logoUrl}
+            alt="Logo"
+            style={{ maxWidth: '150px', height: 'auto' }}
+          />
+        </div>
       )}
       <pre style={{
         fontFamily: "'Courier New', Courier, monospace",
