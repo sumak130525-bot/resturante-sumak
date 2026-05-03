@@ -21,10 +21,10 @@ export default function TicketPage() {
   if (ticketText === null) return null
 
   return (
-    <div style={{ background: 'white', margin: 0, padding: 0, minHeight: '100vh', textAlign: 'center' }}>
-      <style>{`@page { margin: 0; padding: 0; } @media print { .no-print { display: none !important; } body, html { margin: 0; padding: 0; } }`}</style>
+    <div style={{ background: 'white', margin: 0, padding: 0, minHeight: '100vh', maxWidth: '72mm' }}>
+      <style>{`@page { margin: 0; padding: 0; size: 72mm auto; } @media print { .no-print { display: none !important; } body, html { margin: 0; padding: 0; } }`}</style>
       {logoUrl && (
-        <div style={{ width: '100%', display: 'flex', justifyContent: 'center', padding: 0, margin: 0 }}>
+        <div style={{ textAlign: 'center', margin: 0, padding: 0 }}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={logoUrl}
@@ -41,7 +41,6 @@ export default function TicketPage() {
         color: 'black',
         margin: 0,
         whiteSpace: 'pre',
-        textAlign: 'left',
       }}>{ticketText}</pre>
 
       <div className="no-print" style={{ marginTop: '24px', display: 'flex', gap: '12px', flexDirection: 'column', alignItems: 'center' }}>
