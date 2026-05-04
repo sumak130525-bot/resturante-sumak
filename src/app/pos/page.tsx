@@ -1044,10 +1044,19 @@ export default function POSPage() {
   // Ticket panel open/close
   const [ticketOpen, setTicketOpen] = useState(false)
 
-  // Category filter
-  const [activeCategory, setActiveCategory] = useState('all')
+  // Category filter — persisted in sessionStorage so it survives page refresh
+  const [activeCategory, setActiveCategory] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      return sessionStorage.getItem('pos_activeCategory') ?? 'all'
+    }
+    return 'all'
+  })
 
-  // Only display items with display_order > 0, capped at 24
+  useEffect(() => {
+    sessionStorage.setItem('pos_activeCategory', activeCategory)
+  }, [activeCategory])
+
+  // Display all active items, capped at 24
   const filteredItems = activeCategory === 'all'
     ? menuItems
     : menuItems.filter((item) => {
