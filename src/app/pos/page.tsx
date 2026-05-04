@@ -1279,6 +1279,14 @@ export default function POSPage() {
       })
   ).filter((item) => (item.display_order ?? 0) > 0)
 
+  // Items for category tabs: filter by category, show all active items (no display_order filter)
+  const categoryItems = activeCategory === 'all'
+    ? []
+    : menuItems.filter((item) => {
+        const cat = categories.find((c) => c.slug === activeCategory)
+        return cat ? item.category_id === cat.id : true
+      })
+
   const displayItems = filteredItems.slice(0, MAX_VISIBLE)
 
   // Items for edit mode: all positioned items (display_order 1-24), not filtered by category
@@ -1463,7 +1471,7 @@ export default function POSPage() {
           style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
         >
           <button
-            onClick={() => setActiveCategory('all')}
+            onClick={() => { setActiveCategory('all'); }}
             className={`flex items-center gap-1 whitespace-nowrap px-3 py-1 rounded-pill text-xs font-semibold transition-all shrink-0 ${
               activeCategory === 'all'
                 ? 'bg-sumak-gold text-sumak-brown'
@@ -1475,7 +1483,7 @@ export default function POSPage() {
           {categories.map((cat) => (
             <button
               key={cat.id}
-              onClick={() => setActiveCategory(cat.slug)}
+              onClick={() => { setActiveCategory(cat.slug); setEditMode(false); }}
               className={`flex items-center gap-1 whitespace-nowrap px-3 py-1 rounded-pill text-xs font-semibold transition-all shrink-0 ${
                 activeCategory === cat.slug
                   ? 'bg-sumak-gold text-sumak-brown'
@@ -1514,7 +1522,8 @@ export default function POSPage() {
         >
           $
         </button>
-        {/* Edit mode button */}
+        {/* Edit mode button — only visible in Todos tab */}
+        {activeCategory === 'all' && (
         <button
           onClick={toggleEditMode}
           title={editMode ? 'Salir del modo edición' : 'Editar grilla'}
@@ -1526,6 +1535,7 @@ export default function POSPage() {
         >
           ✏️
         </button>
+        )}
         {/* Ticket toggle button */}
         <button
           onClick={() => setTicketOpen((o) => !o)}
@@ -1563,8 +1573,8 @@ export default function POSPage() {
               Array.from({ length: 24 }).map((_, i) => (
                 <div key={i} className="w-full h-full rounded-xl bg-sumak-cream-dark animate-pulse" />
               ))
-            ) : editMode ? (
-              // Edit mode: fixed 24-cell grid, find items by display_order
+            ) : editMode && activeCategory === 'all' ? (
+              // Edit mode (only in Todos): fixed 24-cell grid, find items by display_order
               Array.from({ length: GRID_SIZE }).map((_, gridIndex) => {
                 const position = gridIndex + 1
                 const item = positionedItems.find((i) => i.display_order === position)
@@ -1592,8 +1602,8 @@ export default function POSPage() {
                   </button>
                 )
               })
-            ) : (
-              // Normal mode: fixed 24-cell grid by position, category filtered
+            ) : activeCategory === 'all' ? (
+              // Normal mode Todos: fixed 24-cell grid by position
               Array.from({ length: GRID_SIZE }).map((_, gridIndex) => {
                 const position = gridIndex + 1
                 const item = displayItems.find((i) => i.display_order === position)
@@ -1611,6 +1621,18 @@ export default function POSPage() {
                 }
                 return <div key={`empty-${position}`} className="w-full h-full" />
               })
+            ) : (
+              // Category tab: simple list of items from that category
+              categoryItems.map((item) => (
+                <POSDishCard
+                  key={item.id}
+                  item={item}
+                  onAdd={handleAddItem}
+                  locale={locale}
+                  editMode={false}
+                  onUnassign={handleUnassign}
+                />
+              ))
             )}
           </main>
         </div>
