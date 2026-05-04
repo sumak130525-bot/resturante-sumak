@@ -1323,22 +1323,19 @@ export default function POSPage() {
           style={{
             display: 'grid',
             gridTemplateColumns: 'repeat(6, 1fr)',
-            gridAutoRows: '1fr',
+            gridAutoRows: 'minmax(0, 1fr)',
+            maxHeight: '100%',
             gap: '6px',
           }}
         >
           {loading ? (
-            Array.from({ length: MAX_VISIBLE }).map((_, i) => (
+            Array.from({ length: 24 }).map((_, i) => (
               <div key={i} className="w-full h-full rounded-xl bg-sumak-cream-dark animate-pulse" />
             ))
           ) : (
-            Array.from({ length: Math.max(MAX_VISIBLE, displayItems.length) }).map((_, gridIndex) => {
-              const item = displayItems[gridIndex]
-              if (item) {
-                return <POSDishCard key={item.id} item={item} onAdd={handleAddItem} locale={locale} />
-              }
-              return <div key={`empty-${gridIndex}`} className="w-full h-full rounded-xl bg-sumak-cream-dark/40" />
-            })
+            displayItems.map((item) => (
+              <POSDishCard key={item.id} item={item} onAdd={handleAddItem} locale={locale} />
+            ))
           )}
         </main>
         </div>
