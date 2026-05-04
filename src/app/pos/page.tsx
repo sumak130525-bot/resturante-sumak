@@ -1323,8 +1323,8 @@ export default function POSPage() {
           style={{
             display: 'grid',
             gridTemplateColumns: 'repeat(6, 1fr)',
-            gridAutoRows: 'minmax(0, 1fr)',
-            maxHeight: '100%',
+            gridTemplateRows: 'repeat(4, calc(25% - 5px))',
+            gridAutoRows: 'calc(25% - 5px)',
             gap: '6px',
           }}
         >
