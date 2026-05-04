@@ -149,7 +149,7 @@ const CATEGORY_ICONS: Record<string, string> = {
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const MAX_VISIBLE = 24 // 6 × 4 grid
+const MAX_VISIBLE = 50 // max items in grid
 
 // ─── Price format (ARS: $12.500) ──────────────────────────────────────────────
 
@@ -1319,11 +1319,11 @@ export default function POSPage() {
         <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
           {/* Dish Grid */}
         <main
-          className="flex-1 min-w-0 p-2 overflow-hidden"
+          className="flex-1 min-w-0 p-2 overflow-y-auto"
           style={{
             display: 'grid',
             gridTemplateColumns: 'repeat(6, 1fr)',
-            gridTemplateRows: 'repeat(4, 1fr)',
+            gridAutoRows: '1fr',
             gap: '6px',
           }}
         >
@@ -1332,10 +1332,8 @@ export default function POSPage() {
               <div key={i} className="w-full h-full rounded-xl bg-sumak-cream-dark animate-pulse" />
             ))
           ) : (
-            Array.from({ length: MAX_VISIBLE }).map((_, gridIndex) => {
-              const position = gridIndex + 1
-              const item = displayItems.find((i) => i.display_order === position)
-                ?? (activeCategory !== 'all' ? displayItems[gridIndex] : undefined)
+            Array.from({ length: Math.max(MAX_VISIBLE, displayItems.length) }).map((_, gridIndex) => {
+              const item = displayItems[gridIndex]
               if (item) {
                 return <POSDishCard key={item.id} item={item} onAdd={handleAddItem} locale={locale} />
               }
