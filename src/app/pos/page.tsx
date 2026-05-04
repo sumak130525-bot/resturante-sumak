@@ -582,11 +582,33 @@ function POSClock() {
 }
 
 // ─── Dish Card ──────────────────────────────────────────────────────────────────
-function POSDishCard({ item, onAdd, locale }: { item: MenuItem; onAdd: (item: MenuItem) => void; locale: Locale }) {
+function POSDishCard({
+  item,
+  onAdd,
+  locale,
+  editMode,
+  position,
+  isSelected,
+  onHide,
+  onSelect,
+}: {
+  item: MenuItem
+  onAdd: (item: MenuItem) => void
+  locale: Locale
+  editMode: boolean
+  position: number
+  isSelected: boolean
+  onHide: (item: MenuItem) => void
+  onSelect: (item: MenuItem) => void
+}) {
   const isUnavailable = item.available === 0
   const [pressed, setPressed] = useState(false)
 
   const handleClick = () => {
+    if (editMode) {
+      onSelect(item)
+      return
+    }
     if (isUnavailable) return
     setPressed(true)
     onAdd(item)
@@ -597,9 +619,11 @@ function POSDishCard({ item, onAdd, locale }: { item: MenuItem; onAdd: (item: Me
     <article
       onClick={handleClick}
       className={`relative w-full h-full rounded-xl overflow-hidden select-none transition-all duration-150 ${
-        isUnavailable
-          ? 'opacity-50 cursor-not-allowed'
-          : 'cursor-pointer active:scale-95 hover:ring-2 hover:ring-sumak-gold'
+        editMode
+          ? `cursor-pointer border-2 ${isSelected ? 'border-yellow-400 ring-2 ring-yellow-400' : 'border-red-500/60'}`
+          : isUnavailable
+            ? 'opacity-50 cursor-not-allowed'
+            : 'cursor-pointer active:scale-95 hover:ring-2 hover:ring-sumak-gold'
       } ${pressed ? 'scale-95 brightness-90' : ''}`}
       style={{ touchAction: 'manipulation' }}
     >
@@ -622,6 +646,16 @@ function POSDishCard({ item, onAdd, locale }: { item: MenuItem; onAdd: (item: Me
       {/* Gradient overlay */}
       <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/10 to-transparent" />
 
+      {/* Edit mode overlay */}
+      {editMode && (
+        <div className="absolute inset-0 bg-red-900/20" />
+      )}
+
+      {/* Selected highlight in edit mode */}
+      {editMode && isSelected && (
+        <div className="absolute inset-0 bg-yellow-400/30" />
+      )}
+
       {/* Name + price */}
       <div className="absolute bottom-0 left-0 right-0 px-2 py-1.5">
         <p
@@ -639,14 +673,155 @@ function POSDishCard({ item, onAdd, locale }: { item: MenuItem; onAdd: (item: Me
       </div>
 
       {/* Agotado */}
-      {isUnavailable && (
+      {!editMode && isUnavailable && (
         <div className="absolute inset-0 flex items-center justify-center">
           <span className="px-2 py-0.5 rounded-full bg-gray-700/80 text-white text-[0.6rem] font-bold tracking-widest uppercase border border-white/20">
             Agotado
           </span>
         </div>
       )}
+
+      {/* Edit mode: position badge (bottom-left) */}
+      {editMode && (
+        <div className="absolute bottom-1 left-1 w-5 h-5 rounded-full bg-black/70 text-white text-[0.6rem] font-black flex items-center justify-center border border-white/30">
+          {position}
+        </div>
+      )}
+
+      {/* Edit mode: hide button (top-right) */}
+      {editMode && (
+        <button
+          onClick={(e) => {
+            e.stopPropagation()
+            onHide(item)
+          }}
+          className="absolute top-1 right-1 w-6 h-6 rounded-full bg-red-600 text-white flex items-center justify-center font-black text-sm shadow-lg hover:bg-red-700 active:scale-90 transition-all z-10"
+          aria-label="Ocultar item"
+        >
+          ✕
+        </button>
+      )}
+
+      {/* Edit mode: selected indicator */}
+      {editMode && isSelected && (
+        <div className="absolute top-1 left-1 px-1.5 py-0.5 rounded-full bg-yellow-400 text-black text-[0.6rem] font-black">
+          SEL
+        </div>
+      )}
     </article>
+  )
+}
+
+// ─── Hidden Items Modal ────────────────────────────────────────────────────────
+
+function HiddenItemsModal({
+  onClose,
+  onRestored,
+  locale,
+}: {
+  onClose: () => void
+  onRestored: () => void
+  locale: Locale
+}) {
+  const [items, setItems] = useState<MenuItem[]>([])
+  const [loading, setLoading] = useState(true)
+  const [restoring, setRestoring] = useState<string | null>(null)
+
+  const load = async () => {
+    setLoading(true)
+    try {
+      const res = await fetch('/api/pos/hidden-items')
+      const data = await res.json()
+      setItems(data.items ?? [])
+    } catch (e) { void e }
+    setLoading(false)
+  }
+
+  useEffect(() => { load() }, [])
+
+  const handleRestore = async (item: MenuItem) => {
+    setRestoring(item.id)
+    try {
+      const res = await fetch('/api/pos/show-item', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ itemId: item.id }),
+      })
+      if (res.ok) {
+        setItems((prev) => prev.filter((i) => i.id !== item.id))
+        onRestored()
+      }
+    } catch (e) { void e }
+    setRestoring(null)
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60"
+      onClick={(e) => { if (e.target === e.currentTarget) onClose() }}
+    >
+      <div className="bg-gray-900 rounded-2xl shadow-2xl w-full max-w-sm mx-4 flex flex-col overflow-hidden max-h-[80vh] border border-red-500/30">
+        {/* Header */}
+        <div className="px-5 py-4 bg-red-900/60 flex items-center justify-between shrink-0">
+          <div>
+            <h3 className="text-white font-black text-lg leading-none">Items ocultos</h3>
+            <p className="text-red-200 text-xs mt-0.5">{items.length} oculto{items.length !== 1 ? 's' : ''}</p>
+          </div>
+          <button onClick={onClose} className="text-white/70 hover:text-white text-xl leading-none">✕</button>
+        </div>
+
+        {/* List */}
+        <div className="flex-1 overflow-y-auto px-4 py-3" style={{ minHeight: 0 }}>
+          {loading ? (
+            <div className="space-y-2 py-2">
+              {[1, 2, 3].map((i) => <div key={i} className="h-14 bg-gray-800 rounded-xl animate-pulse" />)}
+            </div>
+          ) : items.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-12 text-gray-400 gap-2">
+              <span className="text-3xl">👁️</span>
+              <p className="text-sm font-semibold">No hay items ocultos</p>
+            </div>
+          ) : (
+            <ul className="flex flex-col gap-2">
+              {items.map((item) => (
+                <li
+                  key={item.id}
+                  className="flex items-center gap-3 bg-gray-800 rounded-xl px-3 py-2.5 border border-gray-700"
+                >
+                  {/* Thumbnail */}
+                  <div className="w-10 h-10 rounded-lg overflow-hidden shrink-0 bg-gray-700 flex items-center justify-center">
+                    {item.image_url ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={item.image_url} alt={item.name} className="w-full h-full object-cover" />
+                    ) : (
+                      <span className="text-lg">🍽️</span>
+                    )}
+                  </div>
+                  {/* Info */}
+                  <div className="flex-1 min-w-0">
+                    <p className="font-bold text-white text-sm truncate">{getItemName(item, locale)}</p>
+                    <p className="text-sumak-gold text-xs font-semibold tabular-nums">{formatARS(item.price)}</p>
+                  </div>
+                  {/* Restore button */}
+                  <button
+                    onClick={() => handleRestore(item)}
+                    disabled={restoring === item.id}
+                    className={`w-8 h-8 rounded-full flex items-center justify-center font-black text-lg transition-all active:scale-90 shrink-0 ${
+                      restoring === item.id
+                        ? 'bg-gray-600 text-gray-400 cursor-not-allowed'
+                        : 'bg-teal-600 text-white hover:bg-teal-500 shadow-md'
+                    }`}
+                    aria-label="Restaurar item"
+                  >
+                    {restoring === item.id ? '…' : '+'}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      </div>
+    </div>
   )
 }
 
@@ -1044,6 +1219,82 @@ export default function POSPage() {
   // Ticket panel open/close
   const [ticketOpen, setTicketOpen] = useState(false)
 
+  // ─── Edit mode state ──────────────────────────────────────────────────────────
+  const [editMode, setEditMode] = useState(false)
+  const [selectedForSwap, setSelectedForSwap] = useState<MenuItem | null>(null)
+  const [hiddenCount, setHiddenCount] = useState(0)
+  const [showHiddenModal, setShowHiddenModal] = useState(false)
+  const [editBusy, setEditBusy] = useState(false)
+
+  // Fetch hidden count whenever we enter edit mode or items change
+  const refreshHiddenCount = useCallback(async () => {
+    try {
+      const res = await fetch('/api/pos/hidden-items')
+      const data = await res.json()
+      setHiddenCount((data.items ?? []).length)
+    } catch (e) { void e }
+  }, [])
+
+  useEffect(() => {
+    if (editMode) {
+      refreshHiddenCount()
+    }
+  }, [editMode, refreshHiddenCount])
+
+  // Toggle edit mode
+  const toggleEditMode = useCallback(() => {
+    setEditMode((prev) => {
+      if (prev) {
+        // Exiting edit mode: clear selection
+        setSelectedForSwap(null)
+      }
+      return !prev
+    })
+  }, [])
+
+  // Hide item handler
+  const handleHideItem = useCallback(async (item: MenuItem) => {
+    setEditBusy(true)
+    try {
+      const res = await fetch('/api/pos/hide-item', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ itemId: item.id }),
+      })
+      if (res.ok) {
+        setHiddenCount((c) => c + 1)
+        setToast(`"${item.name}" oculto`)
+      }
+    } catch (e) { void e }
+    setEditBusy(false)
+  }, [])
+
+  // Select item for swap handler
+  const handleSelectForSwap = useCallback(async (item: MenuItem) => {
+    if (!selectedForSwap) {
+      // First selection
+      setSelectedForSwap(item)
+    } else if (selectedForSwap.id === item.id) {
+      // Deselect same item
+      setSelectedForSwap(null)
+    } else {
+      // Second selection: swap
+      setEditBusy(true)
+      try {
+        const res = await fetch('/api/pos/swap-items', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ itemId1: selectedForSwap.id, itemId2: item.id }),
+        })
+        if (res.ok) {
+          setToast('Posiciones intercambiadas')
+        }
+      } catch (e) { void e }
+      setSelectedForSwap(null)
+      setEditBusy(false)
+    }
+  }, [selectedForSwap])
+
   // Category filter — persisted in sessionStorage so it survives page refresh
   const [activeCategory, setActiveCategory] = useState<string>(() => {
     if (typeof window !== 'undefined') {
@@ -1056,13 +1307,16 @@ export default function POSPage() {
     sessionStorage.setItem('pos_activeCategory', activeCategory)
   }, [activeCategory])
 
-  // Display all active items, capped at 24
-  const filteredItems = activeCategory === 'all'
+  // Display all active items, capped at MAX_VISIBLE
+  // In edit mode also exclude hidden items (display_order = -1) from the filteredItems (they're shown in modal only)
+  const filteredItems = (activeCategory === 'all'
     ? menuItems
     : menuItems.filter((item) => {
         const cat = categories.find((c) => c.slug === activeCategory)
         return cat ? item.category_id === cat.id : true
       })
+  ).filter((item) => item.display_order !== -1)
+
   const displayItems = filteredItems.slice(0, MAX_VISIBLE)
 
   // Add item to ticket (called after modifier selection or directly)
@@ -1235,7 +1489,7 @@ export default function POSPage() {
   return (
     <div className="fixed inset-0 flex flex-col bg-black overflow-hidden select-none" style={{ fontFamily: "'Inter', sans-serif" }}>
       {/* ── Top Bar: POS + Categories + Language + Clock + Ticket ── */}
-      <header className="shrink-0 flex items-center gap-2 px-3 py-1.5 bg-sumak-brown shadow-md">
+      <header className={`shrink-0 flex items-center gap-2 px-3 py-1.5 shadow-md transition-colors ${editMode ? 'bg-red-950' : 'bg-sumak-brown'}`}>
         <h1 className="text-sumak-gold font-black text-lg leading-none shrink-0">POS</h1>
         <div className="h-5 w-px bg-sumak-gold/30 shrink-0" />
         {/* Category Tabs inline */}
@@ -1295,6 +1549,23 @@ export default function POSPage() {
         >
           $
         </button>
+        {/* Edit mode button */}
+        <button
+          onClick={toggleEditMode}
+          title={editMode ? 'Salir del modo edición' : 'Editar grilla'}
+          className={`relative flex items-center justify-center w-8 h-8 rounded-lg active:scale-95 transition-all shrink-0 font-bold text-base ${
+            editMode
+              ? 'bg-red-600 text-white ring-2 ring-red-400'
+              : 'bg-sumak-brown-mid text-sumak-gold hover:bg-sumak-brown-light'
+          }`}
+        >
+          ✏️
+          {editMode && hiddenCount > 0 && (
+            <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-orange-400 text-black text-[9px] font-black flex items-center justify-center">
+              {hiddenCount}
+            </span>
+          )}
+        </button>
         {/* Ticket toggle button */}
         <button
           onClick={() => setTicketOpen((o) => !o)}
@@ -1313,31 +1584,79 @@ export default function POSPage() {
         </button>
       </header>
 
+      {/* ── Edit mode info bar ── */}
+      {editMode && (
+        <div className="shrink-0 flex items-center justify-between px-3 py-1.5 bg-red-900/80 border-b border-red-700/50">
+          <div className="flex items-center gap-2">
+            <span className="text-red-200 text-xs font-bold">MODO EDICIÓN</span>
+            {selectedForSwap ? (
+              <span className="text-yellow-300 text-xs">
+                Seleccionado: <span className="font-black">{selectedForSwap.name}</span> — tocá otro para intercambiar
+              </span>
+            ) : (
+              <span className="text-red-300 text-xs">Tocá ✕ para ocultar · Tocá 2 items para intercambiar</span>
+            )}
+          </div>
+          <div className="flex items-center gap-2">
+            {hiddenCount > 0 && (
+              <button
+                onClick={() => setShowHiddenModal(true)}
+                className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-orange-500/80 text-white text-xs font-bold hover:bg-orange-500 active:scale-95 transition-all"
+              >
+                <span>{hiddenCount} oculto{hiddenCount !== 1 ? 's' : ''}</span>
+                <span>👁️</span>
+              </button>
+            )}
+            <button
+              onClick={toggleEditMode}
+              className="px-2.5 py-1 rounded-lg bg-white/20 text-white text-xs font-bold hover:bg-white/30 active:scale-95 transition-all"
+            >
+              Listo
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* ── Main content: grid + ticket panel ── */}
       <div className="flex-1 flex min-h-0 overflow-hidden">
         {/* ── Left: Dish Grid ── */}
         <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
           {/* Dish Grid */}
-        <main
-          className="flex-1 min-w-0 p-2 overflow-y-auto"
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(6, 1fr)',
-            gridTemplateRows: 'repeat(4, calc(25% - 5px))',
-            gridAutoRows: 'calc(25% - 5px)',
-            gap: '6px',
-          }}
-        >
-          {loading ? (
-            Array.from({ length: 24 }).map((_, i) => (
-              <div key={i} className="w-full h-full rounded-xl bg-sumak-cream-dark animate-pulse" />
-            ))
-          ) : (
-            displayItems.map((item) => (
-              <POSDishCard key={item.id} item={item} onAdd={handleAddItem} locale={locale} />
-            ))
-          )}
-        </main>
+          <main
+            className="flex-1 min-w-0 p-2 overflow-y-auto"
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(6, 1fr)',
+              gridTemplateRows: 'repeat(4, calc(25% - 5px))',
+              gridAutoRows: 'calc(25% - 5px)',
+              gap: '6px',
+            }}
+          >
+            {loading ? (
+              Array.from({ length: 24 }).map((_, i) => (
+                <div key={i} className="w-full h-full rounded-xl bg-sumak-cream-dark animate-pulse" />
+              ))
+            ) : editBusy ? (
+              // Show skeleton over grid while busy
+              displayItems.map((item, idx) => (
+                <div key={item.id} className="w-full h-full rounded-xl bg-gray-700/50 animate-pulse" style={{ opacity: 0.7 + idx * 0 }} />
+              ))
+            ) : (
+              displayItems.map((item, idx) => (
+                <POSDishCard
+                  key={item.id}
+                  item={item}
+                  onAdd={handleAddItem}
+                  locale={locale}
+                  editMode={editMode}
+                  position={idx + 1}
+                  isSelected={selectedForSwap?.id === item.id}
+                  onHide={handleHideItem}
+                  onSelect={handleSelectForSwap}
+                />
+              ))
+            )}
+          </main>
         </div>
 
         {/* ── Right: Ticket Panel (slide-in) ── */}
@@ -1392,6 +1711,17 @@ export default function POSPage() {
       {/* ── Cash Movements Modal ── */}
       {showCashModal && (
         <CashMovementsModal onClose={() => setShowCashModal(false)} />
+      )}
+
+      {/* ── Hidden Items Modal ── */}
+      {showHiddenModal && (
+        <HiddenItemsModal
+          onClose={() => setShowHiddenModal(false)}
+          onRestored={() => {
+            setHiddenCount((c) => Math.max(0, c - 1))
+          }}
+          locale={locale}
+        />
       )}
 
       {/* ── Toast ── */}

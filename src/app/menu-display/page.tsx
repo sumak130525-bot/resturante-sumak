@@ -14,20 +14,7 @@ const CURSOR_HIDE_MS      = 5_000
 const FALLBACK_REFRESH_MS = 15 * 1_000  // Refresh every 15s to pick up admin changes
 const MAX_VISIBLE         = 24   // 6 × 4 grid — no scroll on TV
 
-// ─── Tabs ─────────────────────────────────────────────────────────────────────
-
-const DISPLAY_TABS = [
-  { key: 'menu-dia',    label: { es: 'Menú del Día',  en: 'Daily Menu',   qu: "P'unchaw Mikhuna" } },
-  { key: 'all',         label: { es: 'Menú Completo', en: 'Full Menu',    qu: 'Lliw Mikhuna'     } },
-  { key: 'desayunos',   label: { es: 'Desayunos',     en: 'Breakfasts',   qu: 'Inti Llaqsimuy'   } },
-  { key: 'sopas',       label: { es: 'Sopas',         en: 'Soups',        qu: 'Lawakuna'          } },
-  { key: 'segundo',     label: { es: 'Segundos',      en: 'Main Dishes',  qu: 'Qhipa Mikhuna'     } },
-  { key: 'bebidas',     label: { es: 'Bebidas',       en: 'Drinks',       qu: 'Upyay'             } },
-  { key: 'postres',     label: { es: 'Postres',       en: 'Desserts',     qu: 'Mishki'            } },
-  { key: 'para-llevar', label: { es: 'Para Llevar',   en: 'Take Away',    qu: 'Apakuy'            } },
-] as const
-
-type TabKey = (typeof DISPLAY_TABS)[number]['key']
+// ─── Category Icons ───────────────────────────────────────────────────────────
 
 const CATEGORY_EMOJI: Record<string, string> = {
   sopas: '🍲',
@@ -541,7 +528,7 @@ function SkeletonGrid() {
 export default function MenuDisplayPage() {
   const { menuItems, categories, loading, refetch } = useMenuRealtime()
   const { locale, setLocale } = useTranslation()
-  const [activeTab, setActiveTab]   = useState<TabKey>('all')
+  const [activeTab, setActiveTab]   = useState<string>('all')
   const [visible, setVisible]       = useState(true)
   const [assigningPosition, setAssigningPosition] = useState<number | null>(null)
   const time = useClock()
@@ -567,30 +554,17 @@ export default function MenuDisplayPage() {
     setAssigningPosition(null)
   }
 
-  // Only show tabs that have items (plus always-visible ones)
-  const availableSlugs = new Set(categories.map((c) => c.slug))
-  const visibleTabs = DISPLAY_TABS.filter((tab) => {
-    if (tab.key === 'all' || tab.key === 'menu-dia') return true
-    return availableSlugs.has(tab.key)
-  })
-
-  // Filter items for current tab — cap at MAX_VISIBLE (TV has no scroll)
+  // Filter items for current tab — show only positioned items (display_order > 0), cap at MAX_VISIBLE
   const filteredItems = (() => {
-    let items: typeof menuItems
-    if (activeTab === 'all') {
-      items = menuItems
-    } else if (activeTab === 'menu-dia') {
-      items = menuItems.filter(
-        (i) => i.categories?.slug === 'segundo' || i.categories?.slug === 'sopas'
-      )
-    } else {
-      items = menuItems.filter((i) => i.categories?.slug === activeTab)
-    }
-    return items.slice(0, MAX_VISIBLE)
+    const positioned = menuItems.filter((i) => (i.display_order ?? 0) > 0)
+    if (activeTab === 'all') return positioned.slice(0, MAX_VISIBLE)
+    const cat = categories.find((c) => c.slug === activeTab)
+    if (!cat) return []
+    return positioned.filter((i) => i.category_id === cat.id).slice(0, MAX_VISIBLE)
   })()
 
-  // Tab switch with fade transition — manual only, no auto-rotate
-  const switchTab = useCallback((key: TabKey) => {
+  // Tab switch with fade transition
+  const switchTab = useCallback((key: string) => {
     setVisible(false)
     setTimeout(() => {
       setActiveTab(key)
@@ -598,16 +572,20 @@ export default function MenuDisplayPage() {
     }, 200)
   }, [])
 
-  // Fallback refresh every 5 min (Supabase Realtime fallback)
+  // Fallback refresh every 15s (Supabase Realtime fallback)
   useEffect(() => {
     const id = setInterval(refetch, FALLBACK_REFRESH_MS)
     return () => clearInterval(id)
   }, [refetch])
 
-  const tabLabel = (tab: (typeof DISPLAY_TABS)[number]) =>
-    tab.label[locale as keyof typeof tab.label] ?? tab.label.es
+  // Helper: get category display name per locale
+  const getCatLabel = (cat: { name: string; name_en?: string | null; name_qu?: string | null }) => {
+    if (locale === 'en' && cat.name_en) return cat.name_en
+    if (locale === 'qu' && cat.name_qu) return cat.name_qu
+    return cat.name
+  }
 
-  const isVirtualTab = activeTab === 'all' || activeTab === 'menu-dia'
+  const todosLabel = locale === 'en' ? 'All' : locale === 'qu' ? 'Llipin' : 'Todos'
 
   return (
     <div
@@ -641,24 +619,32 @@ export default function MenuDisplayPage() {
 
         {/* Center: category tabs */}
         <nav className="flex-1 flex items-center gap-1.5 overflow-x-auto scrollbar-hide min-w-0">
-          {visibleTabs.map((tab) => {
-            const isActive = activeTab === tab.key
-            return (
-              <button
-                key={tab.key}
-                onClick={() => switchTab(tab.key)}
-                className={cn(
-                  'whitespace-nowrap px-3 py-1 rounded-full text-xs font-semibold shrink-0',
-                  'transition-all duration-200',
-                  isActive
-                    ? 'bg-[#F5C842] text-[#3B2000] shadow-md'
-                    : 'bg-white/10 text-white/60 border border-white/10 hover:bg-white/20 hover:text-white'
-                )}
-              >
-                {tabLabel(tab)}
-              </button>
-            )
-          })}
+          {/* Todos tab */}
+          <button
+            onClick={() => switchTab('all')}
+            className={`flex items-center gap-1 whitespace-nowrap px-3 py-1 rounded-pill text-xs font-semibold transition-all shrink-0 ${
+              activeTab === 'all'
+                ? 'bg-sumak-gold text-sumak-brown'
+                : 'bg-white/20 text-sumak-gold/80 hover:bg-white/30'
+            }`}
+          >
+            {todosLabel}
+          </button>
+          {/* Dynamic category tabs from DB */}
+          {categories.map((cat) => (
+            <button
+              key={cat.id}
+              onClick={() => switchTab(cat.slug)}
+              className={`flex items-center gap-1 whitespace-nowrap px-3 py-1 rounded-pill text-xs font-semibold transition-all shrink-0 ${
+                activeTab === cat.slug
+                  ? 'bg-sumak-gold text-sumak-brown'
+                  : 'bg-white/20 text-sumak-gold/80 hover:bg-white/30'
+              }`}
+            >
+              <span className="text-sm leading-none">{CATEGORY_EMOJI[cat.slug] ?? '🍴'}</span>
+              {getCatLabel(cat)}
+            </button>
+          ))}
         </nav>
 
         {/* Right: language switcher + clock */}
@@ -700,14 +686,6 @@ export default function MenuDisplayPage() {
       >
         {loading ? (
           <SkeletonGrid />
-        ) : filteredItems.length === 0 && isVirtualTab ? (
-          <div
-            className="flex flex-col items-center justify-center gap-3 text-white/30"
-            style={{ gridColumn: '1 / -1', gridRow: '1 / -1' }}
-          >
-            <span className="text-6xl">🍽️</span>
-            <p className="text-lg font-semibold">Sin platos en esta categoría</p>
-          </div>
         ) : (
           <>
             {Array.from({ length: MAX_VISIBLE }).map((_, gridIndex) => {
