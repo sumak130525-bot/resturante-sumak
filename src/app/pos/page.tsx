@@ -1593,17 +1593,24 @@ export default function POSPage() {
                 )
               })
             ) : (
-              // Normal mode: show positioned items by index (scrollable)
-              displayItems.map((item) => (
-                <POSDishCard
-                  key={item.id}
-                  item={item}
-                  onAdd={handleAddItem}
-                  locale={locale}
-                  editMode={false}
-                  onUnassign={handleUnassign}
-                />
-              ))
+              // Normal mode: fixed 24-cell grid by position, category filtered
+              Array.from({ length: GRID_SIZE }).map((_, gridIndex) => {
+                const position = gridIndex + 1
+                const item = displayItems.find((i) => i.display_order === position)
+                if (item) {
+                  return (
+                    <POSDishCard
+                      key={item.id}
+                      item={item}
+                      onAdd={handleAddItem}
+                      locale={locale}
+                      editMode={false}
+                      onUnassign={handleUnassign}
+                    />
+                  )
+                }
+                return <div key={`empty-${position}`} className="w-full h-full" />
+              })
             )}
           </main>
         </div>
