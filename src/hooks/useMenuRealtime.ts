@@ -18,7 +18,6 @@ export function useMenuRealtime() {
           .from('menu_items')
           .select('*, categories(*)')
           .eq('active', true)
-          .gte('display_order', 0)
           .order('display_order', { ascending: true, nullsFirst: false })
           .order('name'),
         supabase
