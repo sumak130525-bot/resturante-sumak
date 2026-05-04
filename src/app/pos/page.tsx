@@ -149,7 +149,8 @@ const CATEGORY_ICONS: Record<string, string> = {
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const MAX_VISIBLE = 50 // max items in grid
+const MAX_VISIBLE = 50 // max items in normal grid (scrollable)
+const GRID_SIZE = 24   // fixed 6x4 grid in edit mode
 
 // ─── Price format (ARS: $12.500) ──────────────────────────────────────────────
 
@@ -202,6 +203,153 @@ function Toast({ message, onDone }: { message: string; onDone: () => void }) {
       >
         ✕
       </button>
+    </div>
+  )
+}
+
+// ─── Assign Modal (dark themed, adapted from menu-display) ────────────────────
+
+interface UnassignedItem {
+  id: string
+  name: string
+  name_en?: string | null
+  name_qu?: string | null
+  price: number
+  image_url?: string | null
+  categories?: { name: string; slug: string } | null
+}
+
+interface AssignModalProps {
+  position: number
+  onAssign: (itemId: string) => Promise<void>
+  onClose: () => void
+}
+
+function AssignModal({ position, onAssign, onClose }: AssignModalProps) {
+  const [items, setItems] = useState<UnassignedItem[]>([])
+  const [loading, setLoading] = useState(true)
+  const [query, setQuery] = useState('')
+  const [assigning, setAssigning] = useState<string | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    setLoading(true)
+    fetch('/api/menu-display/unassigned')
+      .then((r) => r.json())
+      .then((data) => { if (!cancelled) setItems(data.items ?? []) })
+      .catch(() => {})
+      .finally(() => { if (!cancelled) setLoading(false) })
+    return () => { cancelled = true }
+  }, [])
+
+  const filtered = query.trim()
+    ? items.filter((i) => i.name.toLowerCase().includes(query.trim().toLowerCase()))
+    : items
+
+  const handleSelect = async (id: string) => {
+    setAssigning(id)
+    try {
+      await onAssign(id)
+    } finally {
+      setAssigning(null)
+    }
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center"
+      style={{ background: 'rgba(0,0,0,0.82)' }}
+      onClick={onClose}
+    >
+      <div
+        className="flex flex-col rounded-2xl overflow-hidden"
+        style={{
+          background: '#1a1917',
+          border: '1px solid rgba(255,255,255,0.12)',
+          width: 'min(92vw, 480px)',
+          maxHeight: '80vh',
+        }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="px-5 pt-5 pb-3 shrink-0">
+          <p className="text-white font-bold text-base mb-1">
+            Agregar plato — celda {position}
+          </p>
+          <input
+            type="text"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Buscar plato..."
+            autoFocus
+            className="w-full rounded-lg px-3 py-2 text-sm text-white placeholder-white/30 outline-none"
+            style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.1)' }}
+          />
+        </div>
+
+        {/* List */}
+        <div className="flex-1 overflow-y-auto px-3 pb-3" style={{ minHeight: 0 }}>
+          {loading ? (
+            <div className="flex items-center justify-center py-10 text-white/30 text-sm">
+              Cargando...
+            </div>
+          ) : filtered.length === 0 ? (
+            <div className="flex items-center justify-center py-10 text-white/30 text-sm">
+              Sin platos disponibles
+            </div>
+          ) : (
+            filtered.map((item) => (
+              <button
+                key={item.id}
+                disabled={!!assigning}
+                onClick={() => handleSelect(item.id)}
+                className="w-full flex items-center gap-3 rounded-xl px-3 py-2.5 mb-1.5 text-left transition-all active:scale-[0.98] disabled:opacity-50"
+                style={{ background: assigning === item.id ? 'rgba(245,200,66,0.15)' : 'rgba(255,255,255,0.05)' }}
+              >
+                {/* Thumbnail */}
+                <div
+                  className="shrink-0 rounded-lg overflow-hidden bg-white/5 flex items-center justify-center"
+                  style={{ width: 40, height: 40 }}
+                >
+                  {item.image_url ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img
+                      src={item.image_url}
+                      alt={item.name}
+                      className="w-full h-full object-cover"
+                      draggable={false}
+                    />
+                  ) : (
+                    <span className="text-lg">{CATEGORY_ICONS[item.categories?.slug ?? ''] ?? '🍽️'}</span>
+                  )}
+                </div>
+
+                {/* Name + price */}
+                <div className="flex-1 min-w-0">
+                  <p className="text-white text-sm font-semibold leading-tight truncate">{item.name}</p>
+                  {item.categories?.name && (
+                    <p className="text-white/40 text-xs leading-tight truncate">{item.categories.name}</p>
+                  )}
+                </div>
+                <p className="shrink-0 text-yellow-400 text-sm font-bold tabular-nums">
+                  {formatARS(item.price)}
+                </p>
+              </button>
+            ))
+          )}
+        </div>
+
+        {/* Cancel button */}
+        <div className="px-3 pb-4 pt-1 shrink-0">
+          <button
+            onClick={onClose}
+            className="w-full rounded-xl py-3 font-bold text-white/70 transition-all active:scale-95"
+            style={{ background: '#3f3f46', fontSize: '0.9rem' }}
+          >
+            Cancelar
+          </button>
+        </div>
+      </div>
     </div>
   )
 }
@@ -350,7 +498,7 @@ function ModifierModal({
   )
 }
 
-// ─── POS Dish Card ────────────────────────────────────────────────────────────
+// ─── POS Dish Card ─────────────────────────────────────────────────────────────
 
 // ─── ARS formatter ───────────────────────────────────────────────────────────
 
@@ -581,34 +729,25 @@ function POSClock() {
   return <span className="text-sumak-gold/70 text-xs font-mono shrink-0">{time}</span>
 }
 
-// ─── Dish Card ──────────────────────────────────────────────────────────────────
+// ─── Dish Card (normal mode) ───────────────────────────────────────────────────
 function POSDishCard({
   item,
   onAdd,
   locale,
   editMode,
-  position,
-  isSelected,
-  onHide,
-  onSelect,
+  onUnassign,
 }: {
   item: MenuItem
   onAdd: (item: MenuItem) => void
   locale: Locale
   editMode: boolean
-  position: number
-  isSelected: boolean
-  onHide: (item: MenuItem) => void
-  onSelect: (item: MenuItem) => void
+  onUnassign: (item: MenuItem) => void
 }) {
   const isUnavailable = item.available === 0
   const [pressed, setPressed] = useState(false)
 
   const handleClick = () => {
-    if (editMode) {
-      onSelect(item)
-      return
-    }
+    if (editMode) return // clicks in edit mode handled by X button only
     if (isUnavailable) return
     setPressed(true)
     onAdd(item)
@@ -620,7 +759,7 @@ function POSDishCard({
       onClick={handleClick}
       className={`relative w-full h-full rounded-xl overflow-hidden select-none transition-all duration-150 ${
         editMode
-          ? `cursor-pointer border-2 ${isSelected ? 'border-yellow-400 ring-2 ring-yellow-400' : 'border-red-500/60'}`
+          ? 'cursor-default border-2 border-red-500/40'
           : isUnavailable
             ? 'opacity-50 cursor-not-allowed'
             : 'cursor-pointer active:scale-95 hover:ring-2 hover:ring-sumak-gold'
@@ -651,11 +790,6 @@ function POSDishCard({
         <div className="absolute inset-0 bg-red-900/20" />
       )}
 
-      {/* Selected highlight in edit mode */}
-      {editMode && isSelected && (
-        <div className="absolute inset-0 bg-yellow-400/30" />
-      )}
-
       {/* Name + price */}
       <div className="absolute bottom-0 left-0 right-0 px-2 py-1.5">
         <p
@@ -681,147 +815,20 @@ function POSDishCard({
         </div>
       )}
 
-      {/* Edit mode: position badge (bottom-left) */}
-      {editMode && (
-        <div className="absolute bottom-1 left-1 w-5 h-5 rounded-full bg-black/70 text-white text-[0.6rem] font-black flex items-center justify-center border border-white/30">
-          {position}
-        </div>
-      )}
-
-      {/* Edit mode: hide button (top-right) */}
+      {/* Edit mode: red X button (top-right) */}
       {editMode && (
         <button
           onClick={(e) => {
             e.stopPropagation()
-            onHide(item)
+            onUnassign(item)
           }}
           className="absolute top-1 right-1 w-6 h-6 rounded-full bg-red-600 text-white flex items-center justify-center font-black text-sm shadow-lg hover:bg-red-700 active:scale-90 transition-all z-10"
-          aria-label="Ocultar item"
+          aria-label="Quitar de grilla"
         >
           ✕
         </button>
       )}
-
-      {/* Edit mode: selected indicator */}
-      {editMode && isSelected && (
-        <div className="absolute top-1 left-1 px-1.5 py-0.5 rounded-full bg-yellow-400 text-black text-[0.6rem] font-black">
-          SEL
-        </div>
-      )}
     </article>
-  )
-}
-
-// ─── Hidden Items Modal ────────────────────────────────────────────────────────
-
-function HiddenItemsModal({
-  onClose,
-  onRestored,
-  locale,
-}: {
-  onClose: () => void
-  onRestored: () => void
-  locale: Locale
-}) {
-  const [items, setItems] = useState<MenuItem[]>([])
-  const [loading, setLoading] = useState(true)
-  const [restoring, setRestoring] = useState<string | null>(null)
-
-  const load = async () => {
-    setLoading(true)
-    try {
-      const res = await fetch('/api/pos/hidden-items')
-      const data = await res.json()
-      setItems(data.items ?? [])
-    } catch (e) { void e }
-    setLoading(false)
-  }
-
-  useEffect(() => { load() }, [])
-
-  const handleRestore = async (item: MenuItem) => {
-    setRestoring(item.id)
-    try {
-      const res = await fetch('/api/pos/show-item', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ itemId: item.id }),
-      })
-      if (res.ok) {
-        setItems((prev) => prev.filter((i) => i.id !== item.id))
-        onRestored()
-      }
-    } catch (e) { void e }
-    setRestoring(null)
-  }
-
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60"
-      onClick={(e) => { if (e.target === e.currentTarget) onClose() }}
-    >
-      <div className="bg-gray-900 rounded-2xl shadow-2xl w-full max-w-sm mx-4 flex flex-col overflow-hidden max-h-[80vh] border border-red-500/30">
-        {/* Header */}
-        <div className="px-5 py-4 bg-red-900/60 flex items-center justify-between shrink-0">
-          <div>
-            <h3 className="text-white font-black text-lg leading-none">Items ocultos</h3>
-            <p className="text-red-200 text-xs mt-0.5">{items.length} oculto{items.length !== 1 ? 's' : ''}</p>
-          </div>
-          <button onClick={onClose} className="text-white/70 hover:text-white text-xl leading-none">✕</button>
-        </div>
-
-        {/* List */}
-        <div className="flex-1 overflow-y-auto px-4 py-3" style={{ minHeight: 0 }}>
-          {loading ? (
-            <div className="space-y-2 py-2">
-              {[1, 2, 3].map((i) => <div key={i} className="h-14 bg-gray-800 rounded-xl animate-pulse" />)}
-            </div>
-          ) : items.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-12 text-gray-400 gap-2">
-              <span className="text-3xl">👁️</span>
-              <p className="text-sm font-semibold">No hay items ocultos</p>
-            </div>
-          ) : (
-            <ul className="flex flex-col gap-2">
-              {items.map((item) => (
-                <li
-                  key={item.id}
-                  className="flex items-center gap-3 bg-gray-800 rounded-xl px-3 py-2.5 border border-gray-700"
-                >
-                  {/* Thumbnail */}
-                  <div className="w-10 h-10 rounded-lg overflow-hidden shrink-0 bg-gray-700 flex items-center justify-center">
-                    {item.image_url ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img src={item.image_url} alt={item.name} className="w-full h-full object-cover" />
-                    ) : (
-                      <span className="text-lg">🍽️</span>
-                    )}
-                  </div>
-                  {/* Info */}
-                  <div className="flex-1 min-w-0">
-                    <p className="font-bold text-white text-sm truncate">{getItemName(item, locale)}</p>
-                    <p className="text-sumak-gold text-xs font-semibold tabular-nums">{formatARS(item.price)}</p>
-                  </div>
-                  {/* Restore button */}
-                  <button
-                    onClick={() => handleRestore(item)}
-                    disabled={restoring === item.id}
-                    className={`w-8 h-8 rounded-full flex items-center justify-center font-black text-lg transition-all active:scale-90 shrink-0 ${
-                      restoring === item.id
-                        ? 'bg-gray-600 text-gray-400 cursor-not-allowed'
-                        : 'bg-teal-600 text-white hover:bg-teal-500 shadow-md'
-                    }`}
-                    aria-label="Restaurar item"
-                  >
-                    {restoring === item.id ? '…' : '+'}
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-      </div>
-    </div>
   )
 }
 
@@ -1221,79 +1228,35 @@ export default function POSPage() {
 
   // ─── Edit mode state ──────────────────────────────────────────────────────────
   const [editMode, setEditMode] = useState(false)
-  const [selectedForSwap, setSelectedForSwap] = useState<MenuItem | null>(null)
-  const [hiddenCount, setHiddenCount] = useState(0)
-  const [showHiddenModal, setShowHiddenModal] = useState(false)
-  const [editBusy, setEditBusy] = useState(false)
-
-  // Fetch hidden count whenever we enter edit mode or items change
-  const refreshHiddenCount = useCallback(async () => {
-    try {
-      const res = await fetch('/api/pos/hidden-items')
-      const data = await res.json()
-      setHiddenCount((data.items ?? []).length)
-    } catch (e) { void e }
-  }, [])
-
-  useEffect(() => {
-    if (editMode) {
-      refreshHiddenCount()
-    }
-  }, [editMode, refreshHiddenCount])
+  const [assigningPosition, setAssigningPosition] = useState<number | null>(null)
 
   // Toggle edit mode
   const toggleEditMode = useCallback(() => {
-    setEditMode((prev) => {
-      if (prev) {
-        // Exiting edit mode: clear selection
-        setSelectedForSwap(null)
-      }
-      return !prev
-    })
+    setEditMode((prev) => !prev)
   }, [])
 
-  // Hide item handler
-  const handleHideItem = useCallback(async (item: MenuItem) => {
-    setEditBusy(true)
+  // Unassign item: set display_order to 0
+  const handleUnassign = useCallback(async (item: MenuItem) => {
     try {
-      const res = await fetch('/api/pos/hide-item', {
+      await fetch('/api/menu-display/reorder', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ itemId: item.id }),
+        body: JSON.stringify({ updates: [{ id: item.id, display_order: 0 }] }),
       })
-      if (res.ok) {
-        setHiddenCount((c) => c + 1)
-        setToast(`"${item.name}" oculto`)
-      }
+      // Realtime subscription will update the grid automatically
     } catch (e) { void e }
-    setEditBusy(false)
   }, [])
 
-  // Select item for swap handler
-  const handleSelectForSwap = useCallback(async (item: MenuItem) => {
-    if (!selectedForSwap) {
-      // First selection
-      setSelectedForSwap(item)
-    } else if (selectedForSwap.id === item.id) {
-      // Deselect same item
-      setSelectedForSwap(null)
-    } else {
-      // Second selection: swap
-      setEditBusy(true)
-      try {
-        const res = await fetch('/api/pos/swap-items', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ itemId1: selectedForSwap.id, itemId2: item.id }),
-        })
-        if (res.ok) {
-          setToast('Posiciones intercambiadas')
-        }
-      } catch (e) { void e }
-      setSelectedForSwap(null)
-      setEditBusy(false)
-    }
-  }, [selectedForSwap])
+  // Assign item to a position
+  const handleAssign = useCallback(async (itemId: string) => {
+    if (assigningPosition === null) return
+    await fetch('/api/menu-display/reorder', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ updates: [{ id: itemId, display_order: assigningPosition }] }),
+    })
+    setAssigningPosition(null)
+  }, [assigningPosition])
 
   // Category filter — persisted in sessionStorage so it survives page refresh
   const [activeCategory, setActiveCategory] = useState<string>(() => {
@@ -1307,17 +1270,19 @@ export default function POSPage() {
     sessionStorage.setItem('pos_activeCategory', activeCategory)
   }, [activeCategory])
 
-  // Display all active items, capped at MAX_VISIBLE
-  // In edit mode also exclude hidden items (display_order = -1) from the filteredItems (they're shown in modal only)
+  // Items for normal mode: filter by category, exclude unpositioned (display_order=0), cap at MAX_VISIBLE
   const filteredItems = (activeCategory === 'all'
     ? menuItems
     : menuItems.filter((item) => {
         const cat = categories.find((c) => c.slug === activeCategory)
         return cat ? item.category_id === cat.id : true
       })
-  ).filter((item) => item.display_order !== -1)
+  ).filter((item) => (item.display_order ?? 0) > 0)
 
   const displayItems = filteredItems.slice(0, MAX_VISIBLE)
+
+  // Items for edit mode: all positioned items (display_order 1-24), not filtered by category
+  const positionedItems = menuItems.filter((item) => (item.display_order ?? 0) > 0)
 
   // Add item to ticket (called after modifier selection or directly)
   const addItemToTicket = useCallback((item: MenuItem, modifiers?: SelectedModifier[]) => {
@@ -1553,18 +1518,13 @@ export default function POSPage() {
         <button
           onClick={toggleEditMode}
           title={editMode ? 'Salir del modo edición' : 'Editar grilla'}
-          className={`relative flex items-center justify-center w-8 h-8 rounded-lg active:scale-95 transition-all shrink-0 font-bold text-base ${
+          className={`flex items-center justify-center w-8 h-8 rounded-lg active:scale-95 transition-all shrink-0 font-bold text-base ${
             editMode
               ? 'bg-red-600 text-white ring-2 ring-red-400'
               : 'bg-sumak-brown-mid text-sumak-gold hover:bg-sumak-brown-light'
           }`}
         >
           ✏️
-          {editMode && hiddenCount > 0 && (
-            <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-orange-400 text-black text-[9px] font-black flex items-center justify-center">
-              {hiddenCount}
-            </span>
-          )}
         </button>
         {/* Ticket toggle button */}
         <button
@@ -1584,39 +1544,6 @@ export default function POSPage() {
         </button>
       </header>
 
-      {/* ── Edit mode info bar ── */}
-      {editMode && (
-        <div className="shrink-0 flex items-center justify-between px-3 py-1.5 bg-red-900/80 border-b border-red-700/50">
-          <div className="flex items-center gap-2">
-            <span className="text-red-200 text-xs font-bold">MODO EDICIÓN</span>
-            {selectedForSwap ? (
-              <span className="text-yellow-300 text-xs">
-                Seleccionado: <span className="font-black">{selectedForSwap.name}</span> — tocá otro para intercambiar
-              </span>
-            ) : (
-              <span className="text-red-300 text-xs">Tocá ✕ para ocultar · Tocá 2 items para intercambiar</span>
-            )}
-          </div>
-          <div className="flex items-center gap-2">
-            {hiddenCount > 0 && (
-              <button
-                onClick={() => setShowHiddenModal(true)}
-                className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-orange-500/80 text-white text-xs font-bold hover:bg-orange-500 active:scale-95 transition-all"
-              >
-                <span>{hiddenCount} oculto{hiddenCount !== 1 ? 's' : ''}</span>
-                <span>👁️</span>
-              </button>
-            )}
-            <button
-              onClick={toggleEditMode}
-              className="px-2.5 py-1 rounded-lg bg-white/20 text-white text-xs font-bold hover:bg-white/30 active:scale-95 transition-all"
-            >
-              Listo
-            </button>
-          </div>
-        </div>
-      )}
-
       {/* ── Main content: grid + ticket panel ── */}
       <div className="flex-1 flex min-h-0 overflow-hidden">
         {/* ── Left: Dish Grid ── */}
@@ -1627,7 +1554,7 @@ export default function POSPage() {
             style={{
               display: 'grid',
               gridTemplateColumns: 'repeat(6, 1fr)',
-              gridTemplateRows: 'repeat(4, calc(25% - 5px))',
+              gridTemplateRows: editMode ? 'repeat(4, calc(25% - 5px))' : 'repeat(4, calc(25% - 5px))',
               gridAutoRows: 'calc(25% - 5px)',
               gap: '6px',
             }}
@@ -1636,23 +1563,45 @@ export default function POSPage() {
               Array.from({ length: 24 }).map((_, i) => (
                 <div key={i} className="w-full h-full rounded-xl bg-sumak-cream-dark animate-pulse" />
               ))
-            ) : editBusy ? (
-              // Show skeleton over grid while busy
-              displayItems.map((item, idx) => (
-                <div key={item.id} className="w-full h-full rounded-xl bg-gray-700/50 animate-pulse" style={{ opacity: 0.7 + idx * 0 }} />
-              ))
+            ) : editMode ? (
+              // Edit mode: fixed 24-cell grid, find items by display_order
+              Array.from({ length: GRID_SIZE }).map((_, gridIndex) => {
+                const position = gridIndex + 1
+                const item = positionedItems.find((i) => i.display_order === position)
+                if (item) {
+                  return (
+                    <POSDishCard
+                      key={item.id}
+                      item={item}
+                      onAdd={handleAddItem}
+                      locale={locale}
+                      editMode={true}
+                      onUnassign={handleUnassign}
+                    />
+                  )
+                }
+                // Empty cell: show + button
+                return (
+                  <button
+                    key={`empty-${position}`}
+                    onClick={() => setAssigningPosition(position)}
+                    className="w-full h-full rounded-xl bg-gray-900/60 border border-gray-700/50 flex items-center justify-center hover:bg-gray-800/60 active:bg-gray-700/60 transition-all group"
+                    aria-label={`Agregar plato en celda ${position}`}
+                  >
+                    <span className="text-white/20 text-2xl font-bold group-hover:text-white/40 transition-colors select-none">+</span>
+                  </button>
+                )
+              })
             ) : (
-              displayItems.map((item, idx) => (
+              // Normal mode: show positioned items by index (scrollable)
+              displayItems.map((item) => (
                 <POSDishCard
                   key={item.id}
                   item={item}
                   onAdd={handleAddItem}
                   locale={locale}
-                  editMode={editMode}
-                  position={idx + 1}
-                  isSelected={selectedForSwap?.id === item.id}
-                  onHide={handleHideItem}
-                  onSelect={handleSelectForSwap}
+                  editMode={false}
+                  onUnassign={handleUnassign}
                 />
               ))
             )}
@@ -1713,14 +1662,12 @@ export default function POSPage() {
         <CashMovementsModal onClose={() => setShowCashModal(false)} />
       )}
 
-      {/* ── Hidden Items Modal ── */}
-      {showHiddenModal && (
-        <HiddenItemsModal
-          onClose={() => setShowHiddenModal(false)}
-          onRestored={() => {
-            setHiddenCount((c) => Math.max(0, c - 1))
-          }}
-          locale={locale}
+      {/* ── Assign Modal (edit mode) ── */}
+      {assigningPosition !== null && (
+        <AssignModal
+          position={assigningPosition}
+          onAssign={handleAssign}
+          onClose={() => setAssigningPosition(null)}
         />
       )}
 
