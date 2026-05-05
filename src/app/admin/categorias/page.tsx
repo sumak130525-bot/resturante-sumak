@@ -3,7 +3,7 @@
 import { useState, useCallback, useEffect } from 'react'
 import { AdminLayoutClient } from '@/components/admin/AdminLayoutClient'
 import { cn } from '@/lib/utils'
-import { Plus, Pencil, Check, X, Trash2, RefreshCw, Tag } from 'lucide-react'
+import { Plus, Pencil, Check, X, Trash2, RefreshCw, Tag, ChevronUp, ChevronDown, ArrowUpDown } from 'lucide-react'
 import type { MenuItem, Category } from '@/lib/types'
 
 interface CategoryWithCount extends Category {
@@ -36,6 +36,9 @@ export default function AdminCategoriasPage() {
 
   // Actualización de categoría de un plato
   const [updatingItemId, setUpdatingItemId] = useState<string | null>(null)
+
+  // Reordenamiento de categorías
+  const [reordering, setReordering] = useState(false)
 
   const fetchData = useCallback(async () => {
     setLoading(true)
@@ -125,6 +128,33 @@ export default function AdminCategoriasPage() {
   }
 
   const activeItems = items.filter((i) => i.active)
+
+  // ── Reordenar categorías ───────────────────────────────────────────────────
+  const moveCategory = async (index: number, direction: 'up' | 'down') => {
+    const swapIndex = direction === 'up' ? index - 1 : index + 1
+    if (swapIndex < 0 || swapIndex >= categories.length) return
+
+    const newOrder = [...categories]
+    ;[newOrder[index], newOrder[swapIndex]] = [newOrder[swapIndex], newOrder[index]]
+
+    // Optimistic update
+    setCategories(newOrder)
+    setReordering(true)
+
+    const updates = newOrder.map((cat, i) => ({ id: cat.id, sort_order: i + 1 }))
+
+    const res = await fetch('/api/admin/categories/reorder', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ updates }),
+    })
+
+    setReordering(false)
+    if (!res.ok) {
+      // Revert on error
+      await fetchData()
+    }
+  }
 
   return (
     <AdminLayoutClient active="categorias">
@@ -255,7 +285,49 @@ export default function AdminCategoriasPage() {
               </div>
             </section>
 
-            {/* ── Sección 2: Platos y su categoría ── */}
+            {/* ── Sección 2: Ordenar categorías ── */}
+            <section>
+              <div className="flex items-center gap-2 mb-3">
+                <ArrowUpDown size={16} className="text-gray-500" />
+                <h2 className="text-base font-semibold text-gray-700">Orden de pestañas</h2>
+                <span className="text-xs text-gray-400 font-normal ml-1">(afecta POS y web)</span>
+                {reordering && (
+                  <span className="text-xs text-sumak-brown animate-pulse ml-auto">Guardando...</span>
+                )}
+              </div>
+              <div className="bg-white rounded-2xl shadow-sm overflow-hidden">
+                <ul className="divide-y divide-gray-50">
+                  {categories.map((cat, index) => (
+                    <li key={cat.id} className="flex items-center gap-3 px-4 py-3">
+                      <span className="w-6 text-center text-xs font-mono text-gray-400 select-none">
+                        {index + 1}
+                      </span>
+                      <span className="flex-1 font-medium text-sumak-brown text-sm">{cat.name}</span>
+                      <div className="flex gap-1">
+                        <button
+                          onClick={() => moveCategory(index, 'up')}
+                          disabled={index === 0 || reordering}
+                          className="p-1.5 rounded-lg transition-colors disabled:opacity-30 hover:bg-gray-100 hover:text-gray-700 text-gray-400"
+                          title="Subir"
+                        >
+                          <ChevronUp size={16} />
+                        </button>
+                        <button
+                          onClick={() => moveCategory(index, 'down')}
+                          disabled={index === categories.length - 1 || reordering}
+                          className="p-1.5 rounded-lg transition-colors disabled:opacity-30 hover:bg-gray-100 hover:text-gray-700 text-gray-400"
+                          title="Bajar"
+                        >
+                          <ChevronDown size={16} />
+                        </button>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </section>
+
+            {/* ── Sección 3: Platos y su categoría ── */}
             <section>
               <h2 className="text-base font-semibold text-gray-700 mb-3">
                 Asignar platos a categorías
