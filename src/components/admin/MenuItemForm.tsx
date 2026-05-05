@@ -7,7 +7,7 @@ import type { MenuItem, Category } from '@/lib/types'
 interface MenuItemFormProps {
   item?: MenuItem | null
   categories: Category[]
-  onSave: (data: Partial<MenuItem>) => Promise<void>
+  onSave: (data: Partial<MenuItem>, pendingFile?: File) => Promise<void>
   onClose: () => void
 }
 
@@ -30,6 +30,8 @@ export function MenuItemForm({ item, categories, onSave, onClose }: MenuItemForm
   const [uploading, setUploading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [translationsOpen, setTranslationsOpen] = useState(false)
+  const [pendingFile, setPendingFile] = useState<File | null>(null)
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -55,7 +57,7 @@ export function MenuItemForm({ item, categories, onSave, onClose }: MenuItemForm
         description_es: form.description_es || null,
         description_en: form.description_en || null,
         description_qu: form.description_qu || null,
-      })
+      }, pendingFile ?? undefined)
       onClose()
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Error al guardar')
@@ -140,9 +142,9 @@ export function MenuItemForm({ item, categories, onSave, onClose }: MenuItemForm
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Imagen del plato</label>
-              {form.image_url && (
+              {(previewUrl || form.image_url) && (
                 <div className="mb-2 relative w-full h-32 rounded-lg overflow-hidden bg-gray-100">
-                  <img src={form.image_url} alt="Preview" className="w-full h-full object-cover" />
+                  <img src={previewUrl ?? form.image_url} alt="Preview" className="w-full h-full object-cover" />
                 </div>
               )}
               <div className="flex gap-2">
@@ -171,20 +173,31 @@ export function MenuItemForm({ item, categories, onSave, onClose }: MenuItemForm
                 onChange={async (e) => {
                   const file = e.target.files?.[0]
                   if (!file) return
-                  setUploading(true)
-                  setError(null)
-                  try {
-                    const fd = new FormData()
-                    fd.append('image', file)
-                    fd.append('id', item?.id || 'new')
-                    const res = await fetch('/api/menu-display/update-image', { method: 'POST', body: fd })
-                    if (!res.ok) throw new Error('Error al subir imagen')
-                    const data = await res.json()
-                    setForm({ ...form, image_url: data.image_url })
-                  } catch (err) {
-                    setError(err instanceof Error ? err.message : 'Error al subir imagen')
-                  } finally {
-                    setUploading(false)
+
+                  // If editing an existing item, upload immediately (existing flow)
+                  if (item?.id) {
+                    setUploading(true)
+                    setError(null)
+                    try {
+                      const fd = new FormData()
+                      fd.append('image', file)
+                      fd.append('id', item.id)
+                      const res = await fetch('/api/menu-display/update-image', { method: 'POST', body: fd })
+                      if (!res.ok) throw new Error('Error al subir imagen')
+                      const data = await res.json()
+                      setForm((prev) => ({ ...prev, image_url: data.image_url }))
+                      setPreviewUrl(null)
+                      setPendingFile(null)
+                    } catch (err) {
+                      setError(err instanceof Error ? err.message : 'Error al subir imagen')
+                    } finally {
+                      setUploading(false)
+                      if (fileInputRef.current) fileInputRef.current.value = ''
+                    }
+                  } else {
+                    // New item: store file locally and show preview
+                    setPendingFile(file)
+                    setPreviewUrl(URL.createObjectURL(file))
                     if (fileInputRef.current) fileInputRef.current.value = ''
                   }
                 }}

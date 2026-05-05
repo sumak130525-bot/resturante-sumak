@@ -30,7 +30,7 @@ export default function AdminMenuPage() {
 
   useEffect(() => { fetchData() }, [fetchData])
 
-  const handleSave = async (data: Partial<MenuItem>) => {
+  const handleSave = async (data: Partial<MenuItem>, pendingFile?: File) => {
     const method = data.id ? 'PUT' : 'POST'
     const res = await fetch('/api/admin/menu', {
       method,
@@ -41,6 +41,27 @@ export default function AdminMenuPage() {
       const err = await res.json()
       throw new Error(err.error)
     }
+
+    // If there's a pending file (new item scenario), upload the image now
+    if (pendingFile && !data.id) {
+      const created = await res.json()
+      const newId: string = created.id ?? created.data?.id
+      if (newId) {
+        const fd = new FormData()
+        fd.append('image', pendingFile)
+        fd.append('id', newId)
+        const imgRes = await fetch('/api/menu-display/update-image', { method: 'POST', body: fd })
+        if (imgRes.ok) {
+          const imgData = await imgRes.json()
+          await fetch('/api/admin/menu', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id: newId, image_url: imgData.image_url }),
+          })
+        }
+      }
+    }
+
     await fetchData()
   }
 
