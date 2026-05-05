@@ -125,7 +125,7 @@ function HomeContent() {
               src="/logo-sumak.png"
               alt="Sumak"
               className="mx-auto"
-              style={{ maxWidth: '200px', height: 'auto' }}
+              style={{ maxWidth: '300px', height: 'auto' }}
             />
           </div>
 
