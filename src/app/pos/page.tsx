@@ -150,7 +150,7 @@ const CATEGORY_ICONS: Record<string, string> = {
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const MAX_VISIBLE = 50 // max items in normal grid (scrollable)
-const GRID_SIZE = 48   // 6 columns × 8 rows, scrollable
+const GRID_SIZE = 96   // 6 columns × 16 rows, scrollable
 
 // ─── Price format (ARS: $12.500) ──────────────────────────────────────────────
 
