@@ -1279,10 +1279,11 @@ export default function POSPage() {
       })
   ).filter((item) => (item.display_order ?? 0) > 0)
 
-  // Items for category tabs: filter by category, show all active items (no display_order filter)
+  // Items for category tabs: filter by category, only show assigned items (display_order > 0)
   const categoryItems = activeCategory === 'all'
     ? []
     : menuItems.filter((item) => {
+        if ((item.display_order ?? 0) <= 0) return false
         const cat = categories.find((c) => c.slug === activeCategory)
         return cat ? item.category_id === cat.id : true
       })

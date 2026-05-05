@@ -18,7 +18,9 @@ import type { MenuItem, CartItem } from '@/lib/types'
 import { cn } from '@/lib/utils'
 
 function HomeContent() {
-  const { menuItems, categories, loading } = useMenuRealtime()
+  const { menuItems: allMenuItems, categories, loading } = useMenuRealtime()
+  // Only show items assigned to the grid (display_order > 0)
+  const menuItems = allMenuItems.filter((item) => (item.display_order ?? 0) > 0)
   const [activeCategory, setActiveCategory] = useState('all')
   const [cart, setCart] = useState<CartItem[]>([])
   const [cartOpen, setCartOpen] = useState(false)
