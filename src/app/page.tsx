@@ -376,8 +376,8 @@ function HomeContent() {
         mesa={mesa}
       />
 
-      {/* WhatsApp FAB */}
-      <WhatsAppFAB cart={cart} total={totalPrice} mesa={mesa} />
+      {/* WhatsApp FAB — hide when cart is open */}
+      {!cartOpen && <WhatsAppFAB cart={cart} total={totalPrice} mesa={mesa} />}
     </>
   )
 }
