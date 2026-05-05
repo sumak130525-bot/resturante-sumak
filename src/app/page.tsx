@@ -116,19 +116,18 @@ function HomeContent() {
             className="font-serif font-bold text-white text-balance leading-[1.05] mb-5 animate-fade-up"
             style={{ fontSize: 'clamp(2.6rem, 7vw, 5rem)', animationDelay: '80ms' }}
           >
-            {t('welcomeTo')}{' '}
-            <span
-              className="block"
-              style={{
-                background: 'linear-gradient(135deg, #F5C842 0%, #D4A017 40%, #F5C842 80%)',
-                WebkitBackgroundClip: 'text',
-                WebkitTextFillColor: 'transparent',
-                backgroundClip: 'text',
-              }}
-            >
-              Sumak
-            </span>
+            {t('welcomeTo')}
           </h1>
+          {/* Logo */}
+          <div className="animate-fade-up mb-5" style={{ animationDelay: '120ms' }}>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/logo-sumak.png"
+              alt="Sumak"
+              className="mx-auto"
+              style={{ maxWidth: '200px', height: 'auto' }}
+            />
+          </div>
 
           {/* Subtitle */}
           <p
