@@ -82,8 +82,35 @@ async function startBot() {
       if (msg.key.remoteJid?.endsWith('@g.us')) continue;
       if (!msg.message) continue;
 
+      // Debug: log full msg.key to inspect available fields
+      console.log('MSG KEY:', JSON.stringify(msg.key));
+
       const jid = msg.key.remoteJid!;
-      const sender = jid.split('@')[0];
+      const isLid = jid.endsWith('@lid');
+
+      // Resolve real phone number when Baileys returns a LID JID
+      let realPhone: string;
+      let realJid: string;
+
+      if (isLid) {
+        // senderPn is the real phone number provided by Baileys for LID mappings
+        const pn = (msg.key as any).senderPn as string | undefined;
+        if (pn) {
+          realPhone = pn.split('@')[0].split(':')[0];
+          realJid = `${realPhone}@s.whatsapp.net`;
+          console.log(`[LID] Resolved LID ${jid} → ${realJid} via senderPn`);
+        } else {
+          // Fallback: use LID digits as-is (notification will fail, but we log it)
+          realPhone = jid.split('@')[0];
+          realJid = jid;
+          console.warn(`[LID] ⚠️ Could not resolve LID ${jid} — senderPn not available. Falling back to LID.`);
+        }
+      } else {
+        realPhone = jid.split('@')[0];
+        realJid = jid;
+      }
+
+      const sender = realPhone;
 
       // Extraer texto del mensaje
       const text =
@@ -99,21 +126,21 @@ async function startBot() {
 
       try {
         // Indicador de "escribiendo..."
-        await sock.sendPresenceUpdate('composing', jid);
+        await sock.sendPresenceUpdate('composing', realJid);
 
         const response = await handleMessage(text, sender);
 
         // Pequeña pausa para simular escritura natural
         await new Promise((r) => setTimeout(r, 500 + Math.random() * 800));
 
-        await sock.sendMessage(jid, { text: response });
+        await sock.sendMessage(realJid, { text: response });
         console.log(`✉️  Respuesta enviada a +${sender}`);
       } catch (err) {
         console.error(`❌ Error al responder a +${sender}:`, err);
 
         // Respuesta de emergencia
         try {
-          await sock.sendMessage(jid, {
+          await sock.sendMessage(realJid, {
             text:
               '¡Hola! 👋 En este momento tengo un problema técnico. ' +
               `Para ayudarte, contactanos directamente:\n📞 +${config.restaurant.phone}\n🌐 ${config.restaurant.web}\n\n_Sumak Bot 🤖_`,
