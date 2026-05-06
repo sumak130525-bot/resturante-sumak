@@ -15,6 +15,20 @@ const logger = pino({ level: 'silent' });
 
 const AUTH_DIR = path.resolve(__dirname, '../auth_info');
 
+// ── Deduplication: avoid processing the same message twice ────────────────────
+const processedMessages = new Set<string>();
+const MAX_PROCESSED = 1000;
+
+function isDuplicate(msgId: string): boolean {
+  if (processedMessages.has(msgId)) return true;
+  processedMessages.add(msgId);
+  if (processedMessages.size > MAX_PROCESSED) {
+    const first = processedMessages.values().next().value;
+    if (first) processedMessages.delete(first);
+  }
+  return false;
+}
+
 async function startBot() {
   const { state, saveCreds } = await useMultiFileAuthState(AUTH_DIR);
   const { version } = await fetchLatestBaileysVersion();
@@ -81,6 +95,10 @@ async function startBot() {
       if (msg.key.fromMe) continue;
       if (msg.key.remoteJid?.endsWith('@g.us')) continue;
       if (!msg.message) continue;
+      if (msg.key.id && isDuplicate(msg.key.id)) {
+        console.log(`⏭️  Mensaje duplicado ignorado: ${msg.key.id}`);
+        continue;
+      }
 
       // Debug: log full msg.key to inspect available fields
       console.log('MSG KEY:', JSON.stringify(msg.key));
