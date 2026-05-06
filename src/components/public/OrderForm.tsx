@@ -1,10 +1,17 @@
 'use client'
 
 import { useState } from 'react'
-import { ChevronLeft, Loader2, Receipt, CreditCard } from 'lucide-react'
+import { ChevronLeft, Loader2, Receipt, CreditCard, MapPin } from 'lucide-react'
 import { formatPrice, cn } from '@/lib/utils'
 import { useTranslation, getItemName } from '@/lib/i18n'
 import type { CartItem } from '@/lib/types'
+
+function normalizePhone(raw: string): string {
+  const digits = raw.replace(/\D/g, '')
+  if (digits.startsWith('54') && digits.length >= 12) return digits
+  if (digits.length === 10) return `549${digits}`
+  return digits
+}
 
 interface OrderFormProps {
   cart: CartItem[]
@@ -26,6 +33,10 @@ export function OrderForm({ cart, total, onBack, mesa }: OrderFormProps) {
     e.preventDefault()
     if (!name.trim()) {
       setError(t('nameRequired'))
+      return
+    }
+    if (!phone.trim()) {
+      setError(t('phoneRequired'))
       return
     }
     setError(null)
@@ -52,7 +63,7 @@ export function OrderForm({ cart, total, onBack, mesa }: OrderFormProps) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           customer_name: name.trim(),
-          customer_phone: phone.trim() || null,
+          customer_phone: normalizePhone(phone.trim()),
           notes: notesValue,
           mesa: mesa ?? null,
           channel: 'web',
@@ -87,6 +98,14 @@ export function OrderForm({ cart, total, onBack, mesa }: OrderFormProps) {
           <ChevronLeft size={15} />
           {t('backToCart')}
         </button>
+
+        {/* Pickup-only notice */}
+        <div className="flex items-start gap-2.5 rounded-xl bg-amber-50 border border-amber-200 px-3.5 py-3">
+          <MapPin size={15} className="text-amber-600 shrink-0 mt-0.5" />
+          <p className="text-xs text-amber-800 font-medium leading-snug">
+            {t('pickupOnlyNotice')}
+          </p>
+        </div>
 
         {/* Order summary */}
         <div className="rounded-2xl bg-sumak-brown text-white p-4 space-y-2 shadow-premium">
@@ -137,14 +156,15 @@ export function OrderForm({ cart, total, onBack, mesa }: OrderFormProps) {
 
           <div>
             <label className="block text-xs font-bold tracking-wider uppercase text-sumak-brown-light mb-1.5">
-              {t('phoneLabel')} <span className="normal-case font-normal text-sumak-brown-pale">{t('phoneOptional')}</span>
+              {t('phoneLabel')}
             </label>
             <input
               type="tel"
               value={phone}
               onChange={(e) => setPhone(e.target.value)}
-              placeholder="Ej. 3001234567"
+              placeholder="261XXXXXXX"
               className="input-field"
+              required
             />
           </div>
 

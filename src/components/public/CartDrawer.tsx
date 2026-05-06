@@ -1,12 +1,19 @@
 'use client'
 
 import { useState } from 'react'
-import { X, Trash2, ShoppingBag, ArrowRight, Sparkles, Phone, User, MessageSquare } from 'lucide-react'
+import { X, Trash2, ShoppingBag, ArrowRight, Sparkles, Phone, User, MessageSquare, MapPin } from 'lucide-react'
 import { cn, formatPrice } from '@/lib/utils'
 import { buildWhatsAppURL } from '@/lib/whatsapp'
 import { useTranslation, getItemName } from '@/lib/i18n'
 import type { CartItem, MenuItem } from '@/lib/types'
 import { OrderForm } from './OrderForm'
+
+function normalizePhone(raw: string): string {
+  const digits = raw.replace(/\D/g, '')
+  if (digits.startsWith('54') && digits.length >= 12) return digits
+  if (digits.length === 10) return `549${digits}`
+  return digits
+}
 
 interface CartDrawerProps {
   cart: CartItem[]
@@ -67,7 +74,7 @@ export function CartDrawer({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           customer_name: waName.trim() || 'Cliente WhatsApp',
-          customer_phone: waPhone.trim() || null,
+          customer_phone: waPhone.trim() ? normalizePhone(waPhone.trim()) : null,
           notes: notesValue,
           mesa: mesa ?? null,
           channel: 'whatsapp',
@@ -199,6 +206,14 @@ export function CartDrawer({
 
             {/* Footer */}
             <div className="shrink-0 px-4 pb-6 pt-4 border-t border-sumak-cream-dark space-y-3">
+              {/* Pickup-only notice */}
+              <div className="flex items-start gap-2 rounded-xl bg-amber-50 border border-amber-200 px-3 py-2.5">
+                <MapPin size={13} className="text-amber-600 shrink-0 mt-0.5" />
+                <p className="text-xs text-amber-800 font-medium leading-snug">
+                  {t('pickupOnlyNotice')}
+                </p>
+              </div>
+
               {/* Total */}
               <div className="flex justify-between items-center py-2 px-3 bg-sumak-cream-dark rounded-xl">
                 <div className="flex items-center gap-2">
@@ -267,7 +282,7 @@ export function CartDrawer({
                     <Phone size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-sumak-brown-light pointer-events-none" />
                     <input
                       type="tel"
-                      placeholder={t('phonePlaceholder')}
+                      placeholder="261XXXXXXX *"
                       value={waPhone}
                       onChange={(e) => setWaPhone(e.target.value)}
                       className="w-full pl-8 pr-3 py-2.5 text-sm rounded-xl border border-sumak-cream-dark bg-white text-sumak-brown placeholder:text-sumak-brown-light/60 focus:outline-none focus:ring-2 focus:ring-[#25D366]/50 focus:border-[#25D366]"
@@ -296,11 +311,11 @@ export function CartDrawer({
                     </button>
                     <button
                       onClick={handleWhatsApp}
-                      disabled={!waName.trim() || whatsappLoading}
+                      disabled={!waName.trim() || !waPhone.trim() || whatsappLoading}
                       className={cn(
                         'flex-1 py-2 rounded-xl text-sm font-bold text-white transition-all',
                         'bg-[#25D366] hover:bg-[#1ebe5d]',
-                        (!waName.trim() || whatsappLoading) && 'opacity-50 cursor-not-allowed hover:bg-[#25D366]'
+                        (!waName.trim() || !waPhone.trim() || whatsappLoading) && 'opacity-50 cursor-not-allowed hover:bg-[#25D366]'
                       )}
                     >
                       {whatsappLoading ? (

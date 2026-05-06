@@ -73,6 +73,8 @@ type TranslationDict = {
   namePlaceholder: string
   phoneLabel: string
   phoneOptional: string
+  phoneRequired: string
+  pickupOnlyNotice: string
   notesLabel: string
   notesOptional: string
   notesSamplePlaceholder: string
@@ -167,8 +169,10 @@ const translations: Record<Locale, TranslationDict> = {
     yourData: 'Tus datos',
     nameLabel: 'Nombre *',
     namePlaceholder: 'Tu nombre completo',
-    phoneLabel: 'Teléfono',
+    phoneLabel: 'Teléfono *',
     phoneOptional: '(opcional)',
+    phoneRequired: 'Por favor ingresa tu teléfono para avisarte cuando tu pedido esté listo.',
+    pickupOnlyNotice: 'Los pedidos son para retirar por el local. Juan B Alberdi 247, frente a la Terminal.',
     notesLabel: 'Notas',
     notesOptional: '(opcional)',
     notesSamplePlaceholder: 'Sin cebolla, extra llajua, alergia a…',
@@ -256,8 +260,10 @@ const translations: Record<Locale, TranslationDict> = {
     yourData: 'Your details',
     nameLabel: 'Name *',
     namePlaceholder: 'Your full name',
-    phoneLabel: 'Phone',
+    phoneLabel: 'Phone *',
     phoneOptional: '(optional)',
+    phoneRequired: 'Please enter your phone number so we can notify you when your order is ready.',
+    pickupOnlyNotice: 'Orders are for pickup at the restaurant. Juan B Alberdi 247, opposite the Terminal.',
     notesLabel: 'Notes',
     notesOptional: '(optional)',
     notesSamplePlaceholder: 'No onion, extra sauce, allergy to…',
@@ -345,8 +351,10 @@ const translations: Record<Locale, TranslationDict> = {
     yourData: 'Qampa sutinki',
     nameLabel: 'Suti *',
     namePlaceholder: 'Lliw sutiyki',
-    phoneLabel: 'Waqyana',
+    phoneLabel: 'Waqyana *',
     phoneOptional: '(mana requsirispa)',
+    phoneRequired: 'Ama hina kaspa waqyanata qillqay, mañasqayki kachun nispa willanaykipaq.',
+    pickupOnlyNotice: 'Mañasqaykuna wasimanta apanankipaq. Juan B Alberdi 247, Terminal tinkuq.',
     notesLabel: 'Qillqa',
     notesOptional: '(mana requsirispa)',
     notesSamplePlaceholder: 'Mana sibuyas, yapay llajwa…',

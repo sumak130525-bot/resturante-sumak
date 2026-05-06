@@ -37,7 +37,7 @@ function normalizePhoneToJid(rawPhone: string): string {
 // ── Start realtime subscription ───────────────────────────────────────────────
 
 export function startKitchenNotifications(sendMessage: SendMessageFn): void {
-  console.log('[Kitchen] Iniciando suscripción Realtime a pedidos de WhatsApp...');
+  console.log('[Kitchen] Iniciando suscripción Realtime a todos los pedidos...');
   console.log('[Kitchen] Supabase URL:', config.supabase.url);
 
   const supabase = createClient(config.supabase.url, config.supabase.serviceRoleKey, {
@@ -56,7 +56,6 @@ export function startKitchenNotifications(sendMessage: SendMessageFn): void {
         event: 'UPDATE',
         schema: 'public',
         table: 'orders',
-        filter: "channel=eq.whatsapp",
       },
       async (payload) => {
         console.log('[Kitchen] 🔔 UPDATE event recibido:', JSON.stringify(payload.new, null, 2));
@@ -96,7 +95,7 @@ export function startKitchenNotifications(sendMessage: SendMessageFn): void {
     )
     .subscribe((status, err) => {
       if (status === 'SUBSCRIBED') {
-        console.log('[Kitchen] ✅ Realtime subscrito — escuchando cambios en pedidos de WhatsApp...');
+        console.log('[Kitchen] ✅ Realtime subscrito — escuchando cambios en todos los pedidos...');
       } else if (status === 'CHANNEL_ERROR') {
         console.error('[Kitchen] ❌ Error en canal Realtime:', err);
       } else if (status === 'TIMED_OUT') {
