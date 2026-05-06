@@ -199,6 +199,7 @@ export async function handleMessage(text: string, phone?: string): Promise<strin
 
   } catch (err) {
     console.error('⚠️  Error con Groq, usando fallback estático:', err instanceof Error ? err.message : err);
-    return handleMessageFallback(text);
+    const fallback = await handleMessageFallback(text);
+    return fallback + `\n\n📲 *¿Querés hacer un pedido?*\nPodés pedir desde nuestra web:\n🌐 ${restaurant.web}`;
   }
 }
