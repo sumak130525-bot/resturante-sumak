@@ -1,5 +1,17 @@
 import Groq from 'groq-sdk';
 import { config } from './config';
+import {
+  CartItem,
+  CartSession,
+  getCartSession,
+  upsertCartSession,
+  clearCartSession,
+  createSupabaseOrder,
+  buildConfirmationMessage,
+  cartTotal,
+  formatCart,
+  formatPrice,
+} from './order';
 
 // ── Cliente Groq (lazy init) ──────────────────────────────────────────────────
 let groqClient: Groq | null = null;
@@ -23,16 +35,53 @@ export interface AIResponse {
   handoffToHuman: boolean;
 }
 
+// ── Parsed action from AI response ───────────────────────────────────────────
+
+interface ActionAddItem {
+  action: 'ADD_ITEM';
+  item_id: string;
+  item_name: string;
+  price: number;
+  quantity: number;
+}
+
+interface ActionRemoveItem {
+  action: 'REMOVE_ITEM';
+  item_id: string;
+}
+
+interface ActionSetName {
+  action: 'SET_NAME';
+  name: string;
+}
+
+interface ActionCreateOrder {
+  action: 'CREATE_ORDER';
+  payment_method: 'efectivo' | 'mercadopago';
+}
+
+interface ActionClearCart {
+  action: 'CLEAR_CART';
+}
+
+type BotAction = ActionAddItem | ActionRemoveItem | ActionSetName | ActionCreateOrder | ActionClearCart;
+
 // ── System prompt ─────────────────────────────────────────────────────────────
-function buildSystemPrompt(menuData: string): string {
+function buildSystemPrompt(menuData: string, cart: CartItem[], customerName: string): string {
+  const cartSummary =
+    cart.length === 0
+      ? 'Carrito vacío'
+      : formatCart(cart) + `\nTotal: ${formatPrice(cartTotal(cart))}`;
+
   return `Sos Sumak Bot, el asistente virtual del Restaurante Sumak en Mendoza, Argentina.
 Tu trabajo es atender clientes por WhatsApp de forma amigable, cálida y eficiente.
+Podés responder cualquier pregunta Y también tomar pedidos conversacionalmente.
 
 DATOS DEL RESTAURANTE:
 - Nombre: Restaurante Sumak
 - Dirección: Juan B Alberdi 247, frente a la Terminal de Mendoza, Guaymallén
 - Google Maps: https://maps.google.com/?q=-32.8949528,-68.8286573
-- Horario: Lunes a Sábado 8:00 a 22:30. Domingos cerrado. Feriados: depende del feriado, consultar.
+- Horario: Lunes a Sábado 8:00 a 22:30. Domingos cerrado.
 - WhatsApp: +54 9 261 752 6242
 - Web: https://restaurante-sumak.vercel.app
 - Facebook: https://www.facebook.com/profile.php?id=61576603961881
@@ -41,38 +90,218 @@ DATOS DEL RESTAURANTE:
 
 SERVICIO DISPONIBLE:
 - Solo retiro en el local (takeaway). NO hay delivery ni envío a domicilio.
-- Los clientes pueden hacer su pedido por WhatsApp escribiendo *pedir*.
-- También pueden ver el menú completo en: https://restaurante-sumak.vercel.app
-- Los pedidos se retiran únicamente en Juan B Alberdi 247, frente a la Terminal de Mendoza.
+- También pueden ver el menú completo y pedir en: https://restaurante-sumak.vercel.app
 
-REGLAS:
+ESTADO ACTUAL DEL CARRITO:
+${cartSummary}
+${customerName ? `Nombre del cliente: ${customerName}` : 'Nombre: no registrado aún'}
+
+REGLAS DE CONVERSACIÓN:
 1. Respondé SIEMPRE en español rioplatense (vos, tenés, querés) a menos que el cliente escriba en otro idioma
-2. Sé breve y directo, no hagas párrafos largos. Esto es WhatsApp, no un email. Máximo ~400 caracteres.
+2. Sé breve y directo. Esto es WhatsApp. Máximo ~400 caracteres en el texto visible.
 3. Usá emojis con moderación (1-3 por mensaje)
-4. Cuando te pregunten por el menú, mostrá los platos con precios formateados
-5. Cuando un cliente quiera pedir, decile que escriba *pedir* para iniciar el pedido por acá mismo, o que entre a la web: https://restaurante-sumak.vercel.app
-6. NUNCA menciones delivery, envío a domicilio, ni "para llevar" como si fuera delivery. Solo existe retiro en el local.
-7. Siempre intentá vender más: sugerí bebidas, postres, combos
-8. Si preguntan algo que no sabés, decí que vas a consultar con el equipo
-9. Si piden hablar con una persona, respondé EXACTAMENTE con: "HANDOFF_TO_HUMAN"
-10. NUNCA inventes platos o precios que no estén en el menú. Usá ÚNICAMENTE los precios que aparecen en MENÚ ACTUAL. Si no encontrás el precio, decí "consultá en nuestra web".
-11. NUNCA des información falsa sobre horarios, ubicación, etc.
-12. Podés responder en inglés o quechua si el cliente escribe en esos idiomas
-13. Firmá como Sumak Bot 🤖 solo en el primer mensaje de bienvenida, después no
-14. En algún mensaje apropiado (no siempre), invitá a hacer un pedido: "Si querés pedir para retirar, escribí *pedir* 📝"
+4. NUNCA menciones delivery ni envío a domicilio. Solo existe retiro en el local.
+5. Cuando muestres el menú, usá los precios exactos del MENÚ ACTUAL de abajo.
+6. NUNCA inventes platos o precios. Solo los que están en MENÚ ACTUAL.
+7. Siempre intentá vender más: sugerí bebidas, postres, combos cuando el cliente hace un pedido.
+8. Si piden hablar con una persona, respondé EXACTAMENTE con: "HANDOFF_TO_HUMAN"
+9. Podés responder en inglés o quechua si el cliente escribe en esos idiomas
+10. Recordá que el cliente puede también pedir desde la web: https://restaurante-sumak.vercel.app
 
-MENÚ ACTUAL (USALO TAL CUAL — NO INVENTES PLATOS NI PRECIOS):
-${menuData}
+CÓMO TOMAR PEDIDOS:
+- El cliente puede pedirte directamente lo que quiere, ej: "quiero una sopa de maní"
+- Podés sugerirles categorías o items del menú
+- Cuando el cliente confirme un item, incluí una acción ADD_ITEM en tu respuesta
+- Cuando el cliente quiera confirmar el pedido completo, pedí su nombre si no lo tenés
+- Cuando tengas nombre y el pedido confirmado, pedí preferencia de pago
+- Cuando el cliente confirme el pago, incluí CREATE_ORDER en tu respuesta
 
-IMPORTANTE: Los precios y platos de arriba son los ÚNICOS que existen. Si un plato no está en esa lista, NO lo menciones. Si un precio no está ahí, NO lo inventes. Cuando te pregunten cómo es un plato, usá SOLO la descripción que aparece entre paréntesis al lado del plato. NO inventes ingredientes ni descripciones. Si no tiene descripción, decí que consulten en el local.
+ACCIONES ESTRUCTURADAS:
+Al final de tu respuesta (DESPUÉS del texto visible para el cliente), podés incluir un bloque JSON de acciones así:
+[ACTIONS]{"actions":[...]}[/ACTIONS]
+
+Este bloque NO se muestra al cliente. Las acciones posibles son:
+
+Para agregar un item al carrito:
+{"action":"ADD_ITEM","item_id":"UUID_DEL_ITEM","item_name":"Nombre del plato","price":PRECIO_NUMERICO,"quantity":1}
+
+Para quitar un item del carrito:
+{"action":"REMOVE_ITEM","item_id":"UUID_DEL_ITEM"}
+
+Para registrar el nombre del cliente:
+{"action":"SET_NAME","name":"Nombre del cliente"}
+
+Para crear el pedido en el sistema (cuando el cliente confirma todo):
+{"action":"CREATE_ORDER","payment_method":"efectivo"}
+o
+{"action":"CREATE_ORDER","payment_method":"mercadopago"}
+
+Para limpiar el carrito completamente:
+{"action":"CLEAR_CART"}
+
+IMPORTANTE sobre CREATE_ORDER:
+- Solo usá CREATE_ORDER cuando el cliente haya confirmado explícitamente el pedido Y el método de pago.
+- Antes de CREATE_ORDER el carrito debe tener al menos un item y tener el nombre del cliente.
+- Después de CREATE_ORDER, el sistema envía la confirmación automáticamente.
 
 ESTRATEGIAS DE VENTA:
 - Si piden un segundo, sugerí una sopa de entrada
 - Si piden comida, preguntá si quieren bebida
 - Si no saben qué pedir, recomendá los más populares (Picante de Pollo, Silpancho, Sopa de Maní)
 - Mencioná el Menú del Día si preguntan por algo económico
-- Si es la primera vez, contales sobre la especialidad boliviana/andina
-- Recordales que pueden pedir directo por acá escribiendo *pedir*`;
+
+MENÚ ACTUAL (USALO TAL CUAL — NO INVENTES PLATOS NI PRECIOS):
+${menuData}
+
+IMPORTANTE: Los precios y platos de arriba son los ÚNICOS que existen. Los UUIDs de cada plato aparecen entre corchetes al inicio de cada línea (si están disponibles). Usá esos UUIDs exactos en las acciones ADD_ITEM.`;
+}
+
+// ── Build menu with IDs for AI ────────────────────────────────────────────────
+export async function formatMenuWithIds(): Promise<string> {
+  try {
+    const { getMenu } = await import('./menu');
+    const { items, categories } = await getMenu();
+
+    if (items.length === 0) {
+      const { getStaticMenu } = await import('./menu');
+      return getStaticMenu();
+    }
+
+    let text = '';
+    for (const category of categories) {
+      const categoryItems = items.filter((item) => item.category_id === category.id);
+      if (categoryItems.length === 0) continue;
+
+      const catName = category.name_es || category.name;
+      text += `\n${category.emoji || '🍽️'} ${catName.toUpperCase()}:\n`;
+
+      for (const item of categoryItems) {
+        const name = item.name_es || item.name;
+        const price = item.price;
+        text += `  [${item.id}] ${name} — $${price.toLocaleString('es-AR')}`;
+        if (item.description_es) {
+          text += ` (${item.description_es.trim()})`;
+        }
+        text += '\n';
+      }
+    }
+
+    return text.trim();
+  } catch {
+    const { getStaticMenu } = await import('./menu');
+    return getStaticMenu();
+  }
+}
+
+// ── Parse actions from AI response ───────────────────────────────────────────
+
+interface ParsedResponse {
+  visibleText: string;
+  actions: BotAction[];
+}
+
+function parseAIResponse(raw: string): ParsedResponse {
+  const actionMatch = raw.match(/\[ACTIONS\]([\s\S]*?)\[\/ACTIONS\]/);
+  const visibleText = raw.replace(/\[ACTIONS\][\s\S]*?\[\/ACTIONS\]/g, '').trim();
+
+  const actions: BotAction[] = [];
+  if (actionMatch) {
+    try {
+      const parsed = JSON.parse(actionMatch[1].trim()) as { actions?: BotAction[] };
+      if (Array.isArray(parsed.actions)) {
+        actions.push(...parsed.actions);
+      }
+    } catch {
+      // ignore malformed action block
+    }
+  }
+
+  return { visibleText, actions };
+}
+
+// ── Apply actions to cart session ─────────────────────────────────────────────
+
+interface ApplyResult {
+  confirmationMessage?: string;
+  mercadoPagoUrl?: string;
+}
+
+async function applyActions(
+  actions: BotAction[],
+  phone: string,
+): Promise<ApplyResult> {
+  let session = getCartSession(phone) ?? { cart: [], customerName: '', phone, lastActive: Date.now() };
+  const result: ApplyResult = {};
+
+  for (const act of actions) {
+    if (act.action === 'ADD_ITEM') {
+      const existing = session.cart.findIndex((ci) => ci.id === act.item_id);
+      const newCart = [...session.cart];
+      if (existing >= 0) {
+        newCart[existing] = {
+          ...newCart[existing],
+          quantity: newCart[existing].quantity + act.quantity,
+        };
+      } else {
+        newCart.push({
+          id: act.item_id,
+          name: act.item_name,
+          price: act.price,
+          quantity: act.quantity,
+        });
+      }
+      session = upsertCartSession(phone, { cart: newCart });
+
+    } else if (act.action === 'REMOVE_ITEM') {
+      const newCart = session.cart.filter((ci) => ci.id !== act.item_id);
+      session = upsertCartSession(phone, { cart: newCart });
+
+    } else if (act.action === 'SET_NAME') {
+      session = upsertCartSession(phone, { customerName: act.name });
+
+    } else if (act.action === 'CLEAR_CART') {
+      session = upsertCartSession(phone, { cart: [] });
+
+    } else if (act.action === 'CREATE_ORDER') {
+      if (session.cart.length === 0) continue;
+
+      const paymentMethod = act.payment_method;
+
+      if (paymentMethod === 'mercadopago') {
+        try {
+          const { createMercadoPagoPreference } = await import('./mercadopago');
+          const checkoutUrl = await createMercadoPagoPreference(session);
+          await createSupabaseOrder(session, 'mercadopago', 'pending');
+          result.mercadoPagoUrl = checkoutUrl;
+          const total = cartTotal(session.cart);
+          result.confirmationMessage = (
+            `💳 *Pagá tu pedido online:*\n\n` +
+            `👇 Hacé clic en el siguiente link:\n${checkoutUrl}\n\n` +
+            `*Total: ${formatPrice(total)}*\n\n` +
+            `Cuando acreditemos el pago, tu pedido entra directo a cocina 🍽️\n` +
+            `_Si preferís pagar en el local, avisame y lo registro igual._`
+          );
+        } catch {
+          // Fallback to efectivo
+          await createSupabaseOrder(session, 'mercadopago', 'pending');
+          const total = cartTotal(session.cart);
+          result.confirmationMessage =
+            `⚠️ No pudimos generar el link de MercadoPago ahora.\n\n` +
+            buildConfirmationMessage(session.customerName, total) +
+            `\n\n_Podés pagar al retirar._`;
+        }
+      } else {
+        await createSupabaseOrder(session, 'efectivo', 'pending');
+        const total = cartTotal(session.cart);
+        result.confirmationMessage = buildConfirmationMessage(session.customerName, total);
+      }
+
+      clearCartSession(phone);
+      break;
+    }
+  }
+
+  return result;
 }
 
 // ── Función principal ─────────────────────────────────────────────────────────
@@ -80,6 +309,7 @@ export async function generateResponse(
   userMessage: string,
   menuData: string,
   conversationHistory: ConversationTurn[] = [],
+  phone?: string,
 ): Promise<AIResponse> {
   const client = getClient();
 
@@ -87,11 +317,16 @@ export async function generateResponse(
     throw new Error('AI_API_KEY no configurada');
   }
 
+  // Get current cart state for context
+  const cartSession: CartSession | undefined = phone ? getCartSession(phone) : undefined;
+  const cart = cartSession?.cart ?? [];
+  const customerName = cartSession?.customerName ?? '';
+
   const messages: { role: 'system' | 'user' | 'assistant'; content: string }[] = [
-    { role: 'system', content: buildSystemPrompt(menuData) },
+    { role: 'system', content: buildSystemPrompt(menuData, cart, customerName) },
   ];
 
-  // Agregar historial de conversación
+  // Add conversation history
   for (const turn of conversationHistory) {
     messages.push({
       role: turn.role === 'assistant' ? 'assistant' : 'user',
@@ -99,28 +334,44 @@ export async function generateResponse(
     });
   }
 
-  // Agregar mensaje actual
   messages.push({ role: 'user', content: userMessage });
 
   const completion = await client.chat.completions.create({
     model: 'llama-3.3-70b-versatile',
     messages,
-    max_tokens: 500,
+    max_tokens: 700,
     temperature: 0.7,
   });
 
-  const responseText = (completion.choices[0]?.message?.content ?? '').trim();
+  const rawResponse = (completion.choices[0]?.message?.content ?? '').trim();
 
-  // Detectar si la IA indica handoff a humano
-  if (responseText === 'HANDOFF_TO_HUMAN' || responseText.includes('HANDOFF_TO_HUMAN')) {
+  // Detect handoff
+  if (rawResponse === 'HANDOFF_TO_HUMAN' || rawResponse.includes('HANDOFF_TO_HUMAN')) {
     return {
       text: 'Te comunico con nuestro equipo 🙌',
       handoffToHuman: true,
     };
   }
 
+  // Parse actions and visible text
+  const { visibleText, actions } = parseAIResponse(rawResponse);
+
+  // Apply actions if phone is provided
+  let finalText = visibleText;
+  if (phone && actions.length > 0) {
+    try {
+      const result = await applyActions(actions, phone);
+      // If CREATE_ORDER was processed, override the text with the confirmation
+      if (result.confirmationMessage) {
+        finalText = result.confirmationMessage;
+      }
+    } catch (err) {
+      console.error('[AI] Error applying actions:', err);
+    }
+  }
+
   return {
-    text: responseText,
+    text: finalText,
     handoffToHuman: false,
   };
 }

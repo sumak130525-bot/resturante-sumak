@@ -1,13 +1,7 @@
 import { config } from './config';
-import { formatMenuText, searchMenuItem, getStaticMenu } from './menu';
-import { generateResponse, isAIAvailable } from './ai';
+import { formatMenuText, getStaticMenu } from './menu';
+import { generateResponse, formatMenuWithIds, isAIAvailable } from './ai';
 import { getHistory, addTurn, clearSession } from './conversation';
-import {
-  hasActiveOrderSession,
-  handleOrderMessage,
-  isOrderTrigger,
-  clearOrderSession,
-} from './order';
 
 const { restaurant } = config;
 
@@ -59,7 +53,7 @@ export function getWelcomeMessage(): string {
     `📋 *menu* — Ver el menú completo\n` +
     `🕐 *horario* — Horarios de atención\n` +
     `📍 *ubicacion* — Dónde encontrarnos\n` +
-    `🛒 *pedir* — Hacer un pedido para retirar\n` +
+    `🛒 Escribí lo que querés pedir y te ayudo enseguida\n` +
     `💳 *pagar* — Métodos de pago\n\n` +
     `Para hablar con una persona, escribí *humano* 😊\n\n` +
     `_Sumak Bot 🤖_`
@@ -85,17 +79,6 @@ export function getUbicacionMessage(): string {
   );
 }
 
-export function getPedidoMessage(): string {
-  return (
-    `🛒 *HACER UN PEDIDO*\n\n` +
-    `Podés hacer tu pedido para retirar directamente por acá 👇\n\n` +
-    `Escribí *pedir* y te guío paso a paso 📝\n\n` +
-    `También podés ver el menú completo en:\n🌐 ${restaurant.web}\n\n` +
-    `📍 Retiro en: Juan B Alberdi 247, frente a Terminal de Mendoza\n\n` +
-    `_Sumak Bot 🤖_`
-  );
-}
-
 export function getPagoMessage(): string {
   return (
     `💳 *MÉTODOS DE PAGO*\n\n` +
@@ -104,7 +87,7 @@ export function getPagoMessage(): string {
     `✅ Tarjetas de débito y crédito\n` +
     `✅ MercadoPago\n` +
     `✅ Transferencia bancaria\n\n` +
-    `Para pagar al pedir por WhatsApp, escribí *pedir* 📱\n\n` +
+    `Para pedir por WhatsApp, escribime lo que querés 📱\n\n` +
     `También podés pedir desde:\n🌐 ${restaurant.web}\n\n` +
     `_Sumak Bot 🤖_`
   );
@@ -128,7 +111,7 @@ export function getDefaultMessage(): string {
     `📋 *menu* — Ver el menú completo\n` +
     `🕐 *horario* — Horarios de atención\n` +
     `📍 *ubicacion* — Dónde encontrarnos\n` +
-    `🛒 *pedir* — Hacer un pedido para retirar\n` +
+    `🛒 Escribí lo que querés pedir\n` +
     `💳 *pagar* — Métodos de pago\n` +
     `👤 *humano* — Hablar con una persona\n\n` +
     `_Sumak Bot 🤖_`
@@ -162,37 +145,6 @@ export async function handleMessageFallback(text: string): Promise<string> {
     }
   }
 
-  if (containsAny(t, ['precio', 'cuanto', 'cuánto', 'vale', 'cuesta', 'costo'])) {
-    const words = t.split(/\s+/).filter((w) => w.length > 3);
-    for (const word of words) {
-      if (['precio', 'cuanto', 'cuánto', 'vale', 'cuesta', 'costo', 'tiene'].includes(word)) continue;
-      try {
-        const results = await searchMenuItem(word);
-        if (results.length > 0) {
-          let reply = `🔍 *Encontré esto:*\n\n`;
-          for (const item of results.slice(0, 3)) {
-            const name = item.name_es || item.name;
-            reply += `• *${name}* — $${item.price.toLocaleString('es-AR')}\n`;
-            if (item.description_es) reply += `  _${item.description_es}_\n`;
-          }
-          reply += `\nEscribí *menu* para ver el menú completo 📋\n\n_Sumak Bot 🤖_`;
-          return reply;
-        }
-      } catch {
-        // silencioso
-      }
-    }
-    try {
-      return await formatMenuText();
-    } catch {
-      return getStaticMenu();
-    }
-  }
-
-  if (isOrderTrigger(t)) {
-    return getPedidoMessage();
-  }
-
   if (containsAny(t, ['horario', 'hora', 'cuando abren', 'cuando cierran', 'abierto', 'cerrado', 'atienden'])) {
     return getHorariosMessage();
   }
@@ -217,38 +169,23 @@ export async function handleMessage(text: string, phone?: string): Promise<strin
 
   const t = text.trim();
 
-  // ── Order flow: bypass AI completely ────────────────────────────────────────
-  if (phone) {
-    const inOrderFlow = hasActiveOrderSession(phone);
-    const triggeringOrder = isOrderTrigger(t);
-
-    if (inOrderFlow || triggeringOrder) {
-      try {
-        return await handleOrderMessage(t, phone);
-      } catch (err) {
-        console.error('[Order flow error]', err);
-        clearOrderSession(phone);
-        return `❌ Algo salió mal con el pedido. Escribí *pedir* para intentar de nuevo, o contactanos: +${restaurant.phone}`;
-      }
-    }
-  }
-
-  // ── AI mode ──────────────────────────────────────────────────────────────────
+  // ── AI mode: AI handles ALL conversations including ordering ─────────────────
   if (!isAIAvailable()) {
     console.log('⚠️  Groq no configurado, usando respuestas estáticas');
     return handleMessageFallback(text);
   }
 
   try {
+    // Build menu with IDs so AI can reference item UUIDs in actions
     let menuData: string;
     try {
-      menuData = await formatMenuText();
+      menuData = await formatMenuWithIds();
     } catch {
       menuData = getStaticMenu();
     }
 
     const history = phone ? getHistory(phone) : [];
-    const aiResponse = await generateResponse(t, menuData, history);
+    const aiResponse = await generateResponse(t, menuData, history, phone);
 
     if (phone) {
       addTurn(phone, t, aiResponse.text);

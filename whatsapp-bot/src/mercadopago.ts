@@ -1,12 +1,12 @@
 import { config } from './config';
-import { OrderSession } from './order';
+import { CartSession } from './order';
 
 // ── MercadoPago Checkout Pro ───────────────────────────────────────────────────
 
 /**
  * Creates a MercadoPago Checkout Pro preference and returns the checkout URL.
  */
-export async function createMercadoPagoPreference(session: OrderSession): Promise<string> {
+export async function createMercadoPagoPreference(session: CartSession): Promise<string> {
   const accessToken = config.mercadoPagoAccessToken;
   if (!accessToken) {
     throw new Error('MERCADOPAGO_ACCESS_TOKEN no configurado');
