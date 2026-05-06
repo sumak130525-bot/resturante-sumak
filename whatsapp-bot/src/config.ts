@@ -20,4 +20,8 @@ export const config = {
   // IA: Groq (gratis) — https://console.groq.com/keys
   // Límite gratuito: 30 req/min, 14400 req/día
   aiApiKey: process.env.AI_API_KEY || process.env.GEMINI_API_KEY || '',
+  // MercadoPago Checkout Pro
+  mercadoPagoAccessToken:
+    process.env.MERCADOPAGO_ACCESS_TOKEN ||
+    'APP_USR-3634705731484651-042317-d78059a6a1e76dd7409d6db3efd434f8-814513455',
 };

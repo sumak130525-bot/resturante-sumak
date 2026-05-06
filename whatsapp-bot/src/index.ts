@@ -9,6 +9,7 @@ import qrcode from 'qrcode-terminal';
 import pino from 'pino';
 import path from 'path';
 import { handleMessage } from './handlers';
+import { startKitchenNotifications } from './kitchen';
 
 const logger = pino({ level: 'silent' });
 
@@ -65,6 +66,9 @@ async function startBot() {
       console.log(`✅ Bot conectado exitosamente!`);
       console.log(`📞 Número: +${phone}`);
       console.log(`🤖 Sumak Bot está listo para recibir mensajes.\n`);
+
+      // Start kitchen order notifications via Supabase Realtime
+      startKitchenNotifications((jid, content) => sock.sendMessage(jid, content).then(() => {}));
     }
   });
 

@@ -2,6 +2,12 @@ import { config } from './config';
 import { formatMenuText, searchMenuItem, getStaticMenu } from './menu';
 import { generateResponse, isAIAvailable } from './ai';
 import { getHistory, addTurn, clearSession } from './conversation';
+import {
+  hasActiveOrderSession,
+  handleOrderMessage,
+  isOrderTrigger,
+  clearOrderSession,
+} from './order';
 
 const { restaurant } = config;
 
@@ -53,7 +59,7 @@ export function getWelcomeMessage(): string {
     `📋 *menu* — Ver el menú completo\n` +
     `🕐 *horario* — Horarios de atención\n` +
     `📍 *ubicacion* — Dónde encontrarnos\n` +
-    `🛒 *pedir* — Hacer un pedido\n` +
+    `🛒 *pedir* — Hacer un pedido para retirar\n` +
     `💳 *pagar* — Métodos de pago\n\n` +
     `Para hablar con una persona, escribí *humano* 😊\n\n` +
     `_Sumak Bot 🤖_`
@@ -81,12 +87,11 @@ export function getUbicacionMessage(): string {
 
 export function getPedidoMessage(): string {
   return (
-    `🛒 *¿CÓMO HACER UN PEDIDO?*\n\n` +
-    `Podés hacer tu pedido directamente desde nuestra web:\n\n` +
-    `🌐 ${restaurant.web}\n\n` +
-    `También podés:\n` +
-    `📞 Llamarnos al +${restaurant.phone}\n` +
-    `💬 Escribirnos aquí y te atendemos\n\n` +
+    `🛒 *HACER UN PEDIDO*\n\n` +
+    `Podés hacer tu pedido para retirar directamente por acá 👇\n\n` +
+    `Escribí *pedir* y te guío paso a paso 📝\n\n` +
+    `También podés ver el menú completo en:\n🌐 ${restaurant.web}\n\n` +
+    `📍 Retiro en: Juan B Alberdi 247, frente a Terminal de Mendoza\n\n` +
     `_Sumak Bot 🤖_`
   );
 }
@@ -99,8 +104,8 @@ export function getPagoMessage(): string {
     `✅ Tarjetas de débito y crédito\n` +
     `✅ MercadoPago\n` +
     `✅ Transferencia bancaria\n\n` +
-    `Para pagar un pedido online:\n` +
-    `🌐 ${restaurant.web}\n\n` +
+    `Para pagar al pedir por WhatsApp, escribí *pedir* 📱\n\n` +
+    `También podés pedir desde:\n🌐 ${restaurant.web}\n\n` +
     `_Sumak Bot 🤖_`
   );
 }
@@ -123,7 +128,7 @@ export function getDefaultMessage(): string {
     `📋 *menu* — Ver el menú completo\n` +
     `🕐 *horario* — Horarios de atención\n` +
     `📍 *ubicacion* — Dónde encontrarnos\n` +
-    `🛒 *pedir* — Hacer un pedido\n` +
+    `🛒 *pedir* — Hacer un pedido para retirar\n` +
     `💳 *pagar* — Métodos de pago\n` +
     `👤 *humano* — Hablar con una persona\n\n` +
     `_Sumak Bot 🤖_`
@@ -184,7 +189,7 @@ export async function handleMessageFallback(text: string): Promise<string> {
     }
   }
 
-  if (containsAny(t, ['pedido', 'pedir', 'quiero pedir', 'hacer pedido', 'ordenar', 'orden'])) {
+  if (isOrderTrigger(t)) {
     return getPedidoMessage();
   }
 
@@ -210,14 +215,31 @@ export async function handleMessageFallback(text: string): Promise<string> {
 export async function handleMessage(text: string, phone?: string): Promise<string> {
   if (!isOpen()) return getClosedMessage();
 
-  // Si la IA no está disponible, usar fallback directamente
+  const t = text.trim();
+
+  // ── Order flow: bypass AI completely ────────────────────────────────────────
+  if (phone) {
+    const inOrderFlow = hasActiveOrderSession(phone);
+    const triggeringOrder = isOrderTrigger(t);
+
+    if (inOrderFlow || triggeringOrder) {
+      try {
+        return await handleOrderMessage(t, phone);
+      } catch (err) {
+        console.error('[Order flow error]', err);
+        clearOrderSession(phone);
+        return `❌ Algo salió mal con el pedido. Escribí *pedir* para intentar de nuevo, o contactanos: +${restaurant.phone}`;
+      }
+    }
+  }
+
+  // ── AI mode ──────────────────────────────────────────────────────────────────
   if (!isAIAvailable()) {
-    console.log('⚠️  Gemini no configurado, usando respuestas estáticas');
+    console.log('⚠️  Groq no configurado, usando respuestas estáticas');
     return handleMessageFallback(text);
   }
 
   try {
-    // Obtener menú actualizado para el contexto de la IA
     let menuData: string;
     try {
       menuData = await formatMenuText();
@@ -225,17 +247,12 @@ export async function handleMessage(text: string, phone?: string): Promise<strin
       menuData = getStaticMenu();
     }
 
-    // Historial de conversación (solo si tenemos el número)
     const history = phone ? getHistory(phone) : [];
+    const aiResponse = await generateResponse(t, menuData, history);
 
-    // Generar respuesta con Gemini
-    const aiResponse = await generateResponse(text, menuData, history);
-
-    // Guardar turno en historial
     if (phone) {
-      addTurn(phone, text, aiResponse.text);
+      addTurn(phone, t, aiResponse.text);
 
-      // Si hubo handoff a humano, limpiar la sesión
       if (aiResponse.handoffToHuman) {
         clearSession(phone);
       }
@@ -244,8 +261,7 @@ export async function handleMessage(text: string, phone?: string): Promise<strin
     return aiResponse.text;
 
   } catch (err) {
-    // Fallback si la IA falla (API down, límite, etc.)
-    console.error('⚠️  Error con Gemini, usando fallback estático:', err instanceof Error ? err.message : err);
+    console.error('⚠️  Error con Groq, usando fallback estático:', err instanceof Error ? err.message : err);
     return handleMessageFallback(text);
   }
 }
