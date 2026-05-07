@@ -743,7 +743,9 @@ function POSDishCard({
   editMode: boolean
   onUnassign: (item: MenuItem) => void
 }) {
-  const isUnavailable = item.available === 0
+  const isUnavailable = item.available === 0 || item.available_qty === 0
+  const isSoldOutByQty = item.available_qty === 0
+  const hasLimitedQty = item.available_qty !== null && item.available_qty !== undefined && item.available_qty >= 1 && item.available_qty <= 3
   const [pressed, setPressed] = useState(false)
 
   const handleClick = () => {
@@ -807,10 +809,19 @@ function POSDishCard({
       </div>
 
       {/* Agotado */}
-      {!editMode && isUnavailable && (
+      {!editMode && (isSoldOutByQty || isUnavailable) && (
         <div className="absolute inset-0 flex items-center justify-center">
           <span className="px-2 py-0.5 rounded-full bg-gray-700/80 text-white text-[0.6rem] font-bold tracking-widest uppercase border border-white/20">
             Agotado
+          </span>
+        </div>
+      )}
+
+      {/* Últimos X disponibles badge */}
+      {!editMode && hasLimitedQty && (
+        <div className="absolute top-1 left-1">
+          <span className="px-1.5 py-0.5 rounded-full bg-orange-500/90 text-white text-[0.55rem] font-bold border border-orange-300/40">
+            Últimos {item.available_qty}
           </span>
         </div>
       )}

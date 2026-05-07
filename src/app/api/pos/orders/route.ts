@@ -93,6 +93,28 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // ── Decrement available_qty for limited-stock items ───────────────────────
+    try {
+      for (const item of (items as PosOrderItem[])) {
+        // Read current qty, then update atomically
+        const { data: stockData } = await supabase
+          .from('menu_items')
+          .select('available_qty')
+          .eq('id', item.menu_item_id)
+          .single()
+
+        if (stockData?.available_qty !== null && stockData?.available_qty !== undefined && stockData.available_qty > 0) {
+          await supabase
+            .from('menu_items')
+            .update({ available_qty: Math.max(0, stockData.available_qty - item.quantity) })
+            .eq('id', item.menu_item_id)
+        }
+      }
+    } catch (stockErr) {
+      // Non-fatal: don't fail the order if stock decrement fails
+      void stockErr
+    }
+
     // ── Auto-record cash movement for the sale ────────────────────────────────
     try {
       const movementType =

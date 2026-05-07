@@ -46,6 +46,7 @@ type TranslationDict = {
   // Availability
   oneAvailable: string
   available: string
+  lastUnits: string
 
   // Cart drawer
   yourOrder: string
@@ -146,6 +147,7 @@ const translations: Record<Locale, TranslationDict> = {
 
     oneAvailable: '1 disponible',
     available: '{n} disponibles',
+    lastUnits: 'Últimos {n} disponibles',
 
     yourOrder: 'Tu pedido',
     cartEmpty: 'Tu carrito está vacío',
@@ -237,6 +239,7 @@ const translations: Record<Locale, TranslationDict> = {
 
     oneAvailable: '1 available',
     available: '{n} available',
+    lastUnits: 'Last {n} available',
 
     yourOrder: 'Your order',
     cartEmpty: 'Your cart is empty',
@@ -328,6 +331,7 @@ const translations: Record<Locale, TranslationDict> = {
 
     oneAvailable: '1 kachkan',
     available: '{n} kachkanku',
+    lastUnits: 'Qhipan {n} kachkan',
 
     yourOrder: "Q'ipi",
     cartEmpty: "Q'ipiyki ch'usaq",

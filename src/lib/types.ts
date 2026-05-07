@@ -20,6 +20,7 @@ export type MenuItem = {
   price: number
   image_url: string | null
   available: number
+  available_qty: number | null
   active: boolean
   display_order?: number | null
   created_at: string
@@ -76,6 +77,7 @@ type MenuItemRow = {
   price: number
   image_url: string | null
   available: number
+  available_qty: number | null
   active: boolean
   display_order?: number | null
   created_at: string

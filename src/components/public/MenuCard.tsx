@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect } from 'react'
 import { Plus, Minus, ShoppingBag, Share2, X } from 'lucide-react'
-import { cn, formatPrice, getAvailabilityColor } from '@/lib/utils'
+import { cn, formatPrice } from '@/lib/utils'
 import { useTranslation, getItemName, getItemDescription } from '@/lib/i18n'
 import type { MenuItem, CartItem } from '@/lib/types'
 
@@ -35,7 +35,9 @@ export function MenuCard({
 }: MenuCardProps) {
   const { t, locale } = useTranslation()
   const quantity = cartItem?.quantity ?? 0
-  const isUnavailable = item.available === 0
+  const isUnavailable = item.available === 0 || item.available_qty === 0
+  const isSoldOutByQty = item.available_qty === 0
+  const hasLimitedQty = item.available_qty !== null && item.available_qty !== undefined && item.available_qty >= 1 && item.available_qty <= 3
   const emoji = categorySlug ? (CATEGORY_EMOJI[categorySlug] ?? '🍴') : '🍴'
   const displayName = getItemName(item, locale)
   const displayDescription = getItemDescription(item, locale)
@@ -55,12 +57,6 @@ export function MenuCard({
     document.addEventListener('mousedown', handleClick)
     return () => document.removeEventListener('mousedown', handleClick)
   }, [shareOpen])
-
-  function availabilityLabel(available: number): string {
-    if (available === 0) return t('soldOut')
-    if (available === 1) return t('oneAvailable')
-    return t('available', { n: available })
-  }
 
   const plateUrl = `${BASE_URL}?plato=${item.id}`
   const shareText = `Mirá este plato de Restaurante Sumak: ${displayName} — ${formatPrice(item.price)} 🍽️ ${plateUrl}`
@@ -137,16 +133,17 @@ export function MenuCard({
           </div>
         )}
 
-        {/* ── Availability badge ── */}
+        {/* ── Availability / Stock badge ── */}
         <div className="absolute top-3 right-3">
-          <span
-            className={cn(
-              'badge-available backdrop-blur-sm border border-white/20',
-              getAvailabilityColor(item.available)
-            )}
-          >
-            {availabilityLabel(item.available)}
-          </span>
+          {isSoldOutByQty ? (
+            <span className="badge-available backdrop-blur-sm border border-white/20 bg-gray-700/80 text-white text-[0.65rem] font-bold tracking-widest uppercase">
+              {t('soldOut')}
+            </span>
+          ) : hasLimitedQty ? (
+            <span className="badge-available backdrop-blur-sm border border-orange-400/40 bg-orange-500/80 text-white text-[0.65rem] font-bold">
+              {t('lastUnits', { n: item.available_qty! })}
+            </span>
+          ) : null}
         </div>
 
         {/* ── In-cart indicator ── */}

@@ -282,7 +282,7 @@ export async function POST(request: NextRequest) {
       // No fallar: el pedido ya fue creado
     }
 
-    // Descontar stock
+    // Descontar stock (available field)
     for (const oi of orderItems) {
       const menuItem = menuItems?.find((m) => m.id === oi.menu_item_id)
       if (menuItem) {
@@ -291,6 +291,27 @@ export async function POST(request: NextRequest) {
           .update({ available: menuItem.available - oi.quantity })
           .eq('id', oi.menu_item_id)
       }
+    }
+
+    // Descontar available_qty para items con stock limitado
+    try {
+      for (const oi of orderItems) {
+        const { data: stockData } = await supabase
+          .from('menu_items')
+          .select('available_qty')
+          .eq('id', oi.menu_item_id)
+          .single()
+
+        if (stockData?.available_qty !== null && stockData?.available_qty !== undefined && stockData.available_qty > 0) {
+          await supabase
+            .from('menu_items')
+            .update({ available_qty: Math.max(0, stockData.available_qty - oi.quantity) })
+            .eq('id', oi.menu_item_id)
+        }
+      }
+    } catch (stockErr) {
+      // Non-fatal
+      void stockErr
     }
 
     // Eliminar pending_order (ya procesado)

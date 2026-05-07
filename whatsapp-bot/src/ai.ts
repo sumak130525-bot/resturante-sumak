@@ -181,9 +181,22 @@ export async function formatMenuWithIds(): Promise<string> {
       for (const item of categoryItems) {
         const name = item.name_es || item.name;
         const price = item.price;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const availableQty: number | null | undefined = (item as any).available_qty;
+
+        // Skip agotado items from AI menu (mark them so AI doesn't offer them)
+        if (availableQty === 0) {
+          text += `  [AGOTADO - NO DISPONIBLE] ${name} — $${price.toLocaleString('es-AR')} (AGOTADO, no ofrecer)\n`;
+          continue;
+        }
+
         text += `  [${item.id}] ${name} — $${price.toLocaleString('es-AR')}`;
         if (item.description_es) {
           text += ` (${item.description_es.trim()})`;
+        }
+        // Add stock warning for limited items
+        if (availableQty !== null && availableQty !== undefined && availableQty >= 1 && availableQty <= 3) {
+          text += ` ⚠️ últimos ${availableQty} disponibles`;
         }
         text += '\n';
       }

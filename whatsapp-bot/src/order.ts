@@ -120,6 +120,27 @@ export async function createSupabaseOrder(
     if (fbErr) throw new Error(`Error al guardar items: ${fbErr.message}`);
   }
 
+  // Decrement available_qty for limited-stock items (non-fatal)
+  try {
+    for (const item of session.cart) {
+      const { data: stockData } = await supabase
+        .from('menu_items')
+        .select('available_qty')
+        .eq('id', item.id)
+        .single();
+
+      if (stockData?.available_qty !== null && stockData?.available_qty !== undefined && stockData.available_qty > 0) {
+        await supabase
+          .from('menu_items')
+          .update({ available_qty: Math.max(0, stockData.available_qty - item.quantity) })
+          .eq('id', item.id);
+      }
+    }
+  } catch (stockErr) {
+    // Non-fatal: don't fail the order
+    void stockErr;
+  }
+
   return order.id as string;
 }
 
