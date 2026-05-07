@@ -261,7 +261,7 @@ async function applyActions(
 
   for (const act of actions) {
     if (act.action === 'ADD_ITEM') {
-      // Validate price from DB — never trust AI price
+      // Validate item exists in DB — reject hallucinated items
       let realPrice = act.price;
       let realName = act.item_name;
       const dbItem = menuItems.find((mi) => mi.id === act.item_id);
@@ -269,7 +269,9 @@ async function applyActions(
         realPrice = dbItem.price;
         realName = dbItem.name;
       } else {
-        console.warn(`[AI] ⚠️ Item ${act.item_id} not found in DB, using AI price: ${act.price}`);
+        // Item doesn't exist in DB — skip it entirely (AI hallucinated)
+        console.warn(`[AI] ❌ Item ${act.item_id} ("${act.item_name}") not found in DB — skipping`);
+        continue;
       }
 
       const existing = session.cart.findIndex((ci) => ci.id === act.item_id);
@@ -374,7 +376,7 @@ export async function generateResponse(
   messages.push({ role: 'user', content: userMessage });
 
   const completion = await client.chat.completions.create({
-    model: 'llama-3.3-70b-versatile',
+    model: 'llama-3.1-8b-instant',
     messages,
     max_tokens: 700,
     temperature: 0.7,
