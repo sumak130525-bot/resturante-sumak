@@ -57,6 +57,7 @@ interface ActionAddItem {
   item_name: string;
   price: number;
   quantity: number;
+  note?: string;
 }
 
 interface ActionRemoveItem {
@@ -137,11 +138,13 @@ Cuando necesites agregar items, crear pedidos, etc, agregá UN bloque de accione
 [ACTIONS]{"actions":[{"action":"ADD_ITEM","item_id":"UUID","item_name":"Nombre","price":1000,"quantity":1}]}[/ACTIONS]
 
 Acciones disponibles:
-- ADD_ITEM: {"action":"ADD_ITEM","item_id":"UUID","item_name":"Nombre","price":PRECIO,"quantity":1}
+- ADD_ITEM: {"action":"ADD_ITEM","item_id":"UUID","item_name":"Nombre","price":PRECIO,"quantity":1,"note":"FRITAS"}
 - REMOVE_ITEM: {"action":"REMOVE_ITEM","item_id":"UUID"}
 - SET_NAME: {"action":"SET_NAME","name":"Nombre"}
 - CREATE_ORDER: {"action":"CREATE_ORDER","payment_method":"efectivo"} (o "mercadopago")
 - CLEAR_CART: {"action":"CLEAR_CART"}
+
+NOTA EN ADD_ITEM: Si el cliente especifica una variante o detalle (ej: "fritas", "al horno", "sin arroz", "solo con papas", "bien cocida"), incluí el campo "note" en ADD_ITEM con esa aclaración EN MAYÚSCULAS. Si no hay aclaración, no incluyas "note".
 
 REGLAS DE ACCIONES:
 - Siempre usá el formato [ACTIONS]{"actions":[...]}[/ACTIONS]
@@ -299,6 +302,7 @@ async function applyActions(
         newCart[existing] = {
           ...newCart[existing],
           quantity: act.quantity,
+          note: act.note || newCart[existing].note,
         };
       } else {
         newCart.push({
@@ -306,6 +310,7 @@ async function applyActions(
           name: realName,
           price: realPrice,
           quantity: act.quantity,
+          note: act.note || undefined,
         });
       }
       session = upsertCartSession(phone, { cart: newCart });

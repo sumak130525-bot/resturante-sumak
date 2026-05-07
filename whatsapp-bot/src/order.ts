@@ -10,6 +10,7 @@ export interface CartItem {
   name: string;
   price: number;
   quantity: number;
+  note?: string;
 }
 
 export interface CartSession {
@@ -107,6 +108,7 @@ export async function createSupabaseOrder(
     quantity: item.quantity,
     unit_price: Math.round(item.price),
     item_name: item.name,
+    line_note: item.note || null,
   }));
 
   const { error: itemsError } = await supabase.from('order_items').insert(orderItems);
