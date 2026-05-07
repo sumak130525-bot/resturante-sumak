@@ -387,7 +387,7 @@ async function generateWithGemini(
   if (!client) throw new Error('GEMINI_API_KEY not set');
 
   const model = client.getGenerativeModel({
-    model: 'gemini-2.0-flash',
+    model: 'gemini-1.5-flash',
     systemInstruction: systemPrompt,
     generationConfig: {
       temperature: 0.7,
@@ -503,10 +503,28 @@ export async function generateResponse(
   // Safety net: if AI says "pedido creado" but didn't include CREATE_ORDER action,
   // force-create the order from what's in the cart
   if (phone && actions.every(a => a.action !== 'CREATE_ORDER')) {
-    const orderCreatedPhrases = /pedido (creado|confirmado|registrado|listo para ser retirado)/i;
+    const orderCreatedPhrases = /pedido (está |fue )?(creado|confirmado|registrado|listo)/i;
     if (orderCreatedPhrases.test(finalText)) {
       console.warn('[AI] ⚠️ AI said order created but no CREATE_ORDER action — forcing creation');
-      const session = getCartSession(phone);
+      let session = getCartSession(phone);
+
+      // If no name set, try to extract from AI response or use last user message
+      if (session && (!session.customerName || session.customerName.trim() === '')) {
+        // Try extracting name from AI response (e.g. "Muchas gracias, Juan!")
+        const nameMatch = finalText.match(/gracias,?\s+([A-ZÁÉÍÓÚÑa-záéíóúñ]+)/i) 
+          || finalText.match(/nombre de\s+([A-ZÁÉÍÓÚÑa-záéíóúñ]+)/i)
+          || finalText.match(/para\s+([A-ZÁÉÍÓÚÑa-záéíóúñ]+)/i);
+        if (nameMatch) {
+          session = upsertCartSession(phone, { customerName: nameMatch[1] });
+          console.log(`[AI] 📝 Extracted name from response: "${nameMatch[1]}"`);
+        } else if (userMessage.trim().length < 30 && /^[A-ZÁÉÍÓÚÑa-záéíóúñ\s]+$/.test(userMessage.trim())) {
+          // Last message looks like a name (short, only letters)
+          session = upsertCartSession(phone, { customerName: userMessage.trim() });
+          console.log(`[AI] 📝 Using user message as name: "${userMessage.trim()}"`);
+        }
+      }
+
+      session = getCartSession(phone);
       if (session && session.cart.length > 0 && session.customerName) {
         try {
           const result = await applyActions(
@@ -520,7 +538,7 @@ export async function generateResponse(
           console.error('[AI] Error force-creating order:', err);
         }
       } else {
-        console.warn('[AI] ⚠️ Cannot force-create: cart empty or no name');
+        console.warn(`[AI] ⚠️ Cannot force-create: cart=${session?.cart?.length || 0} items, name="${session?.customerName || ''}"`);
       }
     }
   }
