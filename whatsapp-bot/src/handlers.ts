@@ -198,7 +198,40 @@ export async function handleMessage(text: string, phone?: string): Promise<strin
     return aiResponse.text;
 
   } catch (err) {
-    console.error('⚠️  Error con Groq, usando fallback estático:', err instanceof Error ? err.message : err);
+    console.error('⚠️  Error con AI:', err instanceof Error ? err.message : err);
+
+    // If there's an active cart and user message looks like a name, create order directly
+    if (phone) {
+      const { getCartSession, upsertCartSession, createSupabaseOrder } = await import('./order');
+      const session = getCartSession(phone);
+      if (session && session.cart.length > 0) {
+        const trimmed = text.trim();
+        // User gave a name (short text, only letters/spaces, starts with common patterns)
+        const looksLikeName = trimmed.length < 30 && /^(de |soy |me llamo )?[A-ZÁÉÍÓÚÑa-záéíóúñ\s]+$/i.test(trimmed);
+        if (looksLikeName) {
+          const name = trimmed.replace(/^(de |soy |me llamo )/i, '').trim();
+          const updatedSession = upsertCartSession(phone, { customerName: name });
+          console.log(`[Fallback] 📝 Cart active + name detected: "${name}" — creating order`);
+          try {
+            const confirmation = await createSupabaseOrder(updatedSession, 'efectivo', 'pending');
+            return confirmation;
+          } catch (orderErr) {
+            console.error('[Fallback] Error creating order:', orderErr);
+          }
+        }
+        // User said "si", "ok", "dale", "listo" — confirm with existing name
+        if (/^(si|sí|ok|dale|listo|bueno|confirmo)$/i.test(trimmed) && session.customerName) {
+          console.log(`[Fallback] ✅ Cart active + confirmation word — creating order for "${session.customerName}"`);
+          try {
+            const confirmation = await createSupabaseOrder(session, 'efectivo', 'pending');
+            return confirmation;
+          } catch (orderErr) {
+            console.error('[Fallback] Error creating order:', orderErr);
+          }
+        }
+      }
+    }
+
     const fallback = await handleMessageFallback(text);
     return fallback + `\n\n📲 *¿Querés hacer un pedido?*\nPodés pedir desde nuestra web:\n🌐 ${restaurant.web}`;
   }
