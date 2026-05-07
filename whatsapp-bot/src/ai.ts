@@ -202,9 +202,12 @@ interface ParsedResponse {
 function parseAIResponse(raw: string): ParsedResponse {
   // Try multiple patterns the AI might use
   const patterns = [
-    /\[ACTIONS\]([\s\S]*?)\[\/ACTIONS\]/,
-    /\[ACTIONS\]([\s\S]*?)$/,  // Missing closing tag
-    /\[actions\]([\s\S]*?)\[\/actions\]/i,
+    /\[ACTIONS\]([\s\S]*?)\[\/ACTIONS\]/i,
+    /\(ACTIONS\)([\s\S]*?)\(\/ACTIONS\)/i,
+    /\(Acciones\)([\s\S]*?)\(\/Acciones\)/i,
+    /\[ACTIONS\]([\s\S]*?)$/i,
+    /\(ACTIONS\)([\s\S]*?)$/i,
+    /\(Acciones\)([\s\S]*?)$/i,
   ];
 
   let actionJson: string | null = null;
@@ -218,6 +221,9 @@ function parseAIResponse(raw: string): ParsedResponse {
       break;
     }
   }
+
+  // Also strip any remaining action-like markers from visible text
+  visibleText = visibleText.replace(/\[?\(?(ACTIONS|Acciones)\]?\)?/gi, '').trim();
 
   const actions: BotAction[] = [];
   if (actionJson) {
@@ -286,9 +292,10 @@ async function applyActions(
       const existing = session.cart.findIndex((ci) => ci.id === act.item_id);
       const newCart = [...session.cart];
       if (existing >= 0) {
+        // REPLACE quantity — don't accumulate (AI may resend ADD_ITEM on each message)
         newCart[existing] = {
           ...newCart[existing],
-          quantity: newCart[existing].quantity + act.quantity,
+          quantity: act.quantity,
         };
       } else {
         newCart.push({
