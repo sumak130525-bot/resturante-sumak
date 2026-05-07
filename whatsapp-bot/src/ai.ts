@@ -251,8 +251,27 @@ async function applyActions(
   let session = getCartSession(phone) ?? { cart: [], customerName: '', phone, lastActive: Date.now() };
   const result: ApplyResult = {};
 
+  // Fetch real menu items from DB to validate prices
+  let menuItems: { id: string; name: string; price: number }[] = [];
+  try {
+    const { getMenu } = await import('./menu');
+    const { items } = await getMenu();
+    menuItems = items;
+  } catch { /* use AI prices as fallback */ }
+
   for (const act of actions) {
     if (act.action === 'ADD_ITEM') {
+      // Validate price from DB — never trust AI price
+      let realPrice = act.price;
+      let realName = act.item_name;
+      const dbItem = menuItems.find((mi) => mi.id === act.item_id);
+      if (dbItem) {
+        realPrice = dbItem.price;
+        realName = dbItem.name;
+      } else {
+        console.warn(`[AI] ⚠️ Item ${act.item_id} not found in DB, using AI price: ${act.price}`);
+      }
+
       const existing = session.cart.findIndex((ci) => ci.id === act.item_id);
       const newCart = [...session.cart];
       if (existing >= 0) {
@@ -263,8 +282,8 @@ async function applyActions(
       } else {
         newCart.push({
           id: act.item_id,
-          name: act.item_name,
-          price: act.price,
+          name: realName,
+          price: realPrice,
           quantity: act.quantity,
         });
       }
@@ -355,7 +374,7 @@ export async function generateResponse(
   messages.push({ role: 'user', content: userMessage });
 
   const completion = await client.chat.completions.create({
-    model: 'llama-3.1-8b-instant',
+    model: 'llama-3.3-70b-versatile',
     messages,
     max_tokens: 700,
     temperature: 0.7,

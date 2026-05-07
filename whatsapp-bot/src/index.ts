@@ -19,9 +19,12 @@ const AUTH_DIR = path.resolve(__dirname, '../auth_info');
 const processedMessages = new Set<string>();
 const MAX_PROCESSED = 1000;
 
-function isDuplicate(msgId: string): boolean {
-  if (processedMessages.has(msgId)) return true;
-  processedMessages.add(msgId);
+function isDuplicate(sender: string, text: string): boolean {
+  // Dedupe by sender + text + 10-second window (same person, same text within 10s = duplicate)
+  const timeSlot = Math.floor(Date.now() / 10000); // 10-second window
+  const key = `${sender}:${text}:${timeSlot}`;
+  if (processedMessages.has(key)) return true;
+  processedMessages.add(key);
   if (processedMessages.size > MAX_PROCESSED) {
     const first = processedMessages.values().next().value;
     if (first) processedMessages.delete(first);
@@ -95,10 +98,6 @@ async function startBot() {
       if (msg.key.fromMe) continue;
       if (msg.key.remoteJid?.endsWith('@g.us')) continue;
       if (!msg.message) continue;
-      if (msg.key.id && isDuplicate(msg.key.id)) {
-        console.log(`⏭️  Mensaje duplicado ignorado: ${msg.key.id}`);
-        continue;
-      }
 
       // Debug: log full msg.key to inspect available fields
       console.log('MSG KEY:', JSON.stringify(msg.key));
@@ -139,6 +138,12 @@ async function startBot() {
         '';
 
       if (!text || text.trim() === '') continue;
+
+      // Dedup by sender + text (catches LID/PN double delivery)
+      if (isDuplicate(sender, text.trim())) {
+        console.log(`⏭️  Mensaje duplicado ignorado de +${sender}: "${text}"`);
+        continue;
+      }
 
       console.log(`📩 Mensaje de +${sender}: "${text}"`);
 
