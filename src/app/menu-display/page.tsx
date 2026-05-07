@@ -767,7 +767,8 @@ export default function MenuDisplayPage() {
         style={{
           display: 'grid',
           gridTemplateColumns: 'repeat(6, 1fr)',
-          gridTemplateRows: 'repeat(16, 1fr)',
+          gridTemplateRows: 'repeat(4, calc(25% - 5px))',
+          gridAutoRows: 'calc(25% - 5px)',
           gap: '4px',
         }}
       >
