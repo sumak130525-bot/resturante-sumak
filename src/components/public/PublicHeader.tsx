@@ -5,6 +5,7 @@ import Image from 'next/image'
 import { ShoppingBag, ChevronDown } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useTranslation, type Locale } from '@/lib/i18n'
+import { useLanguagesEnabled } from '@/hooks/useLanguagesEnabled'
 
 interface PublicHeaderProps {
   cartCount: number
@@ -26,6 +27,14 @@ export function PublicHeader({ cartCount, onCartOpen, isLive }: PublicHeaderProp
   const langRef = useRef<HTMLDivElement>(null)
 
   const { locale, setLocale, t } = useTranslation()
+  const { languagesEnabled } = useLanguagesEnabled()
+
+  // Force locale to 'es' when languages are disabled
+  useEffect(() => {
+    if (!languagesEnabled && locale !== 'es') {
+      setLocale('es')
+    }
+  }, [languagesEnabled, locale, setLocale])
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 20)
@@ -95,6 +104,7 @@ export function PublicHeader({ cartCount, onCartOpen, isLive }: PublicHeaderProp
             </div>
 
             {/* ── Language selector ── */}
+            {languagesEnabled && (
             <div ref={langRef} className="relative">
               <button
                 onClick={() => setLangOpen((o) => !o)}
@@ -139,6 +149,7 @@ export function PublicHeader({ cartCount, onCartOpen, isLive }: PublicHeaderProp
                 </div>
               )}
             </div>
+            )}
 
             {/* Cart button */}
             <button

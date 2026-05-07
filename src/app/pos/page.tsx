@@ -4,6 +4,7 @@ import { useState, useCallback, useEffect, useRef } from 'react'
 import { useMenuRealtime } from '@/hooks/useMenuRealtime'
 import type { MenuItem } from '@/lib/types'
 import { useTranslation, getItemName, type Locale } from '@/lib/i18n'
+import { useLanguagesEnabled } from '@/hooks/useLanguagesEnabled'
 
 // ─── Ticket helpers ───────────────────────────────────────────────────────────
 
@@ -1184,6 +1185,12 @@ function TicketPanel({
 export default function POSPage() {
   const { menuItems, categories, loading } = useMenuRealtime()
   const { locale, setLocale } = useTranslation()
+  const { languagesEnabled } = useLanguagesEnabled()
+
+  // Force locale to 'es' when languages are disabled
+  useEffect(() => {
+    if (!languagesEnabled && locale !== 'es') setLocale('es')
+  }, [languagesEnabled, locale, setLocale])
 
   // Logo (fetched once on load)
   const [ticketLogo, setTicketLogo] = useState<string | null>(null)
@@ -1509,6 +1516,7 @@ export default function POSPage() {
         </div>
         <div className="h-5 w-px bg-sumak-gold/30 shrink-0" />
         {/* Language selector */}
+        {languagesEnabled && (
         <div className="flex items-center gap-0.5 shrink-0">
           {(['es', 'en', 'qu'] as Locale[]).map((lang) => (
             <button
@@ -1524,6 +1532,7 @@ export default function POSPage() {
             </button>
           ))}
         </div>
+        )}
         {/* Clock */}
         <POSClock />
         {/* Cash movements button */}

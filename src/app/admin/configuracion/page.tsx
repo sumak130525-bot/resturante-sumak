@@ -13,6 +13,11 @@ export default function AdminConfiguracionPage() {
   const [success, setSuccess] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
+  // ── Languages enabled toggle ───────────────────────────────────────────────
+  const [languagesEnabled, setLanguagesEnabled] = useState(false)
+  const [langLoading, setLangLoading] = useState(true)
+  const [langSaving, setLangSaving] = useState(false)
+
   const fetchLogo = useCallback(async () => {
     setLoading(true)
     const res = await fetch('/api/admin/settings?key=ticket_logo')
@@ -24,6 +29,34 @@ export default function AdminConfiguracionPage() {
   }, [])
 
   useEffect(() => { fetchLogo() }, [fetchLogo])
+
+  // Fetch languages_enabled on mount
+  useEffect(() => {
+    fetch('/api/settings/languages')
+      .then((r) => r.json())
+      .then((d) => {
+        setLanguagesEnabled(d.enabled === true)
+        setLangLoading(false)
+      })
+      .catch(() => setLangLoading(false))
+  }, [])
+
+  const handleToggleLanguages = async (value: boolean) => {
+    setLangSaving(true)
+    const res = await fetch('/api/settings/languages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ enabled: value }),
+    })
+    if (res.ok) {
+      setLanguagesEnabled(value)
+      showSuccess(value ? 'Selector de idiomas habilitado' : 'Selector de idiomas deshabilitado')
+    } else {
+      const d = await res.json()
+      setError(d.error ?? 'Error al guardar configuración')
+    }
+    setLangSaving(false)
+  }
 
   const showSuccess = (msg: string) => {
     setSuccess(msg)
@@ -99,6 +132,35 @@ export default function AdminConfiguracionPage() {
             {success}
           </div>
         )}
+
+        {/* Sección: Idiomas */}
+        <section>
+          <h2 className="text-base font-semibold text-gray-700 mb-3">Idiomas</h2>
+          <div className="bg-white rounded-2xl shadow-sm p-6">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <p className="text-sm font-medium text-gray-800">Habilitar selector de idiomas</p>
+                <p className="text-xs text-gray-400 mt-0.5">
+                  Cuando está deshabilitado, todos los menús usan español y ocultan el selector de idioma.
+                </p>
+              </div>
+              <button
+                onClick={() => handleToggleLanguages(!languagesEnabled)}
+                disabled={langLoading || langSaving}
+                aria-pressed={languagesEnabled}
+                className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none disabled:opacity-50 ${
+                  languagesEnabled ? 'bg-sumak-brown' : 'bg-gray-200'
+                }`}
+              >
+                <span
+                  className={`pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow-md transform transition-transform duration-200 ${
+                    languagesEnabled ? 'translate-x-5' : 'translate-x-0'
+                  }`}
+                />
+              </button>
+            </div>
+          </div>
+        </section>
 
         {/* Sección: Logo del ticket */}
         <section>

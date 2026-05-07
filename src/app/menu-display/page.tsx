@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react'
 import Image from 'next/image'
 import { useMenuRealtime } from '@/hooks/useMenuRealtime'
 import { useTranslation, getItemName, type Locale } from '@/lib/i18n'
+import { useLanguagesEnabled } from '@/hooks/useLanguagesEnabled'
 import { formatPrice } from '@/lib/utils'
 import { cn } from '@/lib/utils'
 import type { MenuItem } from '@/lib/types'
@@ -615,12 +616,18 @@ function SkeletonGrid() {
 export default function MenuDisplayPage() {
   const { menuItems, categories, loading, refetch } = useMenuRealtime()
   const { locale, setLocale } = useTranslation()
+  const { languagesEnabled } = useLanguagesEnabled()
   const [activeTab, setActiveTab]   = useState<string>('all')
   const [visible, setVisible]       = useState(true)
   const [assigningPosition, setAssigningPosition] = useState<number | null>(null)
   const time = useClock()
   useWakeLock()
   useCursorHide()
+
+  // Force locale to 'es' when languages are disabled
+  useEffect(() => {
+    if (!languagesEnabled && locale !== 'es') setLocale('es')
+  }, [languagesEnabled, locale, setLocale])
 
   const handleEmptyCellClick = (position: number) => {
     setAssigningPosition(position)
@@ -736,6 +743,7 @@ export default function MenuDisplayPage() {
 
         {/* Right: language switcher + clock */}
         <div className="flex items-center gap-2 shrink-0">
+          {languagesEnabled && (
           <div className="flex items-center gap-0.5">
             {(['es', 'en', 'qu'] as Locale[]).map((lang) => (
               <button
@@ -752,6 +760,7 @@ export default function MenuDisplayPage() {
               </button>
             ))}
           </div>
+          )}
           <div className="font-mono text-lg font-bold text-white/80 tabular-nums tracking-tight min-w-[4.5ch] text-right">
             {time}
           </div>
