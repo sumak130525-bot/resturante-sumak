@@ -12,7 +12,7 @@ import type { MenuItem } from '@/lib/types'
 
 const CURSOR_HIDE_MS      = 5_000
 const FALLBACK_REFRESH_MS = 15 * 1_000  // Refresh every 15s to pick up admin changes
-const MAX_VISIBLE         = 24   // 6 × 4 grid — no scroll on TV
+const MAX_VISIBLE         = 96   // 6 × 16 grid — scrollable
 
 // ─── Category Icons ───────────────────────────────────────────────────────────
 
@@ -758,16 +758,16 @@ export default function MenuDisplayPage() {
         </div>
       </header>
 
-      {/* ── 6 × 4 grid — fills all remaining height ── */}
+      {/* ── 6 × 16 grid — scrollable ── */}
       <main
         className={cn(
-          'flex-1 min-h-0 p-1 transition-opacity duration-200',
+          'flex-1 min-h-0 p-1 transition-opacity duration-200 overflow-y-auto',
           visible ? 'opacity-100' : 'opacity-0'
         )}
         style={{
           display: 'grid',
           gridTemplateColumns: 'repeat(6, 1fr)',
-          gridTemplateRows: 'repeat(4, 1fr)',
+          gridTemplateRows: 'repeat(16, 1fr)',
           gap: '4px',
         }}
       >
@@ -776,7 +776,7 @@ export default function MenuDisplayPage() {
         ) : (
           <>
             {Array.from({ length: MAX_VISIBLE }).map((_, gridIndex) => {
-              const position = gridIndex + 1 // positions 1-24
+              const position = gridIndex + 1 // positions 1-96
               const item = filteredItems.find((i) => i.display_order === position)
               if (item) {
                 return (
