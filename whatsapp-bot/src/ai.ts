@@ -249,6 +249,9 @@ function parseAIResponse(raw: string): ParsedResponse {
     }
   }
 
+  if (actions.length > 0) {
+    console.log(`[AI] 📋 Parsed ${actions.length} actions:`, JSON.stringify(actions));
+  }
   return { visibleText, actions };
 }
 
@@ -318,12 +321,16 @@ async function applyActions(
       session = upsertCartSession(phone, { cart: [] });
 
     } else if (act.action === 'CREATE_ORDER') {
-      if (session.cart.length === 0) continue;
-      // Block order creation if no customer name set
-      if (!session.customerName || session.customerName.trim() === '' || session.customerName === 'Nombre del cliente') {
-        console.warn('[AI] ❌ CREATE_ORDER blocked — no customer name set');
+      if (session.cart.length === 0) {
+        console.warn('[AI] ❌ CREATE_ORDER blocked — cart is empty');
         continue;
       }
+      // Block order creation if no customer name set
+      if (!session.customerName || session.customerName.trim() === '' || session.customerName === 'Nombre del cliente') {
+        console.warn(`[AI] ❌ CREATE_ORDER blocked — no customer name set (got: "${session.customerName}")`);
+        continue;
+      }
+      console.log(`[AI] ✅ CREATE_ORDER proceeding — name: "${session.customerName}", cart: ${session.cart.length} items, total: ${cartTotal(session.cart)}`);
 
       const paymentMethod = act.payment_method;
 
