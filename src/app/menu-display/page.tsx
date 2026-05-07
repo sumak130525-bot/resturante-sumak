@@ -414,7 +414,7 @@ interface DishCardProps {
 }
 
 function DishCard({ item, locale }: DishCardProps) {
-  const isUnavailable = item.available === 0
+  const isUnavailable = item.available === 0 || item.available_qty === 0
   const name = getItemName(item, locale)
   const emoji = CATEGORY_EMOJI[item.categories?.slug ?? ''] ?? '🍽️'
 
@@ -564,8 +564,17 @@ function DishCard({ item, locale }: DishCardProps) {
       {/* Agotado badge */}
       {isUnavailable && (
         <div className="absolute inset-0 flex items-center justify-center">
-          <span className="px-2 py-0.5 rounded-full bg-gray-700/80 text-white text-[0.6rem] font-bold tracking-widest uppercase border border-white/20">
-            Agotado
+          <span className="px-3 py-1 rounded-full bg-red-600/90 text-white text-sm font-bold tracking-wide uppercase border-2 border-white/40 shadow-lg">
+            AGOTADO
+          </span>
+        </div>
+      )}
+
+      {/* Últimos X disponibles badge */}
+      {!isUnavailable && localQty !== null && localQty > 0 && (
+        <div className="absolute top-1 right-1">
+          <span className="px-2 py-1 rounded-lg bg-orange-500/90 text-white text-xs font-bold shadow-lg border border-orange-300/50">
+            Últimos {localQty}
           </span>
         </div>
       )}
