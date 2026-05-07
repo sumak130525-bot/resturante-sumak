@@ -236,24 +236,47 @@ type ModalStep = 'menu' | 'confirm-delete'
 interface CardModalProps {
   itemName: string
   step: ModalStep
+  currentQty: number | null
   onChangeImage: () => void
   onDeleteRequest: () => void
   onConfirmDelete: () => void
   onCancel: () => void
+  onSetStock: (qty: number | null) => Promise<void>
   deleting: boolean
   uploading: boolean
 }
 
+const STOCK_OPTIONS: Array<{ label: string; value: number | null }> = [
+  { label: '1', value: 1 },
+  { label: '2', value: 2 },
+  { label: '3', value: 3 },
+  { label: 'Sin límite', value: null },
+]
+
 function CardModal({
   itemName,
   step,
+  currentQty,
   onChangeImage,
   onDeleteRequest,
   onConfirmDelete,
   onCancel,
+  onSetStock,
   deleting,
   uploading,
 }: CardModalProps) {
+  const [savingStock, setSavingStock] = useState<number | 'null' | null>(null)
+
+  const handleStock = async (value: number | null) => {
+    const key = value === null ? 'null' : value
+    setSavingStock(key)
+    try {
+      await onSetStock(value)
+    } finally {
+      setSavingStock(null)
+    }
+  }
+
   return (
     <div
       className="absolute inset-0 z-10 flex items-center justify-center rounded-lg"
@@ -278,6 +301,44 @@ function CardModal({
 
         {step === 'menu' ? (
           <>
+            {/* Stock selector */}
+            <div className="w-full">
+              <p
+                className="text-white/50 text-center mb-1.5"
+                style={{ fontSize: 'clamp(0.55rem, 0.9vw, 0.75rem)' }}
+              >
+                Stock disponible
+              </p>
+              <div className="flex gap-1 w-full">
+                {STOCK_OPTIONS.map((opt) => {
+                  const isActive = currentQty === opt.value
+                  const key = opt.value === null ? 'null' : opt.value
+                  const isSaving = savingStock === key
+                  return (
+                    <button
+                      key={key}
+                      onClick={() => handleStock(opt.value)}
+                      disabled={!!savingStock}
+                      className="flex-1 rounded-lg font-bold transition-all active:scale-95 disabled:opacity-60"
+                      style={{
+                        background: isActive
+                          ? opt.value === null
+                            ? '#16a34a'
+                            : '#d97706'
+                          : 'rgba(255,255,255,0.1)',
+                        color: isActive ? '#fff' : 'rgba(255,255,255,0.6)',
+                        fontSize: 'clamp(0.55rem, 0.9vw, 0.75rem)',
+                        padding: '7px 3px',
+                        outline: isActive ? '2px solid rgba(255,255,255,0.35)' : 'none',
+                      }}
+                    >
+                      {isSaving ? '…' : opt.label}
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+
             {/* Remove from grid button */}
             <button
               onClick={onDeleteRequest}
@@ -361,6 +422,8 @@ function DishCard({ item, locale }: DishCardProps) {
   const [deleting, setDeleting] = useState(false)
   const [deleted, setDeleted] = useState(false)
   const [uploading, setUploading] = useState(false)
+  // Local optimistic stock state so highlight updates immediately
+  const [localQty, setLocalQty] = useState<number | null>(item.available_qty ?? null)
 
   const handleCancel = () => {
     setModalStep(null)
@@ -368,6 +431,19 @@ function DishCard({ item, locale }: DishCardProps) {
 
   const handleDeleteRequest = () => {
     setModalStep('confirm-delete')
+  }
+
+  const handleSetStock = async (qty: number | null) => {
+    setLocalQty(qty)
+    try {
+      await fetch('/api/menu-display/stock', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: item.id, available_qty: qty }),
+      })
+    } catch {
+      // silent fail — optimistic update already applied
+    }
   }
 
   const handleConfirmDelete = async () => {
@@ -499,10 +575,12 @@ function DishCard({ item, locale }: DishCardProps) {
         <CardModal
           itemName={name}
           step={modalStep}
+          currentQty={localQty}
           onChangeImage={handleChangeImage}
           onDeleteRequest={handleDeleteRequest}
           onConfirmDelete={handleConfirmDelete}
           onCancel={handleCancel}
+          onSetStock={handleSetStock}
           deleting={deleting}
           uploading={uploading}
         />
