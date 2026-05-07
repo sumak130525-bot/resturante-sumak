@@ -1,3 +1,4 @@
+import { GoogleGenerativeAI } from '@google/generative-ai';
 import Groq from 'groq-sdk';
 import { config } from './config';
 import {
@@ -13,13 +14,26 @@ import {
   formatPrice,
 } from './order';
 
-// ── Cliente Groq (lazy init) ──────────────────────────────────────────────────
+// ── Gemini client (lazy init, primary) ───────────────────────────────────────
+let geminiClient: GoogleGenerativeAI | null = null;
+
+function getGeminiClient(): GoogleGenerativeAI | null {
+  const key = process.env.GEMINI_API_KEY || config.aiApiKey;
+  if (!key) return null;
+  if (!geminiClient) {
+    geminiClient = new GoogleGenerativeAI(key);
+  }
+  return geminiClient;
+}
+
+// ── Groq client (lazy init, fallback) ────────────────────────────────────────
 let groqClient: Groq | null = null;
 
-function getClient(): Groq | null {
-  if (!config.aiApiKey) return null;
+function getGroqClient(): Groq | null {
+  const key = process.env.AI_API_KEY;
+  if (!key) return null;
   if (!groqClient) {
-    groqClient = new Groq({ apiKey: config.aiApiKey });
+    groqClient = new Groq({ apiKey: key });
   }
   return groqClient;
 }
@@ -343,29 +357,47 @@ async function applyActions(
   return result;
 }
 
-// ── Función principal ─────────────────────────────────────────────────────────
-export async function generateResponse(
+// ── Gemini response (primary) ─────────────────────────────────────────────────
+async function generateWithGemini(
   userMessage: string,
-  menuData: string,
-  conversationHistory: ConversationTurn[] = [],
-  phone?: string,
-): Promise<AIResponse> {
-  const client = getClient();
+  systemPrompt: string,
+  conversationHistory: ConversationTurn[],
+): Promise<string> {
+  const client = getGeminiClient();
+  if (!client) throw new Error('GEMINI_API_KEY not set');
 
-  if (!client) {
-    throw new Error('AI_API_KEY no configurada');
-  }
+  const model = client.getGenerativeModel({
+    model: 'gemini-2.0-flash',
+    systemInstruction: systemPrompt,
+    generationConfig: {
+      temperature: 0.7,
+      maxOutputTokens: 700,
+    },
+  });
 
-  // Get current cart state for context
-  const cartSession: CartSession | undefined = phone ? getCartSession(phone) : undefined;
-  const cart = cartSession?.cart ?? [];
-  const customerName = cartSession?.customerName ?? '';
+  const history = conversationHistory.map((turn) => ({
+    role: turn.role === 'assistant' ? 'model' : 'user',
+    parts: [{ text: turn.text }],
+  }));
+
+  const chat = model.startChat({ history });
+  const result = await chat.sendMessage(userMessage);
+  return result.response.text().trim();
+}
+
+// ── Groq response (fallback) ──────────────────────────────────────────────────
+async function generateWithGroq(
+  userMessage: string,
+  systemPrompt: string,
+  conversationHistory: ConversationTurn[],
+): Promise<string> {
+  const client = getGroqClient();
+  if (!client) throw new Error('AI_API_KEY not set');
 
   const messages: { role: 'system' | 'user' | 'assistant'; content: string }[] = [
-    { role: 'system', content: buildSystemPrompt(menuData, cart, customerName) },
+    { role: 'system', content: systemPrompt },
   ];
 
-  // Add conversation history
   for (const turn of conversationHistory) {
     messages.push({
       role: turn.role === 'assistant' ? 'assistant' : 'user',
@@ -382,7 +414,46 @@ export async function generateResponse(
     temperature: 0.7,
   });
 
-  const rawResponse = (completion.choices[0]?.message?.content ?? '').trim();
+  return (completion.choices[0]?.message?.content ?? '').trim();
+}
+
+// ── Función principal ─────────────────────────────────────────────────────────
+export async function generateResponse(
+  userMessage: string,
+  menuData: string,
+  conversationHistory: ConversationTurn[] = [],
+  phone?: string,
+): Promise<AIResponse> {
+  if (!isAIAvailable()) {
+    throw new Error('No AI API key configured (GEMINI_API_KEY or AI_API_KEY)');
+  }
+
+  // Get current cart state for context
+  const cartSession: CartSession | undefined = phone ? getCartSession(phone) : undefined;
+  const cart = cartSession?.cart ?? [];
+  const customerName = cartSession?.customerName ?? '';
+
+  const systemPrompt = buildSystemPrompt(menuData, cart, customerName);
+
+  // Try Gemini first, fall back to Groq
+  let rawResponse: string;
+  const hasGemini = !!(process.env.GEMINI_API_KEY || config.aiApiKey);
+  const hasGroq = !!process.env.AI_API_KEY;
+
+  if (hasGemini) {
+    try {
+      rawResponse = await generateWithGemini(userMessage, systemPrompt, conversationHistory);
+      console.log('[AI] Using Gemini 2.0 Flash');
+    } catch (err) {
+      console.warn('[AI] Gemini failed, trying Groq fallback:', err);
+      if (!hasGroq) throw err;
+      rawResponse = await generateWithGroq(userMessage, systemPrompt, conversationHistory);
+      console.log('[AI] Using Groq fallback');
+    }
+  } else {
+    rawResponse = await generateWithGroq(userMessage, systemPrompt, conversationHistory);
+    console.log('[AI] Using Groq');
+  }
 
   // Detect handoff
   if (rawResponse === 'HANDOFF_TO_HUMAN' || rawResponse.includes('HANDOFF_TO_HUMAN')) {
@@ -416,5 +487,5 @@ export async function generateResponse(
 }
 
 export function isAIAvailable(): boolean {
-  return !!config.aiApiKey;
+  return !!(process.env.GEMINI_API_KEY || config.aiApiKey || process.env.AI_API_KEY);
 }
