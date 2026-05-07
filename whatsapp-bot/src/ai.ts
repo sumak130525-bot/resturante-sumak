@@ -500,6 +500,31 @@ export async function generateResponse(
     }
   }
 
+  // Safety net: if AI says "pedido creado" but didn't include CREATE_ORDER action,
+  // force-create the order from what's in the cart
+  if (phone && actions.every(a => a.action !== 'CREATE_ORDER')) {
+    const orderCreatedPhrases = /pedido (creado|confirmado|registrado|listo para ser retirado)/i;
+    if (orderCreatedPhrases.test(finalText)) {
+      console.warn('[AI] ⚠️ AI said order created but no CREATE_ORDER action — forcing creation');
+      const session = getCartSession(phone);
+      if (session && session.cart.length > 0 && session.customerName) {
+        try {
+          const result = await applyActions(
+            [{ action: 'CREATE_ORDER', payment_method: 'efectivo' }],
+            phone
+          );
+          if (result.confirmationMessage) {
+            finalText = result.confirmationMessage;
+          }
+        } catch (err) {
+          console.error('[AI] Error force-creating order:', err);
+        }
+      } else {
+        console.warn('[AI] ⚠️ Cannot force-create: cart empty or no name');
+      }
+    }
+  }
+
   return {
     text: finalText,
     handoffToHuman: false,
