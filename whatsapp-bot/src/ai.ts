@@ -117,32 +117,22 @@ CÓMO TOMAR PEDIDOS:
 - Cuando el cliente confirme el pago, incluí CREATE_ORDER en tu respuesta
 
 ACCIONES ESTRUCTURADAS:
-Al final de tu respuesta (DESPUÉS del texto visible para el cliente), podés incluir un bloque JSON de acciones así:
-[ACTIONS]{"actions":[...]}[/ACTIONS]
+Cuando necesites agregar items, crear pedidos, etc, agregá UN bloque de acciones AL FINAL de tu mensaje (después de tu texto). El cliente NO ve este bloque. Formato EXACTO:
 
-Este bloque NO se muestra al cliente. Las acciones posibles son:
+[ACTIONS]{"actions":[{"action":"ADD_ITEM","item_id":"UUID","item_name":"Nombre","price":1000,"quantity":1}]}[/ACTIONS]
 
-Para agregar un item al carrito:
-{"action":"ADD_ITEM","item_id":"UUID_DEL_ITEM","item_name":"Nombre del plato","price":PRECIO_NUMERICO,"quantity":1}
+Acciones disponibles:
+- ADD_ITEM: {"action":"ADD_ITEM","item_id":"UUID","item_name":"Nombre","price":PRECIO,"quantity":1}
+- REMOVE_ITEM: {"action":"REMOVE_ITEM","item_id":"UUID"}
+- SET_NAME: {"action":"SET_NAME","name":"Nombre"}
+- CREATE_ORDER: {"action":"CREATE_ORDER","payment_method":"efectivo"} (o "mercadopago")
+- CLEAR_CART: {"action":"CLEAR_CART"}
 
-Para quitar un item del carrito:
-{"action":"REMOVE_ITEM","item_id":"UUID_DEL_ITEM"}
-
-Para registrar el nombre del cliente:
-{"action":"SET_NAME","name":"Nombre del cliente"}
-
-Para crear el pedido en el sistema (cuando el cliente confirma todo):
-{"action":"CREATE_ORDER","payment_method":"efectivo"}
-o
-{"action":"CREATE_ORDER","payment_method":"mercadopago"}
-
-Para limpiar el carrito completamente:
-{"action":"CLEAR_CART"}
-
-IMPORTANTE sobre CREATE_ORDER:
-- Solo usá CREATE_ORDER cuando el cliente haya confirmado explícitamente el pedido Y el método de pago.
-- Antes de CREATE_ORDER el carrito debe tener al menos un item y tener el nombre del cliente.
-- Después de CREATE_ORDER, el sistema envía la confirmación automáticamente.
+REGLAS DE ACCIONES:
+- Siempre usá el formato [ACTIONS]{"actions":[...]}[/ACTIONS]
+- NUNCA muestres el bloque [ACTIONS] como texto visible al cliente
+- Antes de CREATE_ORDER necesitás: al menos 1 item en carrito + nombre del cliente + método de pago confirmado
+- Después de CREATE_ORDER el sistema confirma automáticamente al cliente
 
 ESTRATEGIAS DE VENTA:
 - Si piden un segundo, sugerí una sopa de entrada
@@ -201,18 +191,46 @@ interface ParsedResponse {
 }
 
 function parseAIResponse(raw: string): ParsedResponse {
-  const actionMatch = raw.match(/\[ACTIONS\]([\s\S]*?)\[\/ACTIONS\]/);
-  const visibleText = raw.replace(/\[ACTIONS\][\s\S]*?\[\/ACTIONS\]/g, '').trim();
+  // Try multiple patterns the AI might use
+  const patterns = [
+    /\[ACTIONS\]([\s\S]*?)\[\/ACTIONS\]/,
+    /\[ACTIONS\]([\s\S]*?)$/,  // Missing closing tag
+    /\[actions\]([\s\S]*?)\[\/actions\]/i,
+  ];
+
+  let actionJson: string | null = null;
+  let visibleText = raw;
+
+  for (const pattern of patterns) {
+    const match = raw.match(pattern);
+    if (match) {
+      actionJson = match[1].trim();
+      visibleText = raw.replace(pattern, '').trim();
+      break;
+    }
+  }
 
   const actions: BotAction[] = [];
-  if (actionMatch) {
+  if (actionJson) {
     try {
-      const parsed = JSON.parse(actionMatch[1].trim()) as { actions?: BotAction[] };
+      // Try as {"actions":[...]} format
+      const parsed = JSON.parse(actionJson) as { actions?: BotAction[]; action?: string };
       if (Array.isArray(parsed.actions)) {
         actions.push(...parsed.actions);
+      } else if (parsed.action) {
+        // Single action object like {"action":"CREATE_ORDER","payment_method":"efectivo"}
+        actions.push(parsed as unknown as BotAction);
       }
     } catch {
-      // ignore malformed action block
+      // Try to find any JSON object with "action" key
+      const jsonMatch = actionJson.match(/\{[^}]*"action"[^}]*\}/g);
+      if (jsonMatch) {
+        for (const j of jsonMatch) {
+          try {
+            actions.push(JSON.parse(j) as BotAction);
+          } catch { /* skip */ }
+        }
+      }
     }
   }
 
