@@ -503,12 +503,12 @@ export async function generateResponse(
   // Safety net: if AI says "pedido creado" but didn't include CREATE_ORDER action,
   // force-create the order from what's in the cart
   if (phone && actions.every(a => a.action !== 'CREATE_ORDER')) {
-    const orderCreatedPhrases = /pedido (está |fue )?(creado|confirmado|registrado|listo)/i;
+    const orderCreatedPhrases = /pedido (está |fue )?(creado|confirmado|registrado|listo)|se ha (creado|confirmado|registrado) (tu |su |el )?pedido|order (created|confirmed)/i;
     if (orderCreatedPhrases.test(finalText)) {
       console.warn('[AI] ⚠️ AI said order created but no CREATE_ORDER action — forcing creation');
       let session = getCartSession(phone);
 
-      // If no name set, try to extract from AI response or use last user message
+      // If no name set, try to extract from AI response or user message, or use default
       if (session && (!session.customerName || session.customerName.trim() === '')) {
         // Try extracting name from AI response (e.g. "Muchas gracias, Juan!")
         const nameMatch = finalText.match(/gracias,?\s+([A-ZÁÉÍÓÚÑa-záéíóúñ]+)/i) 
@@ -517,10 +517,15 @@ export async function generateResponse(
         if (nameMatch) {
           session = upsertCartSession(phone, { customerName: nameMatch[1] });
           console.log(`[AI] 📝 Extracted name from response: "${nameMatch[1]}"`);
-        } else if (userMessage.trim().length < 30 && /^[A-ZÁÉÍÓÚÑa-záéíóúñ\s]+$/.test(userMessage.trim())) {
+        } else if (userMessage.trim().length < 30 && /^(de |soy |me llamo )?[A-ZÁÉÍÓÚÑa-záéíóúñ\s]+$/i.test(userMessage.trim())) {
           // Last message looks like a name (short, only letters)
-          session = upsertCartSession(phone, { customerName: userMessage.trim() });
-          console.log(`[AI] 📝 Using user message as name: "${userMessage.trim()}"`);
+          const name = userMessage.trim().replace(/^(de |soy |me llamo )/i, '').trim();
+          session = upsertCartSession(phone, { customerName: name });
+          console.log(`[AI] 📝 Using user message as name: "${name}"`);
+        } else {
+          // Default name so order still gets created
+          session = upsertCartSession(phone, { customerName: 'Cliente WhatsApp' });
+          console.log(`[AI] 📝 No name found — using default "Cliente WhatsApp"`);
         }
       }
 
