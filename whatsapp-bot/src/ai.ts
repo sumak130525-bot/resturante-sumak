@@ -530,6 +530,46 @@ export async function generateResponse(
       }
 
       session = getCartSession(phone);
+      
+      // If cart is STILL empty, try to extract item from AI response or user message
+      if (!session || session.cart.length === 0) {
+        console.warn('[AI] ⚠️ Cart empty despite order confirmation — trying to extract items');
+        const { getMenu } = await import('./menu');
+        const { items: menuItems } = await getMenu();
+        
+        // Search in both user message and AI response for menu item names
+        const searchText = `${userMessage} ${finalText}`.toLowerCase();
+        let foundItem = null;
+        let note = '';
+        
+        for (const item of menuItems) {
+          const itemNameLower = item.name.toLowerCase();
+          // Try exact match or partial match (e.g. "picante" matches "Picante de Pollo")
+          const keywords = itemNameLower.split(/\s+/);
+          const mainKeyword = keywords[0]; // First word (e.g. "picante", "milanesa", "sopa")
+          if (searchText.includes(itemNameLower) || searchText.includes(mainKeyword)) {
+            foundItem = item;
+            break;
+          }
+        }
+        
+        if (foundItem) {
+          // Extract note (sin chuño, fritas, sin arroz, etc.)
+          const noteMatch = userMessage.match(/\b(sin|con|solo|bien|al)\s+\w+(\s+\w+)?/i);
+          if (noteMatch) note = noteMatch[0].toUpperCase();
+          
+          // Add item to cart
+          if (!session) session = getCartSession(phone) ?? { cart: [], customerName: '', phone, lastActive: Date.now() };
+          upsertCartSession(phone, { 
+            cart: [{ id: foundItem.id, name: foundItem.name, price: foundItem.price, quantity: 1, note: note || undefined }] 
+          });
+          console.log(`[AI] 🛒 Auto-added from text: "${foundItem.name}" $${foundItem.price}${note ? ` (${note})` : ''}`);
+          session = getCartSession(phone);
+        } else {
+          console.warn('[AI] ❌ Could not find any menu item in text');
+        }
+      }
+      
       if (session && session.cart.length > 0 && session.customerName) {
         try {
           const result = await applyActions(
