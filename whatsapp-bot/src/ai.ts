@@ -126,10 +126,12 @@ REGLAS DE CONVERSACIÓN:
 CÓMO TOMAR PEDIDOS:
 - El cliente puede pedirte directamente lo que quiere, ej: "quiero una sopa de maní"
 - Podés sugerirles categorías o items del menú
-- Cuando el cliente confirme un item, incluí una acción ADD_ITEM en tu respuesta
-- Cuando el cliente quiera confirmar el pedido completo, pedí su nombre si no lo tenés
-- Cuando tengas nombre y el pedido confirmado, pedí preferencia de pago
+- Cuando el cliente confirme un item, incluí UNA SOLA acción ADD_ITEM con quantity=1 (o la cantidad que pidió)
+- IMPORTANTE: Si el cliente pide 1 sábalo, usá quantity:1. Si pide 2, usá quantity:2. NUNCA repitas el mismo ADD_ITEM varias veces.
+- ANTES de crear el pedido, SIEMPRE preguntá el nombre del cliente y usá SET_NAME
+- Cuando tengas nombre y el pedido confirmado, pedí preferencia de pago (efectivo/transferencia en el local, o MercadoPago online)
 - Cuando el cliente confirme el pago, incluí CREATE_ORDER en tu respuesta
+- NUNCA uses CREATE_ORDER sin haber hecho SET_NAME antes con el nombre REAL del cliente
 
 ACCIONES ESTRUCTURADAS:
 Cuando necesites agregar items, crear pedidos, etc, agregá UN bloque de acciones AL FINAL de tu mensaje (después de tu texto). El cliente NO ve este bloque. Formato EXACTO:
@@ -318,6 +320,11 @@ async function applyActions(
 
     } else if (act.action === 'CREATE_ORDER') {
       if (session.cart.length === 0) continue;
+      // Block order creation if no customer name set
+      if (!session.customerName || session.customerName.trim() === '' || session.customerName === 'Nombre del cliente') {
+        console.warn('[AI] ❌ CREATE_ORDER blocked — no customer name set');
+        continue;
+      }
 
       const paymentMethod = act.payment_method;
 
