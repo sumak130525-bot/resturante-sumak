@@ -196,7 +196,7 @@ const translations: Record<Locale, TranslationDict> = {
     notificationsBlockedClose: 'Entendido',
 
     paymentApproved: '¡Pago confirmado!',
-    paymentApprovedDesc: 'Tu pedido fue confirmado y está en preparación. En breve lo tendrás listo.',
+    paymentApprovedDesc: 'Tu pedido fue confirmado y está en preparación. Te avisamos por WhatsApp cuando esté listo para retirar.',
     orderNumber: 'Pedido #{id}',
     backToMenu: 'Volver al menú',
     paymentFailure: 'Pago no procesado',
@@ -287,7 +287,7 @@ const translations: Record<Locale, TranslationDict> = {
     notificationsBlockedClose: 'Got it',
 
     paymentApproved: 'Payment confirmed!',
-    paymentApprovedDesc: 'Your order has been confirmed and is being prepared. It will be ready shortly.',
+    paymentApprovedDesc: 'Your order has been confirmed and is being prepared. We will notify you via WhatsApp when it is ready for pickup.',
     orderNumber: 'Order #{id}',
     backToMenu: 'Back to menu',
     paymentFailure: 'Payment not processed',
