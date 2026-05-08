@@ -340,6 +340,18 @@ function getOrderLabel(order: KdsOrder): string {
   return order.number
 }
 
+// ─── Filtro bebidas botella (solo POS) ───────────────────────────────────────
+
+const BOTTLE_KEYWORDS = [
+  'coca', 'pepsi', 'fanta', 'sprite', 'agua mineral', 'cerveza',
+  'gaseosa', 'energizante', 'speed', 'red bull', 'manaos',
+]
+
+function isBottleDrink(name: string): boolean {
+  const lower = name.toLowerCase()
+  return BOTTLE_KEYWORDS.some((kw) => lower.includes(kw)) && !lower.includes('jarra')
+}
+
 // ─── Componente Card ──────────────────────────────────────────────────────────
 
 function OrderCard({
@@ -359,7 +371,13 @@ function OrderCard({
     return loadStruck(order.id)
   })
 
-  const allStruck = order.items.length > 0 && struckIndices.size === order.items.length
+  // ── Filtrar bebidas botella en pedidos POS (no WhatsApp) ──
+  const isPOS = order.source === 'POS' && order.channel !== 'whatsapp'
+  const displayItems = isPOS ? order.items.filter((item) => !isBottleDrink(item.name)) : order.items
+
+  if (isPOS && displayItems.length === 0) return null
+
+  const allStruck = displayItems.length > 0 && struckIndices.size === displayItems.length
 
   const toggleStruck = (idx: number) => {
     if (isDelivered) return
@@ -417,7 +435,7 @@ function OrderCard({
               {orderLabel}
             </span>
           </div>
-          <div className={`flex items-center gap-1 text-sm font-mono font-bold shrink-0 ${elapsedColor(order.created_at)} bg-white/40 rounded-lg px-2 py-0.5`}>
+          <div className={`flex items-center gap-1 text-xl font-mono font-bold shrink-0 ${elapsedColor(order.created_at)} bg-white/40 rounded-lg px-2 py-0.5`}>
             <span>{elapsed(order.created_at)}</span>
             <span className="text-white/70 text-xs font-normal">
               {new Date(order.created_at).toLocaleTimeString('es-CO', {
@@ -482,7 +500,7 @@ function OrderCard({
           </div>
         )}
         <ul className="flex flex-col gap-2">
-          {order.items.map((item, i) => {
+          {displayItems.map((item, i) => {
             const struck = struckIndices.has(i)
             return (
               <li
