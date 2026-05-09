@@ -3,18 +3,7 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
 import { AdminLayoutClient } from '@/components/admin/AdminLayoutClient'
 import { Settings, Upload, Trash2, Image as ImageIcon, RefreshCw } from 'lucide-react'
-import type { TicketConfig } from '@/app/api/settings/ticket-config/route'
-
-const DEFAULT_TICKET_CONFIG: TicketConfig = {
-  width: 22,
-  separator: '-',
-  header1: 'SUMAK',
-  header2: 'Restaurante',
-  footer1: 'Gracias por su visita!',
-  footer2: 'Restaurante Sumak',
-  showLogo: true,
-  fontSize: '12px',
-}
+import { type TicketConfig, DEFAULT_TICKET_CONFIG } from '@/types/ticket-config'
 
 export default function AdminConfiguracionPage() {
   const [logoUrl, setLogoUrl] = useState<string | null>(null)

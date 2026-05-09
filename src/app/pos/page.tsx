@@ -5,30 +5,7 @@ import { useMenuRealtime } from '@/hooks/useMenuRealtime'
 import type { MenuItem } from '@/lib/types'
 import { useTranslation, getItemName, type Locale } from '@/lib/i18n'
 import { useLanguagesEnabled } from '@/hooks/useLanguagesEnabled'
-
-// ─── Ticket config type & defaults ───────────────────────────────────────────
-
-type TicketConfig = {
-  width: number
-  separator: string
-  header1: string
-  header2: string
-  footer1: string
-  footer2: string
-  showLogo: boolean
-  fontSize: string
-}
-
-const DEFAULT_TICKET_CONFIG: TicketConfig = {
-  width: 22,
-  separator: '-',
-  header1: 'SUMAK',
-  header2: 'Restaurante',
-  footer1: 'Gracias por su visita!',
-  footer2: 'Restaurante Sumak',
-  showLogo: true,
-  fontSize: '12px',
-}
+import { type TicketConfig, DEFAULT_TICKET_CONFIG } from '@/types/ticket-config'
 
 // ─── Ticket helpers ───────────────────────────────────────────────────────────
 
