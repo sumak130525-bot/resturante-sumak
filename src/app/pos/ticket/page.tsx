@@ -148,8 +148,15 @@ export default function TicketPage() {
           ...(isLast ? { paddingBottom: `${pbottom}px` } : {}),
           ...(isHeaderOrFooter ? { textAlign: 'center', fontSize: headerFontSize } : { textAlign: 'left' }),
         }
-        // Split segment into lines; price lines (leading spaces then $) are right-aligned
+        // Split segment into lines; TOTAL lines are right-aligned bold+large; price lines (leading spaces then $) are right-aligned
         const renderedLines = segment.split('\n').map((line, li) => {
+          if (/TOTAL/i.test(line)) {
+            return (
+              <span key={li} style={{ display: 'block', textAlign: 'right', width: '100%', fontWeight: 'bold', fontSize: '1.3em' }}>
+                {line.trim()}
+              </span>
+            )
+          }
           if (/^\s+\$/.test(line)) {
             return (
               <span key={li} style={{ display: 'block', textAlign: 'right', width: '100%' }}>
