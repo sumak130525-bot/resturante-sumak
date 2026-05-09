@@ -1306,7 +1306,7 @@ export default function POSPage() {
         return cat ? item.category_id === cat.id : true
       })
 
-  const displayItems = filteredItems.slice(0, MAX_VISIBLE)
+  const displayItems = activeCategory === 'all' ? filteredItems.slice(0, GRID_SIZE) : filteredItems.slice(0, MAX_VISIBLE)
 
   // Items for edit mode: all positioned items (display_order 1-24), not filtered by category
   const positionedItems = menuItems.filter((item) => (item.display_order ?? 0) > 0)
