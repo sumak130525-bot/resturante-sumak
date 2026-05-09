@@ -307,9 +307,76 @@ async function getLocalOrders(): Promise<KdsOrder[]> {
   }
 }
 
+// ─── Web orders entregados hoy ────────────────────────────────────────────────
+
+async function getDeliveredOrdersToday(): Promise<KdsOrder[]> {
+  const cookieStore = await cookies()
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll() { return cookieStore.getAll() },
+        setAll(cookiesToSet: { name: string; value: string; options: CookieOptions }[]) {
+          try { cookiesToSet.forEach(({ name, value, options }) => cookieStore.set(name, value, options)) } catch {}
+        },
+      },
+    }
+  )
+
+  // Desde las 00:00 del día de hoy (hora local del servidor)
+  const todayStart = new Date()
+  todayStart.setHours(0, 0, 0, 0)
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data, error } = await (supabase as any)
+    .from('orders')
+    .select('*, order_items(quantity, unit_price, line_note, menu_items(name))')
+    .eq('status', 'delivered')
+    .gte('created_at', todayStart.toISOString())
+    .order('created_at', { ascending: false })
+
+  if (error || !data) return []
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return (data as any[]).map((o, idx) => {
+    const isPOS = o.channel === 'pos'
+    return {
+      id: o.id,
+      source: isPOS ? ('POS' as const) : ('WEB' as const),
+      number: isPOS ? `P-${String(idx + 1).padStart(3, '0')}` : `W-${String(idx + 1).padStart(3, '0')}`,
+      customer: o.customer_name,
+      status: o.status,
+      channel: (o.channel === 'whatsapp' ? 'whatsapp' : o.channel === 'pos' ? 'pos' : 'web') as 'web' | 'whatsapp' | 'pos',
+      customer_phone: o.customer_phone ?? null,
+      tableNumber: o.table_number ?? o.mesa ?? (isPOS && o.notes ? (o.notes.match(/Mesa (\d+)/)?.[1] ?? null) : null),
+      diningOption: o.dining_option ?? undefined,
+      paymentMethod: o.payment_method ?? undefined,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      items: (o.order_items ?? []).map((i: any) => ({
+        name: i.menu_items?.name ?? 'Ítem',
+        quantity: i.quantity,
+        price: i.unit_price,
+        note: i.line_note ?? null,
+      })),
+      total: o.total,
+      notes: o.notes,
+      created_at: o.created_at,
+    }
+  })
+}
+
 // ─── Handler ──────────────────────────────────────────────────────────────────
 
-export async function GET() {
+export async function GET(request: Request) {
+  const { searchParams } = new URL(request.url)
+
+  // ?delivered=true → devuelve los pedidos entregados del día de hoy
+  if (searchParams.get('delivered') === 'true') {
+    const delivered = await getDeliveredOrdersToday()
+    return NextResponse.json(delivered, { headers: { 'Cache-Control': 'no-store' } })
+  }
+
   const [webOrders, localOrders] = await Promise.all([
     getWebOrders(),
     getLocalOrders(),

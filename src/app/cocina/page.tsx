@@ -790,6 +790,8 @@ export default function CocinaPage() {
   }, [playSoundWithRef])
 
   // ── Fetch ──────────────────────────────────────────────────────────────────
+  const deliveredFetchedRef = useRef(false)
+
   const fetchOrders = useCallback(async () => {
     try {
       const res = await fetch('/api/cocina/orders', { cache: 'no-store' })
@@ -806,6 +808,20 @@ export default function CocinaPage() {
         setLastCount((c) => c + (data.length - prevCountRef.current))
       }
       prevCountRef.current = data.length
+
+      // Carga inicial de pedidos entregados del día (solo una vez al montar)
+      if (!deliveredFetchedRef.current) {
+        deliveredFetchedRef.current = true
+        try {
+          const dRes = await fetch('/api/cocina/orders?delivered=true', { cache: 'no-store' })
+          if (dRes.ok) {
+            const delivered: KdsOrder[] = await dRes.json()
+            setDeliveredOrders(delivered)
+          }
+        } catch {
+          // silencioso
+        }
+      }
     } catch {
       // silencioso
     } finally {
