@@ -157,7 +157,6 @@ function buildTicketText(data: PrintData, cfg: TicketConfig = DEFAULT_TICKET_CON
   return [
     cfg.header1 ? alignText(cfg.header1, headerAlign) : '',
     cfg.header2 ? alignText(cfg.header2, headerAlign) : '',
-    sectionGap,
     LINES,
     ...infoLines,
     LINES,
@@ -167,7 +166,6 @@ function buildTicketText(data: PrintData, cfg: TicketConfig = DEFAULT_TICKET_CON
     payLine,
     clienteLine,
     LINES,
-    sectionGap,
     cfg.footer1 ? alignText(cfg.footer1, footerAlign) : '',
     cfg.footer2 ? alignText(cfg.footer2, footerAlign) : '',
     feedLines,

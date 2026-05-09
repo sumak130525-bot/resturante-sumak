@@ -124,7 +124,7 @@ export default function TicketPage() {
   }
 
   return (
-    <div style={{ background: 'white', margin: 0, padding: 0, maxWidth: '72mm', width: '100%' }}>
+    <div style={{ background: 'white', margin: '0 auto', padding: 0, width: '72mm', overflow: 'hidden', boxSizing: 'border-box' }}>
       <style>{`@page { margin: 0; padding: 0; size: 72mm auto; } @media print { .no-print { display: none !important; } body, html { margin: 0; padding: 0; } }`}</style>
       {logoUrl && (
         <div style={{ textAlign: 'center', margin: 0, padding: '4px 0' }}>
@@ -148,11 +148,22 @@ export default function TicketPage() {
           ...(isLast ? { paddingBottom: `${pbottom}px` } : {}),
           ...(isHeaderOrFooter ? { textAlign: 'center', fontSize: headerFontSize } : { textAlign: 'left' }),
         }
+        // Split segment into lines; price lines (leading spaces then $) are right-aligned
+        const renderedLines = segment.split('\n').map((line, li) => {
+          if (/^\s+\$/.test(line)) {
+            return (
+              <span key={li} style={{ display: 'block', textAlign: 'right', width: '100%' }}>
+                {line.trimStart()}
+              </span>
+            )
+          }
+          return <span key={li} style={{ display: 'block' }}>{line}</span>
+        })
         return (
           <React.Fragment key={`frag-${idx}`}>
             {!isFirst && renderSep(idx)}
             <pre style={segStyle}>
-              {segment}
+              {renderedLines}
             </pre>
           </React.Fragment>
         )
