@@ -175,6 +175,7 @@ type TicketItem = {
   image_url?: string | null
   modifiers?: SelectedModifier[]
   person_number?: number | null  // null / undefined = single-person mode
+  customNote?: string            // free-text note per item (e.g. "sin chuño")
 }
 
 type DiningOption = 'Comer dentro' | 'Para llevar'
@@ -1052,57 +1053,96 @@ function TicketItemRow({
   item,
   onUpdateQty,
   onRemove,
+  onUpdateNote,
 }: {
   item: TicketItem
   onUpdateQty: (uid: string, delta: number) => void
   onRemove: (uid: string) => void
+  onUpdateNote: (uid: string, note: string) => void
 }) {
+  const [noteOpen, setNoteOpen] = useState(false)
   const modExtra = (item.modifiers ?? []).reduce((ms, m) => ms + m.price, 0)
   const unitTotal = item.price + modExtra
   return (
-    <li className="flex items-start gap-1.5 bg-gray-50 rounded-xl px-2.5 py-1.5 border border-gray-100">
-      <div className="flex-1 min-w-0">
-        <p className="font-semibold text-gray-900 text-sm leading-tight truncate">{item.name}</p>
-        {(item.modifiers ?? []).length > 0 && (
-          <div className="mt-0.5">
-            {item.modifiers!.map((m, idx) => (
-              <p key={idx} className="text-gray-500 text-xs leading-tight pl-2">
-                · {m.optionName}
-                {m.price > 0 && (
-                  <span className="text-teal-600"> +{formatARS(m.price)}</span>
-                )}
-              </p>
-            ))}
-          </div>
-        )}
-        <p className="text-teal-600 font-bold text-xs tabular-nums mt-0.5">
-          {formatARS(unitTotal)} × {item.quantity} = {formatARS(unitTotal * item.quantity)}
-        </p>
+    <li className="flex flex-col bg-gray-50 rounded-xl px-2.5 py-1.5 border border-gray-100 gap-1">
+      <div className="flex items-start gap-1.5">
+        <div className="flex-1 min-w-0">
+          <p className="font-semibold text-gray-900 text-sm leading-tight truncate">{item.name}</p>
+          {(item.modifiers ?? []).length > 0 && (
+            <div className="mt-0.5">
+              {item.modifiers!.map((m, idx) => (
+                <p key={idx} className="text-gray-500 text-xs leading-tight pl-2">
+                  · {m.optionName}
+                  {m.price > 0 && (
+                    <span className="text-teal-600"> +{formatARS(m.price)}</span>
+                  )}
+                </p>
+              ))}
+            </div>
+          )}
+          {item.customNote && !noteOpen && (
+            <p className="text-orange-600 text-xs leading-tight pl-2 mt-0.5 italic">✎ {item.customNote}</p>
+          )}
+          <p className="text-teal-600 font-bold text-xs tabular-nums mt-0.5">
+            {formatARS(unitTotal)} × {item.quantity} = {formatARS(unitTotal * item.quantity)}
+          </p>
+        </div>
+        <div className="flex items-center gap-0.5 shrink-0 mt-0.5">
+          <button
+            onClick={() => setNoteOpen((o) => !o)}
+            className={`w-6 h-6 rounded-md flex items-center justify-center text-xs transition-all active:scale-90 ${
+              item.customNote
+                ? 'bg-orange-100 hover:bg-orange-200 text-orange-600'
+                : 'bg-gray-200 hover:bg-gray-300 text-gray-500'
+            }`}
+            aria-label="Agregar nota"
+            title="Nota del ítem"
+          >
+            ✎
+          </button>
+          <button
+            onClick={() => onUpdateQty(item.uid, -1)}
+            className="w-6 h-6 rounded-md bg-gray-200 hover:bg-gray-300 active:scale-90 flex items-center justify-center font-black text-gray-700 text-sm transition-all"
+            aria-label="Quitar uno"
+          >
+            −
+          </button>
+          <span className="w-6 text-center font-black text-gray-900 tabular-nums text-sm">{item.quantity}</span>
+          <button
+            onClick={() => onUpdateQty(item.uid, +1)}
+            className="w-6 h-6 rounded-md bg-teal-100 hover:bg-teal-200 active:scale-90 flex items-center justify-center font-black text-teal-700 text-sm transition-all"
+            aria-label="Agregar uno"
+          >
+            +
+          </button>
+          <button
+            onClick={() => onRemove(item.uid)}
+            className="w-6 h-6 rounded-md bg-red-100 hover:bg-red-200 active:scale-90 flex items-center justify-center text-red-600 font-black text-xs transition-all ml-0.5"
+            aria-label="Eliminar"
+          >
+            ✕
+          </button>
+        </div>
       </div>
-      <div className="flex items-center gap-0.5 shrink-0 mt-0.5">
-        <button
-          onClick={() => onUpdateQty(item.uid, -1)}
-          className="w-6 h-6 rounded-md bg-gray-200 hover:bg-gray-300 active:scale-90 flex items-center justify-center font-black text-gray-700 text-sm transition-all"
-          aria-label="Quitar uno"
-        >
-          −
-        </button>
-        <span className="w-6 text-center font-black text-gray-900 tabular-nums text-sm">{item.quantity}</span>
-        <button
-          onClick={() => onUpdateQty(item.uid, +1)}
-          className="w-6 h-6 rounded-md bg-teal-100 hover:bg-teal-200 active:scale-90 flex items-center justify-center font-black text-teal-700 text-sm transition-all"
-          aria-label="Agregar uno"
-        >
-          +
-        </button>
-        <button
-          onClick={() => onRemove(item.uid)}
-          className="w-6 h-6 rounded-md bg-red-100 hover:bg-red-200 active:scale-90 flex items-center justify-center text-red-600 font-black text-xs transition-all ml-0.5"
-          aria-label="Eliminar"
-        >
-          ✕
-        </button>
-      </div>
+      {noteOpen && (
+        <div className="flex items-center gap-1.5 mt-0.5">
+          <input
+            type="text"
+            value={item.customNote ?? ''}
+            onChange={(e) => onUpdateNote(item.uid, e.target.value)}
+            placeholder="Ej: sin chuño, solo papas..."
+            autoFocus
+            className="flex-1 rounded-lg border border-orange-300 px-2 py-1 text-xs font-medium text-gray-900 bg-white focus:outline-none focus:ring-2 focus:ring-orange-400"
+          />
+          <button
+            onClick={() => setNoteOpen(false)}
+            className="shrink-0 text-xs text-gray-400 hover:text-gray-600 font-bold px-1"
+            aria-label="Cerrar nota"
+          >
+            ✓
+          </button>
+        </div>
+      )}
     </li>
   )
 }
@@ -1116,6 +1156,7 @@ function TicketPanel({
   activePerson,
   onUpdateQty,
   onRemove,
+  onUpdateNote,
   onDiningChange,
   onPersonsChange,
   onActivePersonChange,
@@ -1127,6 +1168,7 @@ function TicketPanel({
   activePerson: number
   onUpdateQty: (uid: string, delta: number) => void
   onRemove: (uid: string) => void
+  onUpdateNote: (uid: string, note: string) => void
   onDiningChange: (v: DiningOption) => void
   onPersonsChange: (v: number) => void
   onActivePersonChange: (v: number) => void
@@ -1238,7 +1280,7 @@ function TicketPanel({
                   </div>
                   <ul className="flex flex-col gap-1">
                     {personItems.map((item) => (
-                      <TicketItemRow key={item.uid} item={item} onUpdateQty={onUpdateQty} onRemove={onRemove} />
+                      <TicketItemRow key={item.uid} item={item} onUpdateQty={onUpdateQty} onRemove={onRemove} onUpdateNote={onUpdateNote} />
                     ))}
                   </ul>
                 </div>
@@ -1249,7 +1291,7 @@ function TicketPanel({
           // Single-person view: flat list (unchanged)
           <ul className="flex flex-col gap-1">
             {items.map((item) => (
-              <TicketItemRow key={item.uid} item={item} onUpdateQty={onUpdateQty} onRemove={onRemove} />
+              <TicketItemRow key={item.uid} item={item} onUpdateQty={onUpdateQty} onRemove={onRemove} onUpdateNote={onUpdateNote} />
             ))}
           </ul>
         )}
@@ -1505,6 +1547,10 @@ export default function POSPage() {
     setTicketItems((prev) => prev.filter((i) => i.uid !== uid))
   }, [])
 
+  const handleUpdateNote = useCallback((uid: string, note: string) => {
+    setTicketItems((prev) => prev.map((i) => i.uid === uid ? { ...i, customNote: note } : i))
+  }, [])
+
   const handleSubmit = useCallback(async () => {
     if (ticketItems.length === 0) return
     setSubmitting(true)
@@ -1515,14 +1561,21 @@ export default function POSPage() {
       }, 0)
 
       // Build items with line_note for modifiers + person_number if multi-person
-      const itemsPayload = ticketItems.map((item) => ({
-        menu_item_id: item.menu_item_id,
-        name: item.name,
-        quantity: item.quantity,
-        price: item.price + (item.modifiers ?? []).reduce((s, m) => s + m.price, 0),
-        line_note: buildLineNote(item.modifiers ?? []),
-        ...(persons > 1 && item.person_number ? { person_number: item.person_number } : {}),
-      }))
+      const itemsPayload = ticketItems.map((item) => {
+        const modNote = buildLineNote(item.modifiers ?? [])
+        const customNote = item.customNote?.trim() || null
+        const line_note = modNote && customNote
+          ? `${modNote} · ${customNote}`
+          : modNote ?? customNote
+        return {
+          menu_item_id: item.menu_item_id,
+          name: item.name,
+          quantity: item.quantity,
+          price: item.price + (item.modifiers ?? []).reduce((s, m) => s + m.price, 0),
+          line_note,
+          ...(persons > 1 && item.person_number ? { person_number: item.person_number } : {}),
+        }
+      })
 
       // Mesa goes in notes for kitchen extraction (header), user note is separate
       const mesaPart = diningOption === 'Comer dentro' && tableNumber ? `Mesa ${tableNumber}` : ''
@@ -1782,6 +1835,7 @@ export default function POSPage() {
               activePerson={activePerson}
               onUpdateQty={handleUpdateQty}
               onRemove={handleRemove}
+              onUpdateNote={handleUpdateNote}
               onDiningChange={setDiningOption}
               onPersonsChange={setPersons}
               onActivePersonChange={setActivePerson}

@@ -12,6 +12,7 @@ export type KdsItem = {
   price: number
   modifiers?: string[]
   note?: string | null
+  person_number?: number | null
 }
 
 export type KdsOrder = {
@@ -32,6 +33,7 @@ export type KdsOrder = {
   paymentMethod?: string    // payments[0].name (ej: 'Efectivo')
   // Campos extra WEB / POS
   tableNumber?: string      // mesa del pedido web (del parámetro ?mesa=)
+  persons?: number | null   // cantidad de personas del pedido
 }
 
 // ─── Supabase ─────────────────────────────────────────────────────────────────
@@ -57,7 +59,7 @@ async function getWebOrders(): Promise<KdsOrder[]> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data, error } = await (supabase as any)
     .from('orders')
-    .select('*, order_items(quantity, unit_price, line_note, menu_items(name))')
+    .select('*, order_items(quantity, unit_price, line_note, person_number, menu_items(name))')
     .gte('created_at', since)
     .not('status', 'in', '("delivered","cancelled")')
     .order('created_at', { ascending: true })
@@ -84,10 +86,12 @@ async function getWebOrders(): Promise<KdsOrder[]> {
         quantity: i.quantity,
         price: i.unit_price,
         note: i.line_note ?? null,
+        person_number: i.person_number ?? null,
       })),
       total: o.total,
       notes: o.notes,
       created_at: o.created_at,
+      persons: o.persons ?? null,
     }
   })
 }
@@ -331,7 +335,7 @@ async function getDeliveredOrdersToday(): Promise<KdsOrder[]> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data, error } = await (supabase as any)
     .from('orders')
-    .select('*, order_items(quantity, unit_price, line_note, menu_items(name))')
+    .select('*, order_items(quantity, unit_price, line_note, person_number, menu_items(name))')
     .eq('status', 'delivered')
     .gte('created_at', todayStart.toISOString())
     .order('created_at', { ascending: false })
@@ -358,10 +362,12 @@ async function getDeliveredOrdersToday(): Promise<KdsOrder[]> {
         quantity: i.quantity,
         price: i.unit_price,
         note: i.line_note ?? null,
+        person_number: i.person_number ?? null,
       })),
       total: o.total,
       notes: o.notes,
       created_at: o.created_at,
+      persons: o.persons ?? null,
     }
   })
 }
