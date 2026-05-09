@@ -64,12 +64,9 @@ function buildTicketText(data: PrintData, cfg: TicketConfig = DEFAULT_TICKET_CON
   const marginRight = cfg.marginRight ?? 0
   const leftPad = ' '.repeat(marginLeft)
 
-  // Separator width: full paper width (no margins) or content width
-  const sepWidth = (cfg.separatorFullWidth ?? true) ? W : Math.max(1, W - marginLeft - marginRight)
-  const sepLine = cfg.separator.repeat(sepWidth)
-  // Full-width separators start at column 0 (no leftPad); content separators respect leftPad
-  const LINE = (cfg.separatorFullWidth ?? true) ? sepLine : leftPad + sepLine
-  const LINES = (cfg.separatorDouble ?? false) ? LINE + '\n' + LINE : LINE
+  // Separator markers — rendered as full-width HTML elements in ticket/page.tsx
+  const SEP = '---SEP---'
+  const LINES = SEP
 
   const total = formatTicketMoney(data.total)
 
@@ -195,6 +192,8 @@ function triggerPrint(ticketText: string, logoUrl?: string | null, cfg?: TicketC
   sessionStorage.setItem('pos_ticket_marginbottom', String(c.marginBottom))
   sessionStorage.setItem('pos_ticket_marginleft', String(c.marginLeft))
   sessionStorage.setItem('pos_ticket_marginright', String(c.marginRight))
+  sessionStorage.setItem('pos_ticket_separator', c.separator ?? '-')
+  sessionStorage.setItem('pos_ticket_separatordouble', String(c.separatorDouble ?? false))
   window.location.href = '/pos/ticket'
 }
 

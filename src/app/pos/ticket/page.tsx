@@ -2,6 +2,17 @@
 
 import { useEffect, useState } from 'react'
 
+// Map separator char from config to CSS border style
+function sepCharToBorder(char: string): string {
+  switch (char) {
+    case '.': return 'dotted'
+    case '*': return 'dashed'
+    case '=': return 'double'
+    case '-':
+    default:  return 'solid'
+  }
+}
+
 export default function TicketPage() {
   const [ticketText, setTicketText] = useState<string | null>(null)
   const [logoUrl, setLogoUrl] = useState<string | null>(null)
@@ -9,6 +20,8 @@ export default function TicketPage() {
   const [fontFamily, setFontFamily] = useState("'Courier New', Courier, monospace")
   const [lineSpacing, setLineSpacing] = useState(4)
   const [headerBold, setHeaderBold] = useState(true)
+  const [separatorChar, setSeparatorChar] = useState('-')
+  const [separatorDouble, setSeparatorDouble] = useState(false)
   // Margins in mm → converted to px (1mm ≈ 3.78px)
   const [marginTop, setMarginTop] = useState(4)
   const [marginBottom, setMarginBottom] = useState(4)
@@ -40,6 +53,12 @@ export default function TicketPage() {
     const hb = sessionStorage.getItem('pos_ticket_headerbold')
     if (hb !== null) setHeaderBold(hb !== 'false')
 
+    const sep = sessionStorage.getItem('pos_ticket_separator')
+    if (sep) setSeparatorChar(sep)
+
+    const sepd = sessionStorage.getItem('pos_ticket_separatordouble')
+    if (sepd !== null) setSeparatorDouble(sepd === 'true')
+
     const mt = sessionStorage.getItem('pos_ticket_margintop')
     if (mt !== null) setMarginTop(Number(mt))
     const mb = sessionStorage.getItem('pos_ticket_marginbottom')
@@ -64,6 +83,42 @@ export default function TicketPage() {
   const pleft = Math.round(marginLeft * MM_TO_PX)
   const pright = Math.round(marginRight * MM_TO_PX)
 
+  const borderStyle = sepCharToBorder(separatorChar)
+
+  // Shared style for every <pre> segment
+  const preStyle: React.CSSProperties = {
+    fontFamily,
+    fontSize,
+    fontWeight: headerBold ? 'bold' : 'normal',
+    lineHeight: lineHeightValue,
+    color: 'black',
+    margin: 0,
+    whiteSpace: 'pre',
+    width: '100%',
+    boxSizing: 'border-box',
+    paddingLeft: `${pleft}px`,
+    paddingRight: `${pright}px`,
+  }
+
+  // Split the ticket text by separator markers
+  const SEP_MARKER = '---SEP---'
+  const segments = ticketText.split(SEP_MARKER)
+
+  // Separator element (single or double)
+  const renderSep = (key: number) => {
+    if (separatorDouble) {
+      return (
+        <div key={`sep-${key}`} style={{ width: '100%', boxSizing: 'border-box' }}>
+          <div style={{ width: '100%', borderTop: `1px ${borderStyle} black`, marginBottom: '2px' }} />
+          <div style={{ width: '100%', borderTop: `1px ${borderStyle} black` }} />
+        </div>
+      )
+    }
+    return (
+      <div key={`sep-${key}`} style={{ width: '100%', borderTop: `1px ${borderStyle} black`, boxSizing: 'border-box' }} />
+    )
+  }
+
   return (
     <div style={{ background: 'white', margin: 0, padding: 0, maxWidth: '72mm', width: '100%' }}>
       <style>{`@page { margin: 0; padding: 0; size: 72mm auto; } @media print { .no-print { display: none !important; } body, html { margin: 0; padding: 0; } }`}</style>
@@ -77,21 +132,36 @@ export default function TicketPage() {
           />
         </div>
       )}
-      <pre style={{
-        fontFamily: fontFamily,
-        fontSize: fontSize,
-        fontWeight: headerBold ? 'bold' : 'normal',
-        lineHeight: lineHeightValue,
-        color: 'black',
-        margin: 0,
-        whiteSpace: 'pre',
-        width: '100%',
-        boxSizing: 'border-box' as const,
-        paddingTop: `${ptop}px`,
-        paddingBottom: `${pbottom}px`,
-        paddingLeft: `${pleft}px`,
-        paddingRight: `${pright}px`,
-      }}>{ticketText}</pre>
+
+      {/* First segment gets top padding; last segment gets bottom padding */}
+      {segments.map((segment, idx) => (
+        <>
+          {idx === 0
+            ? (
+              <pre key={`seg-${idx}`} style={{ ...preStyle, paddingTop: `${ptop}px` }}>
+                {segment}
+              </pre>
+            )
+            : idx === segments.length - 1
+              ? (
+                <>
+                  {renderSep(idx)}
+                  <pre key={`seg-${idx}`} style={{ ...preStyle, paddingBottom: `${pbottom}px` }}>
+                    {segment}
+                  </pre>
+                </>
+              )
+              : (
+                <>
+                  {renderSep(idx)}
+                  <pre key={`seg-${idx}`} style={preStyle}>
+                    {segment}
+                  </pre>
+                </>
+              )
+          }
+        </>
+      ))}
 
       <div className="no-print" style={{ marginTop: '24px', display: 'flex', gap: '12px', flexDirection: 'column', alignItems: 'center' }}>
         <button
