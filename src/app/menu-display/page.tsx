@@ -248,6 +248,7 @@ interface CardModalProps {
 }
 
 const STOCK_OPTIONS: Array<{ label: string; value: number | null }> = [
+  { label: 'Agotado', value: 0 },
   { label: '1', value: 1 },
   { label: '2', value: 2 },
   { label: '3', value: 3 },
@@ -315,6 +316,7 @@ function CardModal({
                   const isActive = currentQty === opt.value
                   const key = opt.value === null ? 'null' : opt.value
                   const isSaving = savingStock === key
+                  const isAgotado = opt.value === 0
                   return (
                     <button
                       key={key}
@@ -323,12 +325,16 @@ function CardModal({
                       className="flex-1 rounded-lg font-bold transition-all active:scale-95 disabled:opacity-60"
                       style={{
                         background: isActive
-                          ? opt.value === null
+                          ? isAgotado
+                            ? '#b91c1c'
+                            : opt.value === null
                             ? '#16a34a'
                             : '#d97706'
+                          : isAgotado
+                          ? 'rgba(185,28,28,0.35)'
                           : 'rgba(255,255,255,0.1)',
-                        color: isActive ? '#fff' : 'rgba(255,255,255,0.6)',
-                        fontSize: 'clamp(0.55rem, 0.9vw, 0.75rem)',
+                        color: isActive ? '#fff' : isAgotado ? 'rgba(255,180,180,0.9)' : 'rgba(255,255,255,0.6)',
+                        fontSize: 'clamp(0.5rem, 0.8vw, 0.7rem)',
                         padding: '7px 3px',
                         outline: isActive ? '2px solid rgba(255,255,255,0.35)' : 'none',
                       }}
