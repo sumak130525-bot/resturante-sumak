@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import React, { useEffect, useState } from 'react'
 
 // Map separator char from config to CSS border style
 function sepCharToBorder(char: string): string {
@@ -93,12 +93,16 @@ export default function TicketPage() {
     lineHeight: lineHeightValue,
     color: 'black',
     margin: 0,
-    whiteSpace: 'pre',
+    whiteSpace: 'pre-wrap',
     width: '100%',
     boxSizing: 'border-box',
     paddingLeft: `${pleft}px`,
     paddingRight: `${pright}px`,
   }
+
+  // Parse numeric font size (e.g. "12px" → 12) to compute header/footer size
+  const fontSizePx = parseFloat(fontSize) || 12
+  const headerFontSize = `${fontSizePx + 2}px`
 
   // Split the ticket text by separator markers
   const SEP_MARKER = '---SEP---'
@@ -133,35 +137,26 @@ export default function TicketPage() {
         </div>
       )}
 
-      {/* First segment gets top padding; last segment gets bottom padding */}
-      {segments.map((segment, idx) => (
-        <>
-          {idx === 0
-            ? (
-              <pre key={`seg-${idx}`} style={{ ...preStyle, paddingTop: `${ptop}px` }}>
-                {segment}
-              </pre>
-            )
-            : idx === segments.length - 1
-              ? (
-                <>
-                  {renderSep(idx)}
-                  <pre key={`seg-${idx}`} style={{ ...preStyle, paddingBottom: `${pbottom}px` }}>
-                    {segment}
-                  </pre>
-                </>
-              )
-              : (
-                <>
-                  {renderSep(idx)}
-                  <pre key={`seg-${idx}`} style={preStyle}>
-                    {segment}
-                  </pre>
-                </>
-              )
-          }
-        </>
-      ))}
+      {/* First segment gets top padding + centered; last segment gets bottom padding + centered */}
+      {segments.map((segment, idx) => {
+        const isFirst = idx === 0
+        const isLast = idx === segments.length - 1
+        const isHeaderOrFooter = isFirst || isLast
+        const segStyle: React.CSSProperties = {
+          ...preStyle,
+          ...(isFirst ? { paddingTop: `${ptop}px` } : {}),
+          ...(isLast ? { paddingBottom: `${pbottom}px` } : {}),
+          ...(isHeaderOrFooter ? { textAlign: 'center', fontSize: headerFontSize } : { textAlign: 'left' }),
+        }
+        return (
+          <React.Fragment key={`frag-${idx}`}>
+            {!isFirst && renderSep(idx)}
+            <pre style={segStyle}>
+              {segment}
+            </pre>
+          </React.Fragment>
+        )
+      })}
 
       <div className="no-print" style={{ marginTop: '24px', display: 'flex', gap: '12px', flexDirection: 'column', alignItems: 'center' }}>
         <button

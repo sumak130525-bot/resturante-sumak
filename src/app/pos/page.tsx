@@ -70,17 +70,16 @@ function buildTicketText(data: PrintData, cfg: TicketConfig = DEFAULT_TICKET_CON
 
   const total = formatTicketMoney(data.total)
 
-  // Section gap: blank lines between header/items/footer (1 blank per 2px of sectionSpacing)
+  // Section gap: at most 1 blank line between header/footer and separators
   const sectionSpacingVal = cfg.sectionSpacing ?? 4
-  const sectionGap = sectionSpacingVal > 0 ? '\n'.repeat(Math.max(1, Math.floor(sectionSpacingVal / 2))) : ''
+  const sectionGap = sectionSpacingVal > 0 ? '\n' : ''
   // Extra blank lines between items based on itemSpacing
   const itemGap = cfg.itemSpacing && cfg.itemSpacing > 0 ? '\n'.repeat(Math.floor(cfg.itemSpacing / 2)) : ''
 
   const alignText = (s: string, align: 'center' | 'left') => {
     if (align === 'left') return leftPad + s
-    const contentW = Math.max(1, W - marginLeft - marginRight)
-    const spaces = Math.max(0, Math.floor((contentW - s.length) / 2))
-    return leftPad + ' '.repeat(spaces) + s
+    // center alignment: return plain string; CSS text-align:center handles it in ticket/page.tsx
+    return s
   }
 
   const addMargin = (s: string) => leftPad + s
