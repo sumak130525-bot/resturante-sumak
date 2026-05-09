@@ -64,10 +64,11 @@ function buildTicketText(data: PrintData, cfg: TicketConfig = DEFAULT_TICKET_CON
   const marginRight = cfg.marginRight ?? 0
   const leftPad = ' '.repeat(marginLeft)
 
-  // Separator width: full paper width or content width
+  // Separator width: full paper width (no margins) or content width
   const sepWidth = (cfg.separatorFullWidth ?? true) ? W : Math.max(1, W - marginLeft - marginRight)
   const sepLine = cfg.separator.repeat(sepWidth)
-  const LINE = leftPad + sepLine
+  // Full-width separators start at column 0 (no leftPad); content separators respect leftPad
+  const LINE = (cfg.separatorFullWidth ?? true) ? sepLine : leftPad + sepLine
   const LINES = (cfg.separatorDouble ?? false) ? LINE + '\n' + LINE : LINE
 
   const total = formatTicketMoney(data.total)

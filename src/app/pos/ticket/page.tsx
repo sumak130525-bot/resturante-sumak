@@ -65,15 +65,15 @@ export default function TicketPage() {
   const pright = Math.round(marginRight * MM_TO_PX)
 
   return (
-    <div style={{ background: 'white', margin: 0, padding: 0, maxWidth: '72mm' }}>
+    <div style={{ background: 'white', margin: 0, padding: 0, maxWidth: '72mm', width: '100%' }}>
       <style>{`@page { margin: 0; padding: 0; size: 72mm auto; } @media print { .no-print { display: none !important; } body, html { margin: 0; padding: 0; } }`}</style>
       {logoUrl && (
-        <div style={{ textAlign: 'center', margin: 0, padding: '0 0 0 8mm' }}>
+        <div style={{ textAlign: 'center', margin: 0, padding: '4px 0' }}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={logoUrl}
             alt="Logo"
-            style={{ maxWidth: '150px', height: 'auto' }}
+            style={{ maxWidth: '150px', height: 'auto', display: 'block', marginLeft: 'auto', marginRight: 'auto' }}
           />
         </div>
       )}
@@ -85,6 +85,8 @@ export default function TicketPage() {
         color: 'black',
         margin: 0,
         whiteSpace: 'pre',
+        width: '100%',
+        boxSizing: 'border-box' as const,
         paddingTop: `${ptop}px`,
         paddingBottom: `${pbottom}px`,
         paddingLeft: `${pleft}px`,
