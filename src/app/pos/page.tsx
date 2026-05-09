@@ -6,6 +6,30 @@ import type { MenuItem } from '@/lib/types'
 import { useTranslation, getItemName, type Locale } from '@/lib/i18n'
 import { useLanguagesEnabled } from '@/hooks/useLanguagesEnabled'
 
+// ─── Ticket config type & defaults ───────────────────────────────────────────
+
+type TicketConfig = {
+  width: number
+  separator: string
+  header1: string
+  header2: string
+  footer1: string
+  footer2: string
+  showLogo: boolean
+  fontSize: string
+}
+
+const DEFAULT_TICKET_CONFIG: TicketConfig = {
+  width: 22,
+  separator: '-',
+  header1: 'SUMAK',
+  header2: 'Restaurante',
+  footer1: 'Gracias por su visita!',
+  footer2: 'Restaurante Sumak',
+  showLogo: true,
+  fontSize: '12px',
+}
+
 // ─── Ticket helpers ───────────────────────────────────────────────────────────
 
 function pad(str: string, width: number, right = false): string {
@@ -57,9 +81,9 @@ type PrintData = {
   customerName: string
 }
 
-function buildTicketText(data: PrintData): string {
-  const W = 22 // 58mm thermal = ~22 chars
-  const LINE = '-'.repeat(W)
+function buildTicketText(data: PrintData, cfg: TicketConfig = DEFAULT_TICKET_CONFIG): string {
+  const W = cfg.width
+  const LINE = cfg.separator.repeat(W)
   const total = formatTicketMoney(data.total)
 
   const center = (s: string) => {
@@ -93,8 +117,8 @@ function buildTicketText(data: PrintData): string {
   const paymentLabel = data.paymentMethod === 'Transferencia' ? 'TRANSFER' : data.paymentMethod.toUpperCase()
 
   return [
-    center('SUMAK'),
-    center('Restaurante'),
+    cfg.header1 ? center(cfg.header1) : '',
+    cfg.header2 ? center(cfg.header2) : '',
     LINE,
     `${data.dateStr}  ${data.timeStr}`,
     `Pedido: P-${String(data.orderNumber).padStart(3, '0')}`,
@@ -107,25 +131,26 @@ function buildTicketText(data: PrintData): string {
     `Pago: ${paymentLabel}`,
     clienteLine,
     LINE,
-    center('Gracias por su visita!'),
-    center('Restaurante Sumak'),
+    cfg.footer1 ? center(cfg.footer1) : '',
+    cfg.footer2 ? center(cfg.footer2) : '',
     '',
     '',
   ].filter((l) => l !== '').join('\n')
 }
 
-function triggerPrint(ticketText: string, logoUrl?: string | null): void {
+function triggerPrint(ticketText: string, logoUrl?: string | null, cfg?: TicketConfig): void {
   sessionStorage.setItem('pos_ticket', ticketText)
-  if (logoUrl) {
+  if (logoUrl && (cfg?.showLogo ?? true)) {
     sessionStorage.setItem('pos_ticket_logo', logoUrl)
   } else {
     sessionStorage.removeItem('pos_ticket_logo')
   }
+  sessionStorage.setItem('pos_ticket_fontsize', cfg?.fontSize ?? DEFAULT_TICKET_CONFIG.fontSize)
   window.location.href = '/pos/ticket'
 }
 
-function printTicketPopup(data: PrintData): void {
-  const ticketText = buildTicketText(data)
+function printTicketPopup(data: PrintData, cfg: TicketConfig = DEFAULT_TICKET_CONFIG): void {
+  const ticketText = buildTicketText(data, cfg)
   // Save ticket text globally so the print button can use it
   ;(window as any).__pendingTicket = ticketText
 }
@@ -1341,6 +1366,15 @@ export default function POSPage() {
       .catch(() => {})
   }, [])
 
+  // Ticket config (fetched once on load)
+  const [ticketCfg, setTicketCfg] = useState<TicketConfig>(DEFAULT_TICKET_CONFIG)
+  useEffect(() => {
+    fetch('/api/settings/ticket-config')
+      .then((r) => r.ok ? r.json() : null)
+      .then((data) => { if (data) setTicketCfg({ ...DEFAULT_TICKET_CONFIG, ...data }) })
+      .catch(() => {})
+  }, [])
+
   // Frequent customers
   const [customers, setCustomers] = useState<FrequentCustomer[]>([])
   useEffect(() => {
@@ -1628,7 +1662,7 @@ export default function POSPage() {
       setToast('Pedido enviado a cocina')
 
       // Print ticket via popup window
-      printTicketPopup(snapshot)
+      printTicketPopup(snapshot, ticketCfg)
       setShowPrintBtn(true)
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Error al enviar pedido'
@@ -1902,7 +1936,7 @@ export default function POSPage() {
               onClick={() => {
                 const ticket = (window as any).__pendingTicket
                 if (ticket) {
-                  triggerPrint(ticket, ticketLogo)
+                  triggerPrint(ticket, ticketLogo, ticketCfg)
                 }
                 setShowPrintBtn(false)
               }}

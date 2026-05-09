@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react'
 export default function TicketPage() {
   const [ticketText, setTicketText] = useState<string | null>(null)
   const [logoUrl, setLogoUrl] = useState<string | null>(null)
+  const [fontSize, setFontSize] = useState('12px')
 
   useEffect(() => {
     const text = sessionStorage.getItem('pos_ticket')
@@ -15,6 +16,8 @@ export default function TicketPage() {
     setTicketText(text)
     const logo = sessionStorage.getItem('pos_ticket_logo')
     if (logo) setLogoUrl(logo)
+    const fs = sessionStorage.getItem('pos_ticket_fontsize')
+    if (fs) setFontSize(fs)
     setTimeout(() => window.print(), 400)
   }, [])
 
@@ -35,7 +38,7 @@ export default function TicketPage() {
       )}
       <pre style={{
         fontFamily: "'Courier New', Courier, monospace",
-        fontSize: '16px',
+        fontSize: fontSize,
         fontWeight: 'bold',
         lineHeight: '1.5',
         color: 'black',
