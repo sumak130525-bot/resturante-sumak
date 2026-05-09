@@ -284,6 +284,7 @@ type KdsItem = {
   price: number
   modifiers?: string[]
   note?: string | null
+  person_number?: number | null
 }
 
 type KdsOrder = {
@@ -302,6 +303,7 @@ type KdsOrder = {
   diningOption?: string
   paymentMethod?: string
   tableNumber?: string
+  persons?: number | null
 }
 
 type FilterSource = 'ALL' | 'WEB' | 'LOCAL' | 'POS'
@@ -499,38 +501,97 @@ function OrderCard({
             Todos listos — click para entregar
           </div>
         )}
-        <ul className="flex flex-col gap-2">
-          {displayItems.map((item, i) => {
-            const struck = struckIndices.has(i)
+        {order.persons && order.persons > 1 ? (
+          // Agrupado por persona
+          (() => {
+            // Construir grupos manteniendo el índice original del array displayItems
+            const groups = new Map<number, { item: typeof displayItems[0]; idx: number }[]>()
+            displayItems.forEach((item, i) => {
+              const pn = item.person_number ?? 1
+              if (!groups.has(pn)) groups.set(pn, [])
+              groups.get(pn)!.push({ item, idx: i })
+            })
+            const sortedKeys = Array.from(groups.keys()).sort((a, b) => a - b)
             return (
-              <li
-                key={i}
-                className={`flex items-start gap-2 cursor-pointer select-none transition-all duration-150`}
-                onClick={() => toggleStruck(i)}
-                title={struck ? 'Click para quitar tachado' : 'Click para tachar'}
-              >
-                <span className={`text-2xl font-black leading-none w-8 shrink-0 ${struck ? 'text-gray-400 line-through' : 'text-gray-900'}`}>
-                  {item.quantity}×
-                </span>
-                <div className="flex flex-col min-w-0">
-                  <span className={`text-xl font-semibold leading-tight ${struck ? 'line-through text-gray-400' : 'text-gray-900'}`}>
-                    {item.name}
-                  </span>
-                  {item.modifiers && item.modifiers.length > 0 && (
-                    <span className={`text-base leading-snug mt-0.5 ${struck ? 'line-through text-gray-400' : 'text-gray-700'}`}>
-                      {item.modifiers.join(' · ')}
-                    </span>
-                  )}
-                  {item.note && (
-                    <span className={`text-base font-semibold leading-snug mt-0.5 ${struck ? 'line-through text-gray-400' : 'text-red-600'}`}>
-                      💬 {item.note}
-                    </span>
-                  )}
-                </div>
-              </li>
+              <div className="flex flex-col gap-3">
+                {sortedKeys.map((pn, gi) => (
+                  <div key={pn}>
+                    {gi > 0 && <div className="border-t border-gray-200 my-1" />}
+                    <div className="text-xs font-black text-teal-600 uppercase tracking-wide mb-1">
+                      P{pn}:
+                    </div>
+                    <ul className="flex flex-col gap-2">
+                      {groups.get(pn)!.map(({ item, idx }) => {
+                        const struck = struckIndices.has(idx)
+                        return (
+                          <li
+                            key={idx}
+                            className="flex items-start gap-2 cursor-pointer select-none transition-all duration-150"
+                            onClick={() => toggleStruck(idx)}
+                            title={struck ? 'Click para quitar tachado' : 'Click para tachar'}
+                          >
+                            <span className={`text-2xl font-black leading-none w-8 shrink-0 ${struck ? 'text-gray-400 line-through' : 'text-gray-900'}`}>
+                              {item.quantity}×
+                            </span>
+                            <div className="flex flex-col min-w-0">
+                              <span className={`text-xl font-semibold leading-tight ${struck ? 'line-through text-gray-400' : 'text-gray-900'}`}>
+                                {item.name}
+                              </span>
+                              {item.modifiers && item.modifiers.length > 0 && (
+                                <span className={`text-base leading-snug mt-0.5 ${struck ? 'line-through text-gray-400' : 'text-gray-700'}`}>
+                                  {item.modifiers.join(' · ')}
+                                </span>
+                              )}
+                              {item.note && (
+                                <span className={`text-base font-semibold leading-snug mt-0.5 ${struck ? 'line-through text-gray-400' : 'text-red-600'}`}>
+                                  💬 {item.note}
+                                </span>
+                              )}
+                            </div>
+                          </li>
+                        )
+                      })}
+                    </ul>
+                  </div>
+                ))}
+              </div>
             )
-          })}
-        </ul>
+          })()
+        ) : (
+          // Lista plana (comportamiento original)
+          <ul className="flex flex-col gap-2">
+            {displayItems.map((item, i) => {
+              const struck = struckIndices.has(i)
+              return (
+                <li
+                  key={i}
+                  className={`flex items-start gap-2 cursor-pointer select-none transition-all duration-150`}
+                  onClick={() => toggleStruck(i)}
+                  title={struck ? 'Click para quitar tachado' : 'Click para tachar'}
+                >
+                  <span className={`text-2xl font-black leading-none w-8 shrink-0 ${struck ? 'text-gray-400 line-through' : 'text-gray-900'}`}>
+                    {item.quantity}×
+                  </span>
+                  <div className="flex flex-col min-w-0">
+                    <span className={`text-xl font-semibold leading-tight ${struck ? 'line-through text-gray-400' : 'text-gray-900'}`}>
+                      {item.name}
+                    </span>
+                    {item.modifiers && item.modifiers.length > 0 && (
+                      <span className={`text-base leading-snug mt-0.5 ${struck ? 'line-through text-gray-400' : 'text-gray-700'}`}>
+                        {item.modifiers.join(' · ')}
+                      </span>
+                    )}
+                    {item.note && (
+                      <span className={`text-base font-semibold leading-snug mt-0.5 ${struck ? 'line-through text-gray-400' : 'text-red-600'}`}>
+                        💬 {item.note}
+                      </span>
+                    )}
+                  </div>
+                </li>
+              )
+            })}
+          </ul>
+        )}
 
         {/* Notas */}
         {order.notes && (() => {
