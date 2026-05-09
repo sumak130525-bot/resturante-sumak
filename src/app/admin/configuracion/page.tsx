@@ -280,6 +280,7 @@ export default function AdminConfiguracionPage() {
               </div>
             ) : (
               <>
+                {/* ── Encabezado y pie ─────────────────────────────────────────────── */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                   {/* Ancho */}
                   <div>
@@ -356,40 +357,139 @@ export default function AdminConfiguracionPage() {
                       placeholder="Restaurante Sumak"
                     />
                   </div>
+                </div>
 
-                  {/* Font size */}
-                  <div>
-                    <label className={labelClass}>Tamaño de fuente del ticket</label>
-                    <select
-                      className={inputClass}
-                      value={ticketConfig.fontSize}
-                      onChange={(e) => setTicketConfig((c) => ({ ...c, fontSize: e.target.value }))}
-                    >
-                      <option value="10px">Chico (10px)</option>
-                      <option value="12px">Normal (12px)</option>
-                      <option value="14px">Grande (14px)</option>
-                    </select>
-                  </div>
-
-                  {/* Show logo */}
-                  <div className="flex items-center gap-3 sm:col-span-1">
-                    <div className="flex-1">
-                      <p className="text-sm font-medium text-gray-800">Mostrar logo en ticket</p>
-                      <p className="text-xs text-gray-400 mt-0.5">Si no hay logo cargado, no se mostrará nada.</p>
+                {/* ── Tipografía ───────────────────────────────────────────────────── */}
+                <div>
+                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Tipografía</p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    {/* Font size */}
+                    <div>
+                      <label className={labelClass}>Tamaño de fuente</label>
+                      <select
+                        className={inputClass}
+                        value={ticketConfig.fontSize}
+                        onChange={(e) => setTicketConfig((c) => ({ ...c, fontSize: e.target.value }))}
+                      >
+                        <option value="10px">Chico (10px)</option>
+                        <option value="12px">Normal (12px)</option>
+                        <option value="14px">Grande (14px)</option>
+                      </select>
                     </div>
-                    <button
-                      onClick={() => setTicketConfig((c) => ({ ...c, showLogo: !c.showLogo }))}
-                      aria-pressed={ticketConfig.showLogo}
-                      className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none ${
-                        ticketConfig.showLogo ? 'bg-sumak-brown' : 'bg-gray-200'
-                      }`}
-                    >
-                      <span
-                        className={`pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow-md transform transition-transform duration-200 ${
-                          ticketConfig.showLogo ? 'translate-x-5' : 'translate-x-0'
-                        }`}
-                      />
-                    </button>
+
+                    {/* Font family */}
+                    <div>
+                      <label className={labelClass}>Familia tipográfica</label>
+                      <select
+                        className={inputClass}
+                        value={ticketConfig.fontFamily}
+                        onChange={(e) => setTicketConfig((c) => ({ ...c, fontFamily: e.target.value }))}
+                      >
+                        <option value="monospace">Monoespaciada (Courier)</option>
+                        <option value="sans-serif">Sans-serif (Arial)</option>
+                        <option value="serif">Serif (Times)</option>
+                      </select>
+                    </div>
+
+                    {/* Line spacing */}
+                    <div>
+                      <label className={labelClass}>Espaciado entre líneas (px)</label>
+                      <select
+                        className={inputClass}
+                        value={ticketConfig.lineSpacing}
+                        onChange={(e) => setTicketConfig((c) => ({ ...c, lineSpacing: Number(e.target.value) }))}
+                      >
+                        <option value={2}>2px — Compacto</option>
+                        <option value={4}>4px — Normal</option>
+                        <option value={6}>6px — Amplio</option>
+                        <option value={8}>8px — Extra amplio</option>
+                      </select>
+                    </div>
+
+                    {/* Item spacing */}
+                    <div>
+                      <label className={labelClass}>Espacio extra entre items</label>
+                      <select
+                        className={inputClass}
+                        value={ticketConfig.itemSpacing}
+                        onChange={(e) => setTicketConfig((c) => ({ ...c, itemSpacing: Number(e.target.value) }))}
+                      >
+                        <option value={0}>0 — Sin espacio extra</option>
+                        <option value={2}>2px — Pequeño</option>
+                        <option value={4}>4px — Normal</option>
+                        <option value={6}>6px — Grande</option>
+                      </select>
+                    </div>
+                  </div>
+                </div>
+
+                {/* ── Contenido ────────────────────────────────────────────────────── */}
+                <div>
+                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Contenido</p>
+                  <div className="space-y-3">
+                    {(
+                      [
+                        { key: 'showLogo',          label: 'Mostrar logo',            desc: 'Si no hay logo cargado, no se mostrará nada.' },
+                        { key: 'showOrderNumber',    label: 'Mostrar número de pedido', desc: null },
+                        { key: 'showDate',           label: 'Mostrar fecha y hora',     desc: null },
+                        { key: 'showPaymentMethod',  label: 'Mostrar método de pago',   desc: null },
+                        { key: 'showTableNumber',    label: 'Mostrar número de mesa',   desc: null },
+                        { key: 'showDiningOption',   label: 'Mostrar modalidad',        desc: 'Comer dentro / Para llevar.' },
+                      ] as { key: keyof TicketConfig; label: string; desc: string | null }[]
+                    ).map(({ key, label, desc }) => (
+                      <div key={key} className="flex items-center justify-between gap-4">
+                        <div>
+                          <p className="text-sm font-medium text-gray-800">{label}</p>
+                          {desc && <p className="text-xs text-gray-400 mt-0.5">{desc}</p>}
+                        </div>
+                        <button
+                          onClick={() => setTicketConfig((c) => ({ ...c, [key]: !c[key] }))}
+                          aria-pressed={ticketConfig[key] as boolean}
+                          className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none ${
+                            ticketConfig[key] ? 'bg-sumak-brown' : 'bg-gray-200'
+                          }`}
+                        >
+                          <span
+                            className={`pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow-md transform transition-transform duration-200 ${
+                              ticketConfig[key] ? 'translate-x-5' : 'translate-x-0'
+                            }`}
+                          />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* ── Estilos ──────────────────────────────────────────────────────── */}
+                <div>
+                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Estilos</p>
+                  <div className="space-y-3">
+                    {(
+                      [
+                        { key: 'headerBold', label: 'Encabezado en negrita', desc: null },
+                        { key: 'totalBold',  label: 'Total en negrita',      desc: null },
+                      ] as { key: keyof TicketConfig; label: string; desc: string | null }[]
+                    ).map(({ key, label, desc }) => (
+                      <div key={key} className="flex items-center justify-between gap-4">
+                        <div>
+                          <p className="text-sm font-medium text-gray-800">{label}</p>
+                          {desc && <p className="text-xs text-gray-400 mt-0.5">{desc}</p>}
+                        </div>
+                        <button
+                          onClick={() => setTicketConfig((c) => ({ ...c, [key]: !c[key] }))}
+                          aria-pressed={ticketConfig[key] as boolean}
+                          className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none ${
+                            ticketConfig[key] ? 'bg-sumak-brown' : 'bg-gray-200'
+                          }`}
+                        >
+                          <span
+                            className={`pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow-md transform transition-transform duration-200 ${
+                              ticketConfig[key] ? 'translate-x-5' : 'translate-x-0'
+                            }`}
+                          />
+                        </button>
+                      </div>
+                    ))}
                   </div>
                 </div>
 

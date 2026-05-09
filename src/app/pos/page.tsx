@@ -63,12 +63,17 @@ function buildTicketText(data: PrintData, cfg: TicketConfig = DEFAULT_TICKET_CON
   const LINE = cfg.separator.repeat(W)
   const total = formatTicketMoney(data.total)
 
+  // Extra blank lines between sections based on lineSpacing (1 blank per 2px)
+  const sectionGap = '\n'.repeat(Math.max(0, Math.floor((cfg.lineSpacing ?? 4) / 2)))
+  // Extra blank lines between items based on itemSpacing
+  const itemGap = cfg.itemSpacing && cfg.itemSpacing > 0 ? '\n'.repeat(Math.floor(cfg.itemSpacing / 2)) : ''
+
   const center = (s: string) => {
     const spaces = Math.max(0, Math.floor((W - s.length) / 2))
     return ' '.repeat(spaces) + s
   }
 
-  const itemLines = data.items.flatMap((item) => {
+  const itemLines = data.items.flatMap((item, idx) => {
     const qty = String(item.quantity)
     const sub = formatTicketMoney(item.price * item.quantity)
     const prefix = qty + 'x '
@@ -82,10 +87,13 @@ function buildTicketText(data: PrintData, cfg: TicketConfig = DEFAULT_TICKET_CON
     const modLines = (item.modifiers ?? []).map(
       (m) => `  > ${m.optionName}${m.price > 0 ? ' (+)' : ''}`
     )
-    return [line1, line2, ...modLines]
+    const lines = [line1, line2, ...modLines]
+    // Add item gap between items (not after last)
+    if (itemGap && idx < data.items.length - 1) lines.push(itemGap)
+    return lines
   })
 
-  const mesaLine = data.diningOption === 'Comer dentro' && data.tableNumber
+  const mesaLine = (cfg.showTableNumber ?? true) && data.diningOption === 'Comer dentro' && data.tableNumber
     ? `Mesa: ${data.tableNumber}` : ''
 
   const clienteLine = data.customerName && data.customerName !== 'POS'
@@ -93,21 +101,29 @@ function buildTicketText(data: PrintData, cfg: TicketConfig = DEFAULT_TICKET_CON
 
   const paymentLabel = data.paymentMethod === 'Transferencia' ? 'TRANSFER' : data.paymentMethod.toUpperCase()
 
+  const infoLines: string[] = []
+  if (cfg.showDate ?? true) infoLines.push(`${data.dateStr}  ${data.timeStr}`)
+  if (cfg.showOrderNumber ?? true) infoLines.push(`Pedido: P-${String(data.orderNumber).padStart(3, '0')}`)
+  if (mesaLine) infoLines.push(mesaLine)
+  if (cfg.showDiningOption ?? true) infoLines.push(`Modalidad: ${data.diningOption}`)
+
+  const totalLine = `TOTAL: ${total}`
+  const payLine = (cfg.showPaymentMethod ?? true) ? `Pago: ${paymentLabel}` : ''
+
   return [
     cfg.header1 ? center(cfg.header1) : '',
     cfg.header2 ? center(cfg.header2) : '',
+    sectionGap,
     LINE,
-    `${data.dateStr}  ${data.timeStr}`,
-    `Pedido: P-${String(data.orderNumber).padStart(3, '0')}`,
-    mesaLine,
-    `Modalidad: ${data.diningOption}`,
+    ...infoLines,
     LINE,
     ...itemLines,
     LINE,
-    `TOTAL: ${total}`,
-    `Pago: ${paymentLabel}`,
+    totalLine,
+    payLine,
     clienteLine,
     LINE,
+    sectionGap,
     cfg.footer1 ? center(cfg.footer1) : '',
     cfg.footer2 ? center(cfg.footer2) : '',
     '',
@@ -123,6 +139,10 @@ function triggerPrint(ticketText: string, logoUrl?: string | null, cfg?: TicketC
     sessionStorage.removeItem('pos_ticket_logo')
   }
   sessionStorage.setItem('pos_ticket_fontsize', cfg?.fontSize ?? DEFAULT_TICKET_CONFIG.fontSize)
+  sessionStorage.setItem('pos_ticket_fontfamily', cfg?.fontFamily ?? DEFAULT_TICKET_CONFIG.fontFamily)
+  sessionStorage.setItem('pos_ticket_linespacing', String(cfg?.lineSpacing ?? DEFAULT_TICKET_CONFIG.lineSpacing))
+  sessionStorage.setItem('pos_ticket_headerbold', String(cfg?.headerBold ?? DEFAULT_TICKET_CONFIG.headerBold))
+  sessionStorage.setItem('pos_ticket_totalbold', String(cfg?.totalBold ?? DEFAULT_TICKET_CONFIG.totalBold))
   window.location.href = '/pos/ticket'
 }
 

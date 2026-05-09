@@ -6,6 +6,9 @@ export default function TicketPage() {
   const [ticketText, setTicketText] = useState<string | null>(null)
   const [logoUrl, setLogoUrl] = useState<string | null>(null)
   const [fontSize, setFontSize] = useState('12px')
+  const [fontFamily, setFontFamily] = useState("'Courier New', Courier, monospace")
+  const [lineSpacing, setLineSpacing] = useState(4)
+  const [headerBold, setHeaderBold] = useState(true)
 
   useEffect(() => {
     const text = sessionStorage.getItem('pos_ticket')
@@ -18,10 +21,28 @@ export default function TicketPage() {
     if (logo) setLogoUrl(logo)
     const fs = sessionStorage.getItem('pos_ticket_fontsize')
     if (fs) setFontSize(fs)
+
+    const ff = sessionStorage.getItem('pos_ticket_fontfamily')
+    if (ff) {
+      if (ff === 'sans-serif') setFontFamily('Arial, Helvetica, sans-serif')
+      else if (ff === 'serif') setFontFamily("'Times New Roman', Times, serif")
+      else setFontFamily("'Courier New', Courier, monospace")
+    }
+
+    const ls = sessionStorage.getItem('pos_ticket_linespacing')
+    if (ls) setLineSpacing(Number(ls))
+
+    const hb = sessionStorage.getItem('pos_ticket_headerbold')
+    if (hb !== null) setHeaderBold(hb !== 'false')
+
     setTimeout(() => window.print(), 400)
   }, [])
 
   if (ticketText === null) return null
+
+  // lineSpacing stored as px value; convert to em-based lineHeight for pre
+  // base lineHeight ~1.2, add lineSpacing/fontSize ratio
+  const lineHeightValue = `calc(1.2em + ${lineSpacing}px)`
 
   return (
     <div style={{ background: 'white', margin: 0, padding: 0, maxWidth: '72mm' }}>
@@ -37,10 +58,10 @@ export default function TicketPage() {
         </div>
       )}
       <pre style={{
-        fontFamily: "'Courier New', Courier, monospace",
+        fontFamily: fontFamily,
         fontSize: fontSize,
-        fontWeight: 'bold',
-        lineHeight: '1.5',
+        fontWeight: headerBold ? 'bold' : 'normal',
+        lineHeight: lineHeightValue,
         color: 'black',
         margin: 0,
         whiteSpace: 'pre',
@@ -82,3 +103,4 @@ export default function TicketPage() {
     </div>
   )
 }
+
