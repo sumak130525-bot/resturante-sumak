@@ -9,6 +9,11 @@ export default function TicketPage() {
   const [fontFamily, setFontFamily] = useState("'Courier New', Courier, monospace")
   const [lineSpacing, setLineSpacing] = useState(4)
   const [headerBold, setHeaderBold] = useState(true)
+  // Margins in mm → converted to px (1mm ≈ 3.78px)
+  const [marginTop, setMarginTop] = useState(4)
+  const [marginBottom, setMarginBottom] = useState(4)
+  const [marginLeft, setMarginLeft] = useState(0)
+  const [marginRight, setMarginRight] = useState(0)
 
   useEffect(() => {
     const text = sessionStorage.getItem('pos_ticket')
@@ -35,14 +40,29 @@ export default function TicketPage() {
     const hb = sessionStorage.getItem('pos_ticket_headerbold')
     if (hb !== null) setHeaderBold(hb !== 'false')
 
+    const mt = sessionStorage.getItem('pos_ticket_margintop')
+    if (mt !== null) setMarginTop(Number(mt))
+    const mb = sessionStorage.getItem('pos_ticket_marginbottom')
+    if (mb !== null) setMarginBottom(Number(mb))
+    const ml = sessionStorage.getItem('pos_ticket_marginleft')
+    if (ml !== null) setMarginLeft(Number(ml))
+    const mr = sessionStorage.getItem('pos_ticket_marginright')
+    if (mr !== null) setMarginRight(Number(mr))
+
     setTimeout(() => window.print(), 400)
   }, [])
 
   if (ticketText === null) return null
 
   // lineSpacing stored as px value; convert to em-based lineHeight for pre
-  // base lineHeight ~1.2, add lineSpacing/fontSize ratio
   const lineHeightValue = `calc(1.2em + ${lineSpacing}px)`
+
+  // Convert mm to px (1mm ≈ 3.78px)
+  const MM_TO_PX = 3.78
+  const ptop = Math.round(marginTop * MM_TO_PX)
+  const pbottom = Math.round(marginBottom * MM_TO_PX)
+  const pleft = Math.round(marginLeft * MM_TO_PX)
+  const pright = Math.round(marginRight * MM_TO_PX)
 
   return (
     <div style={{ background: 'white', margin: 0, padding: 0, maxWidth: '72mm' }}>
@@ -65,6 +85,10 @@ export default function TicketPage() {
         color: 'black',
         margin: 0,
         whiteSpace: 'pre',
+        paddingTop: `${ptop}px`,
+        paddingBottom: `${pbottom}px`,
+        paddingLeft: `${pleft}px`,
+        paddingRight: `${pright}px`,
       }}>{ticketText}</pre>
 
       <div className="no-print" style={{ marginTop: '24px', display: 'flex', gap: '12px', flexDirection: 'column', alignItems: 'center' }}>
@@ -103,4 +127,3 @@ export default function TicketPage() {
     </div>
   )
 }
-

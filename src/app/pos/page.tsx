@@ -60,89 +60,140 @@ type PrintData = {
 
 function buildTicketText(data: PrintData, cfg: TicketConfig = DEFAULT_TICKET_CONFIG): string {
   const W = cfg.width
-  const LINE = cfg.separator.repeat(W)
+  const marginLeft = cfg.marginLeft ?? 0
+  const marginRight = cfg.marginRight ?? 0
+  const leftPad = ' '.repeat(marginLeft)
+
+  // Separator width: full paper width or content width
+  const sepWidth = (cfg.separatorFullWidth ?? true) ? W : Math.max(1, W - marginLeft - marginRight)
+  const sepLine = cfg.separator.repeat(sepWidth)
+  const LINE = leftPad + sepLine
+  const LINES = (cfg.separatorDouble ?? false) ? LINE + '\n' + LINE : LINE
+
   const total = formatTicketMoney(data.total)
 
-  // Extra blank lines between sections based on lineSpacing (1 blank per 2px)
-  const sectionGap = '\n'.repeat(Math.max(0, Math.floor((cfg.lineSpacing ?? 4) / 2)))
+  // Section gap: blank lines between header/items/footer (1 blank per 2px of sectionSpacing)
+  const sectionSpacingVal = cfg.sectionSpacing ?? 4
+  const sectionGap = sectionSpacingVal > 0 ? '\n'.repeat(Math.max(1, Math.floor(sectionSpacingVal / 2))) : ''
   // Extra blank lines between items based on itemSpacing
   const itemGap = cfg.itemSpacing && cfg.itemSpacing > 0 ? '\n'.repeat(Math.floor(cfg.itemSpacing / 2)) : ''
 
-  const center = (s: string) => {
-    const spaces = Math.max(0, Math.floor((W - s.length) / 2))
-    return ' '.repeat(spaces) + s
+  const alignText = (s: string, align: 'center' | 'left') => {
+    if (align === 'left') return leftPad + s
+    const contentW = Math.max(1, W - marginLeft - marginRight)
+    const spaces = Math.max(0, Math.floor((contentW - s.length) / 2))
+    return leftPad + ' '.repeat(spaces) + s
   }
 
-  const itemLines = data.items.flatMap((item, idx) => {
+  const addMargin = (s: string) => leftPad + s
+
+  // Build item lines — flat list (person grouping handled in sectionized output below)
+  const buildItemLines = (items: typeof data.items) => items.flatMap((item, idx) => {
     const qty = String(item.quantity)
     const sub = formatTicketMoney(item.price * item.quantity)
     const prefix = qty + 'x '
-    const maxNameLen = W - prefix.length
+    const contentW = Math.max(1, W - marginLeft - marginRight)
+    const maxNameLen = contentW - prefix.length
     const name = item.name.length > maxNameLen
       ? item.name.substring(0, maxNameLen)
       : item.name
-    const line1 = prefix + name
-    const line2 = pad(sub, W, true)
+    const line1 = addMargin(prefix + name)
+    const line2 = addMargin(pad(sub, contentW, true))
 
     const modLines = (item.modifiers ?? []).map(
-      (m) => `  > ${m.optionName}${m.price > 0 ? ' (+)' : ''}`
+      (m) => addMargin(`  > ${m.optionName}${m.price > 0 ? ' (+)' : ''}`)
     )
     const lines = [line1, line2, ...modLines]
-    // Add item gap between items (not after last)
-    if (itemGap && idx < data.items.length - 1) lines.push(itemGap)
+    if (itemGap && idx < items.length - 1) lines.push(itemGap)
     return lines
   })
 
   const mesaLine = (cfg.showTableNumber ?? true) && data.diningOption === 'Comer dentro' && data.tableNumber
-    ? `Mesa: ${data.tableNumber}` : ''
+    ? addMargin(`Mesa: ${data.tableNumber}`) : ''
 
-  const clienteLine = data.customerName && data.customerName !== 'POS'
-    ? `Cliente: ${data.customerName}` : ''
+  const clienteLine = (cfg.showCustomerName ?? true) && data.customerName && data.customerName !== 'POS'
+    ? addMargin(`Cliente: ${data.customerName}`) : ''
 
   const paymentLabel = data.paymentMethod === 'Transferencia' ? 'TRANSFER' : data.paymentMethod.toUpperCase()
 
   const infoLines: string[] = []
-  if (cfg.showDate ?? true) infoLines.push(`${data.dateStr}  ${data.timeStr}`)
-  if (cfg.showOrderNumber ?? true) infoLines.push(`Pedido: P-${String(data.orderNumber).padStart(3, '0')}`)
+  if (cfg.showDate ?? true) infoLines.push(addMargin(`${data.dateStr}  ${data.timeStr}`))
+  if (cfg.showOrderNumber ?? true) infoLines.push(addMargin(`Pedido: P-${String(data.orderNumber).padStart(3, '0')}`))
   if (mesaLine) infoLines.push(mesaLine)
-  if (cfg.showDiningOption ?? true) infoLines.push(`Modalidad: ${data.diningOption}`)
+  if (cfg.showDiningOption ?? true) infoLines.push(addMargin(`Modalidad: ${data.diningOption}`))
 
-  const totalLine = `TOTAL: ${total}`
-  const payLine = (cfg.showPaymentMethod ?? true) ? `Pago: ${paymentLabel}` : ''
+  // Persons line
+  const hasMultiPerson = data.items.some((i) => (i.person_number ?? 0) > 1)
+  if ((cfg.showPersons ?? true) && hasMultiPerson) {
+    const maxPerson = Math.max(...data.items.map((i) => i.person_number ?? 1))
+    infoLines.push(addMargin(`Personas: ${maxPerson}`))
+  }
+
+  // Order note (extracted from items or a dedicated field if present)
+  // Note: data doesn't carry a top-level note field yet, so this is a placeholder
+  // showOrderNote controls whether a note line is shown when available
+
+  const totalLine = addMargin(`TOTAL: ${total}`)
+  const payLine = (cfg.showPaymentMethod ?? true) ? addMargin(`Pago: ${paymentLabel}`) : ''
+
+  // Build item section — with person grouping if showPersonDetail is enabled
+  let itemSection: string[]
+  if ((cfg.showPersonDetail ?? true) && hasMultiPerson) {
+    const maxPerson = Math.max(...data.items.map((i) => i.person_number ?? 1))
+    itemSection = []
+    for (let p = 1; p <= maxPerson; p++) {
+      const personItems = data.items.filter((i) => (i.person_number ?? 1) === p)
+      if (personItems.length === 0) continue
+      itemSection.push(addMargin(`-- P${p} --`))
+      itemSection.push(...buildItemLines(personItems))
+    }
+  } else {
+    itemSection = buildItemLines(data.items)
+  }
+
+  // Feed lines before cut
+  const feedLines = '\n'.repeat(Math.max(0, cfg.feedLinesBeforeCut ?? 3))
+
+  const headerAlign = cfg.headerAlign ?? 'center'
+  const footerAlign = cfg.footerAlign ?? 'center'
 
   return [
-    cfg.header1 ? center(cfg.header1) : '',
-    cfg.header2 ? center(cfg.header2) : '',
+    cfg.header1 ? alignText(cfg.header1, headerAlign) : '',
+    cfg.header2 ? alignText(cfg.header2, headerAlign) : '',
     sectionGap,
-    LINE,
+    LINES,
     ...infoLines,
-    LINE,
-    ...itemLines,
-    LINE,
+    LINES,
+    ...itemSection,
+    LINES,
     totalLine,
     payLine,
     clienteLine,
-    LINE,
+    LINES,
     sectionGap,
-    cfg.footer1 ? center(cfg.footer1) : '',
-    cfg.footer2 ? center(cfg.footer2) : '',
-    '',
-    '',
+    cfg.footer1 ? alignText(cfg.footer1, footerAlign) : '',
+    cfg.footer2 ? alignText(cfg.footer2, footerAlign) : '',
+    feedLines,
   ].filter((l) => l !== '').join('\n')
 }
 
 function triggerPrint(ticketText: string, logoUrl?: string | null, cfg?: TicketConfig): void {
+  const c = { ...DEFAULT_TICKET_CONFIG, ...(cfg ?? {}) }
   sessionStorage.setItem('pos_ticket', ticketText)
-  if (logoUrl && (cfg?.showLogo ?? true)) {
+  if (logoUrl && c.showLogo) {
     sessionStorage.setItem('pos_ticket_logo', logoUrl)
   } else {
     sessionStorage.removeItem('pos_ticket_logo')
   }
-  sessionStorage.setItem('pos_ticket_fontsize', cfg?.fontSize ?? DEFAULT_TICKET_CONFIG.fontSize)
-  sessionStorage.setItem('pos_ticket_fontfamily', cfg?.fontFamily ?? DEFAULT_TICKET_CONFIG.fontFamily)
-  sessionStorage.setItem('pos_ticket_linespacing', String(cfg?.lineSpacing ?? DEFAULT_TICKET_CONFIG.lineSpacing))
-  sessionStorage.setItem('pos_ticket_headerbold', String(cfg?.headerBold ?? DEFAULT_TICKET_CONFIG.headerBold))
-  sessionStorage.setItem('pos_ticket_totalbold', String(cfg?.totalBold ?? DEFAULT_TICKET_CONFIG.totalBold))
+  sessionStorage.setItem('pos_ticket_fontsize', c.fontSize)
+  sessionStorage.setItem('pos_ticket_fontfamily', c.fontFamily)
+  sessionStorage.setItem('pos_ticket_linespacing', String(c.lineSpacing))
+  sessionStorage.setItem('pos_ticket_headerbold', String(c.headerBold))
+  sessionStorage.setItem('pos_ticket_totalbold', String(c.totalBold))
+  sessionStorage.setItem('pos_ticket_margintop', String(c.marginTop))
+  sessionStorage.setItem('pos_ticket_marginbottom', String(c.marginBottom))
+  sessionStorage.setItem('pos_ticket_marginleft', String(c.marginLeft))
+  sessionStorage.setItem('pos_ticket_marginright', String(c.marginRight))
   window.location.href = '/pos/ticket'
 }
 

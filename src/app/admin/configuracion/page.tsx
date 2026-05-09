@@ -146,6 +146,45 @@ export default function AdminConfiguracionPage() {
   const inputClass = 'w-full text-sm border border-gray-200 rounded-xl px-3 py-2 focus:outline-none focus:ring-2 focus:ring-sumak-brown/30'
   const labelClass = 'block text-xs font-medium text-gray-600 mb-1'
 
+  // Reusable toggle component
+  const Toggle = ({ value, onChange }: { value: boolean; onChange: (v: boolean) => void }) => (
+    <button
+      type="button"
+      onClick={() => onChange(!value)}
+      aria-pressed={value}
+      className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none ${
+        value ? 'bg-sumak-brown' : 'bg-gray-200'
+      }`}
+    >
+      <span
+        className={`pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow-md transform transition-transform duration-200 ${
+          value ? 'translate-x-5' : 'translate-x-0'
+        }`}
+      />
+    </button>
+  )
+
+  // Reusable toggle row
+  const ToggleRow = ({
+    label,
+    desc,
+    value,
+    onChange,
+  }: {
+    label: string
+    desc?: string | null
+    value: boolean
+    onChange: (v: boolean) => void
+  }) => (
+    <div className="flex items-center justify-between gap-4">
+      <div>
+        <p className="text-sm font-medium text-gray-800">{label}</p>
+        {desc && <p className="text-xs text-gray-400 mt-0.5">{desc}</p>}
+      </div>
+      <Toggle value={value} onChange={onChange} />
+    </div>
+  )
+
   return (
     <AdminLayoutClient active="configuracion">
       <div className="space-y-8">
@@ -271,18 +310,17 @@ export default function AdminConfiguracionPage() {
         {/* Sección: Configuración del ticket impreso */}
         <section>
           <h2 className="text-base font-semibold text-gray-700 mb-3">Configuración del ticket impreso</h2>
-          <div className="bg-white rounded-2xl shadow-sm p-6 space-y-5">
+          <div className="bg-white rounded-2xl shadow-sm p-6 space-y-7">
             {ticketConfigLoading ? (
               <div className="space-y-3">
-                {[...Array(6)].map((_, i) => (
+                {[...Array(8)].map((_, i) => (
                   <div key={i} className="h-9 rounded-xl bg-gray-100 animate-pulse" />
                 ))}
               </div>
             ) : (
               <>
-                {/* ── Encabezado y pie ─────────────────────────────────────────────── */}
+                {/* ── Ancho ──────────────────────────────────────────────────────────── */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  {/* Ancho */}
                   <div>
                     <label className={labelClass}>Ancho en caracteres</label>
                     <select
@@ -294,90 +332,59 @@ export default function AdminConfiguracionPage() {
                       <option value={32}>32 — Térmica 80mm</option>
                     </select>
                   </div>
+                </div>
 
-                  {/* Separador */}
-                  <div>
-                    <label className={labelClass}>Separador de secciones</label>
-                    <select
-                      className={inputClass}
-                      value={ticketConfig.separator}
-                      onChange={(e) => setTicketConfig((c) => ({ ...c, separator: e.target.value }))}
-                    >
-                      <option value="-">Guiones (------)</option>
-                      <option value="*">Asteriscos (******)</option>
-                      <option value=".">Puntos (...........)</option>
-                      <option value="=">Igual (======)</option>
-                    </select>
-                  </div>
-
-                  {/* Header 1 */}
-                  <div>
-                    <label className={labelClass}>Encabezado línea 1</label>
-                    <input
-                      type="text"
-                      className={inputClass}
-                      value={ticketConfig.header1}
-                      onChange={(e) => setTicketConfig((c) => ({ ...c, header1: e.target.value }))}
-                      placeholder="SUMAK"
-                    />
-                  </div>
-
-                  {/* Header 2 */}
-                  <div>
-                    <label className={labelClass}>Encabezado línea 2</label>
-                    <input
-                      type="text"
-                      className={inputClass}
-                      value={ticketConfig.header2}
-                      onChange={(e) => setTicketConfig((c) => ({ ...c, header2: e.target.value }))}
-                      placeholder="Restaurante"
-                    />
-                  </div>
-
-                  {/* Footer 1 */}
-                  <div>
-                    <label className={labelClass}>Pie del ticket línea 1</label>
-                    <input
-                      type="text"
-                      className={inputClass}
-                      value={ticketConfig.footer1}
-                      onChange={(e) => setTicketConfig((c) => ({ ...c, footer1: e.target.value }))}
-                      placeholder="Gracias por su visita!"
-                    />
-                  </div>
-
-                  {/* Footer 2 */}
-                  <div>
-                    <label className={labelClass}>Pie del ticket línea 2</label>
-                    <input
-                      type="text"
-                      className={inputClass}
-                      value={ticketConfig.footer2}
-                      onChange={(e) => setTicketConfig((c) => ({ ...c, footer2: e.target.value }))}
-                      placeholder="Restaurante Sumak"
-                    />
+                {/* ── Márgenes ──────────────────────────────────────────────────────── */}
+                <div>
+                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Márgenes</p>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                    <div>
+                      <label className={labelClass}>Izquierdo (mm)</label>
+                      <select
+                        className={inputClass}
+                        value={ticketConfig.marginLeft}
+                        onChange={(e) => setTicketConfig((c) => ({ ...c, marginLeft: Number(e.target.value) }))}
+                      >
+                        {[0, 2, 4, 6, 8].map((v) => <option key={v} value={v}>{v} mm</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className={labelClass}>Derecho (mm)</label>
+                      <select
+                        className={inputClass}
+                        value={ticketConfig.marginRight}
+                        onChange={(e) => setTicketConfig((c) => ({ ...c, marginRight: Number(e.target.value) }))}
+                      >
+                        {[0, 2, 4, 6, 8].map((v) => <option key={v} value={v}>{v} mm</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className={labelClass}>Superior (mm)</label>
+                      <select
+                        className={inputClass}
+                        value={ticketConfig.marginTop}
+                        onChange={(e) => setTicketConfig((c) => ({ ...c, marginTop: Number(e.target.value) }))}
+                      >
+                        {[0, 2, 4, 6, 8].map((v) => <option key={v} value={v}>{v} mm</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className={labelClass}>Inferior (mm)</label>
+                      <select
+                        className={inputClass}
+                        value={ticketConfig.marginBottom}
+                        onChange={(e) => setTicketConfig((c) => ({ ...c, marginBottom: Number(e.target.value) }))}
+                      >
+                        {[0, 4, 8, 12, 16].map((v) => <option key={v} value={v}>{v} mm</option>)}
+                      </select>
+                    </div>
                   </div>
                 </div>
 
-                {/* ── Tipografía ───────────────────────────────────────────────────── */}
+                {/* ── Tipografía ─────────────────────────────────────────────────────── */}
                 <div>
                   <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Tipografía</p>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    {/* Font size */}
-                    <div>
-                      <label className={labelClass}>Tamaño de fuente</label>
-                      <select
-                        className={inputClass}
-                        value={ticketConfig.fontSize}
-                        onChange={(e) => setTicketConfig((c) => ({ ...c, fontSize: e.target.value }))}
-                      >
-                        <option value="10px">Chico (10px)</option>
-                        <option value="12px">Normal (12px)</option>
-                        <option value="14px">Grande (14px)</option>
-                      </select>
-                    </div>
-
-                    {/* Font family */}
                     <div>
                       <label className={labelClass}>Familia tipográfica</label>
                       <select
@@ -390,8 +397,43 @@ export default function AdminConfiguracionPage() {
                         <option value="serif">Serif (Times)</option>
                       </select>
                     </div>
+                    <div>
+                      <label className={labelClass}>Tamaño de fuente</label>
+                      <select
+                        className={inputClass}
+                        value={ticketConfig.fontSize}
+                        onChange={(e) => setTicketConfig((c) => ({ ...c, fontSize: e.target.value }))}
+                      >
+                        <option value="10px">Chico (10px)</option>
+                        <option value="12px">Normal (12px)</option>
+                        <option value="14px">Grande (14px)</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div className="mt-3 space-y-3">
+                    <ToggleRow
+                      label="Encabezado en negrita"
+                      value={ticketConfig.headerBold}
+                      onChange={(v) => setTicketConfig((c) => ({ ...c, headerBold: v }))}
+                    />
+                    <ToggleRow
+                      label="Total en negrita"
+                      value={ticketConfig.totalBold}
+                      onChange={(v) => setTicketConfig((c) => ({ ...c, totalBold: v }))}
+                    />
+                    <ToggleRow
+                      label="Items en negrita"
+                      desc="Reservado para impresoras ESC/POS con soporte de negrita por línea."
+                      value={ticketConfig.itemsBold}
+                      onChange={(v) => setTicketConfig((c) => ({ ...c, itemsBold: v }))}
+                    />
+                  </div>
+                </div>
 
-                    {/* Line spacing */}
+                {/* ── Espaciado ──────────────────────────────────────────────────────── */}
+                <div>
+                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Espaciado</p>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                     <div>
                       <label className={labelClass}>Espaciado entre líneas (px)</label>
                       <select
@@ -399,14 +441,13 @@ export default function AdminConfiguracionPage() {
                         value={ticketConfig.lineSpacing}
                         onChange={(e) => setTicketConfig((c) => ({ ...c, lineSpacing: Number(e.target.value) }))}
                       >
+                        <option value={0}>0px — Sin extra</option>
                         <option value={2}>2px — Compacto</option>
                         <option value={4}>4px — Normal</option>
                         <option value={6}>6px — Amplio</option>
                         <option value={8}>8px — Extra amplio</option>
                       </select>
                     </div>
-
-                    {/* Item spacing */}
                     <div>
                       <label className={labelClass}>Espacio extra entre items</label>
                       <select
@@ -420,76 +461,207 @@ export default function AdminConfiguracionPage() {
                         <option value={6}>6px — Grande</option>
                       </select>
                     </div>
+                    <div>
+                      <label className={labelClass}>Espacio entre secciones (px)</label>
+                      <select
+                        className={inputClass}
+                        value={ticketConfig.sectionSpacing}
+                        onChange={(e) => setTicketConfig((c) => ({ ...c, sectionSpacing: Number(e.target.value) }))}
+                      >
+                        <option value={2}>2px — Compacto</option>
+                        <option value={4}>4px — Normal</option>
+                        <option value={6}>6px — Amplio</option>
+                        <option value={8}>8px — Extra amplio</option>
+                      </select>
+                    </div>
                   </div>
                 </div>
 
-                {/* ── Contenido ────────────────────────────────────────────────────── */}
+                {/* ── Separadores ────────────────────────────────────────────────────── */}
+                <div>
+                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Separadores</p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-3">
+                    <div>
+                      <label className={labelClass}>Carácter separador</label>
+                      <select
+                        className={inputClass}
+                        value={ticketConfig.separator}
+                        onChange={(e) => setTicketConfig((c) => ({ ...c, separator: e.target.value }))}
+                      >
+                        <option value="-">Guiones (------)</option>
+                        <option value="*">Asteriscos (******)</option>
+                        <option value=".">Puntos (...........)</option>
+                        <option value="=">Igual (======)</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div className="space-y-3">
+                    <ToggleRow
+                      label="Separador ancho completo"
+                      desc="El separador ocupa todo el ancho del papel ignorando los márgenes."
+                      value={ticketConfig.separatorFullWidth}
+                      onChange={(v) => setTicketConfig((c) => ({ ...c, separatorFullWidth: v }))}
+                    />
+                    <ToggleRow
+                      label="Separador doble"
+                      desc="Repite la línea separadora dos veces."
+                      value={ticketConfig.separatorDouble}
+                      onChange={(v) => setTicketConfig((c) => ({ ...c, separatorDouble: v }))}
+                    />
+                  </div>
+                </div>
+
+                {/* ── Contenido ──────────────────────────────────────────────────────── */}
                 <div>
                   <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Contenido</p>
                   <div className="space-y-3">
-                    {(
-                      [
-                        { key: 'showLogo',          label: 'Mostrar logo',            desc: 'Si no hay logo cargado, no se mostrará nada.' },
-                        { key: 'showOrderNumber',    label: 'Mostrar número de pedido', desc: null },
-                        { key: 'showDate',           label: 'Mostrar fecha y hora',     desc: null },
-                        { key: 'showPaymentMethod',  label: 'Mostrar método de pago',   desc: null },
-                        { key: 'showTableNumber',    label: 'Mostrar número de mesa',   desc: null },
-                        { key: 'showDiningOption',   label: 'Mostrar modalidad',        desc: 'Comer dentro / Para llevar.' },
-                      ] as { key: keyof TicketConfig; label: string; desc: string | null }[]
-                    ).map(({ key, label, desc }) => (
-                      <div key={key} className="flex items-center justify-between gap-4">
-                        <div>
-                          <p className="text-sm font-medium text-gray-800">{label}</p>
-                          {desc && <p className="text-xs text-gray-400 mt-0.5">{desc}</p>}
-                        </div>
-                        <button
-                          onClick={() => setTicketConfig((c) => ({ ...c, [key]: !c[key] }))}
-                          aria-pressed={ticketConfig[key] as boolean}
-                          className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none ${
-                            ticketConfig[key] ? 'bg-sumak-brown' : 'bg-gray-200'
-                          }`}
-                        >
-                          <span
-                            className={`pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow-md transform transition-transform duration-200 ${
-                              ticketConfig[key] ? 'translate-x-5' : 'translate-x-0'
-                            }`}
-                          />
-                        </button>
-                      </div>
-                    ))}
+                    <ToggleRow
+                      label="Mostrar logo"
+                      desc="Si no hay logo cargado, no se mostrará nada."
+                      value={ticketConfig.showLogo}
+                      onChange={(v) => setTicketConfig((c) => ({ ...c, showLogo: v }))}
+                    />
+                    <ToggleRow
+                      label="Mostrar número de pedido"
+                      value={ticketConfig.showOrderNumber}
+                      onChange={(v) => setTicketConfig((c) => ({ ...c, showOrderNumber: v }))}
+                    />
+                    <ToggleRow
+                      label="Mostrar fecha y hora"
+                      value={ticketConfig.showDate}
+                      onChange={(v) => setTicketConfig((c) => ({ ...c, showDate: v }))}
+                    />
+                    <ToggleRow
+                      label="Mostrar número de mesa"
+                      value={ticketConfig.showTableNumber}
+                      onChange={(v) => setTicketConfig((c) => ({ ...c, showTableNumber: v }))}
+                    />
+                    <ToggleRow
+                      label="Mostrar modalidad"
+                      desc="Comer dentro / Para llevar."
+                      value={ticketConfig.showDiningOption}
+                      onChange={(v) => setTicketConfig((c) => ({ ...c, showDiningOption: v }))}
+                    />
+                    <ToggleRow
+                      label="Mostrar método de pago"
+                      value={ticketConfig.showPaymentMethod}
+                      onChange={(v) => setTicketConfig((c) => ({ ...c, showPaymentMethod: v }))}
+                    />
+                    <ToggleRow
+                      label="Mostrar nombre del cliente"
+                      value={ticketConfig.showCustomerName}
+                      onChange={(v) => setTicketConfig((c) => ({ ...c, showCustomerName: v }))}
+                    />
+                    <ToggleRow
+                      label="Mostrar cantidad de personas"
+                      value={ticketConfig.showPersons}
+                      onChange={(v) => setTicketConfig((c) => ({ ...c, showPersons: v }))}
+                    />
+                    <ToggleRow
+                      label="Agrupar items por persona (P1, P2…)"
+                      desc="Cuando el pedido tiene más de una persona, agrupa los items bajo cada etiqueta."
+                      value={ticketConfig.showPersonDetail}
+                      onChange={(v) => setTicketConfig((c) => ({ ...c, showPersonDetail: v }))}
+                    />
+                    <ToggleRow
+                      label="Mostrar nota del pedido"
+                      value={ticketConfig.showOrderNote}
+                      onChange={(v) => setTicketConfig((c) => ({ ...c, showOrderNote: v }))}
+                    />
                   </div>
                 </div>
 
-                {/* ── Estilos ──────────────────────────────────────────────────────── */}
+                {/* ── Textos ─────────────────────────────────────────────────────────── */}
                 <div>
-                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Estilos</p>
+                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Textos</p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <label className={labelClass}>Encabezado línea 1</label>
+                      <input
+                        type="text"
+                        className={inputClass}
+                        value={ticketConfig.header1}
+                        onChange={(e) => setTicketConfig((c) => ({ ...c, header1: e.target.value }))}
+                        placeholder="SUMAK"
+                      />
+                    </div>
+                    <div>
+                      <label className={labelClass}>Encabezado línea 2</label>
+                      <input
+                        type="text"
+                        className={inputClass}
+                        value={ticketConfig.header2}
+                        onChange={(e) => setTicketConfig((c) => ({ ...c, header2: e.target.value }))}
+                        placeholder="Restaurante"
+                      />
+                    </div>
+                    <div>
+                      <label className={labelClass}>Pie del ticket línea 1</label>
+                      <input
+                        type="text"
+                        className={inputClass}
+                        value={ticketConfig.footer1}
+                        onChange={(e) => setTicketConfig((c) => ({ ...c, footer1: e.target.value }))}
+                        placeholder="Gracias por su visita!"
+                      />
+                    </div>
+                    <div>
+                      <label className={labelClass}>Pie del ticket línea 2</label>
+                      <input
+                        type="text"
+                        className={inputClass}
+                        value={ticketConfig.footer2}
+                        onChange={(e) => setTicketConfig((c) => ({ ...c, footer2: e.target.value }))}
+                        placeholder="Restaurante Sumak"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                {/* ── Impresión ──────────────────────────────────────────────────────── */}
+                <div>
+                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Impresión</p>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-3">
+                    <div>
+                      <label className={labelClass}>Líneas vacías antes del corte</label>
+                      <select
+                        className={inputClass}
+                        value={ticketConfig.feedLinesBeforeCut}
+                        onChange={(e) => setTicketConfig((c) => ({ ...c, feedLinesBeforeCut: Number(e.target.value) }))}
+                      >
+                        {[0, 1, 2, 3, 4, 5].map((v) => <option key={v} value={v}>{v} {v === 3 ? '(defecto)' : ''}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className={labelClass}>Alineación del encabezado</label>
+                      <select
+                        className={inputClass}
+                        value={ticketConfig.headerAlign}
+                        onChange={(e) => setTicketConfig((c) => ({ ...c, headerAlign: e.target.value as 'center' | 'left' }))}
+                      >
+                        <option value="center">Centro</option>
+                        <option value="left">Izquierda</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className={labelClass}>Alineación del pie</label>
+                      <select
+                        className={inputClass}
+                        value={ticketConfig.footerAlign}
+                        onChange={(e) => setTicketConfig((c) => ({ ...c, footerAlign: e.target.value as 'center' | 'left' }))}
+                      >
+                        <option value="center">Centro</option>
+                        <option value="left">Izquierda</option>
+                      </select>
+                    </div>
+                  </div>
                   <div className="space-y-3">
-                    {(
-                      [
-                        { key: 'headerBold', label: 'Encabezado en negrita', desc: null },
-                        { key: 'totalBold',  label: 'Total en negrita',      desc: null },
-                      ] as { key: keyof TicketConfig; label: string; desc: string | null }[]
-                    ).map(({ key, label, desc }) => (
-                      <div key={key} className="flex items-center justify-between gap-4">
-                        <div>
-                          <p className="text-sm font-medium text-gray-800">{label}</p>
-                          {desc && <p className="text-xs text-gray-400 mt-0.5">{desc}</p>}
-                        </div>
-                        <button
-                          onClick={() => setTicketConfig((c) => ({ ...c, [key]: !c[key] }))}
-                          aria-pressed={ticketConfig[key] as boolean}
-                          className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 focus:outline-none ${
-                            ticketConfig[key] ? 'bg-sumak-brown' : 'bg-gray-200'
-                          }`}
-                        >
-                          <span
-                            className={`pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow-md transform transition-transform duration-200 ${
-                              ticketConfig[key] ? 'translate-x-5' : 'translate-x-0'
-                            }`}
-                          />
-                        </button>
-                      </div>
-                    ))}
+                    <ToggleRow
+                      label="Corte automático"
+                      desc="Envía comando de corte automático a la impresora (requiere soporte ESC/POS)."
+                      value={ticketConfig.autoCut}
+                      onChange={(v) => setTicketConfig((c) => ({ ...c, autoCut: v }))}
+                    />
                   </div>
                 </div>
 
