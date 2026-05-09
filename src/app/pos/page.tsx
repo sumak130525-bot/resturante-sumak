@@ -167,12 +167,14 @@ function formatARS(price: number): string {
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type TicketItem = {
+  uid: string            // unique row key: menu_item_id + person_number (+ modifier hash)
   menu_item_id: string
   name: string
   price: number
   quantity: number
   image_url?: string | null
   modifiers?: SelectedModifier[]
+  person_number?: number | null  // null / undefined = single-person mode
 }
 
 type DiningOption = 'Comer dentro' | 'Para llevar'
@@ -1044,21 +1046,90 @@ function ConfirmModal({
   )
 }
 
+// ─── Ticket Item Row ──────────────────────────────────────────────────────────
+
+function TicketItemRow({
+  item,
+  onUpdateQty,
+  onRemove,
+}: {
+  item: TicketItem
+  onUpdateQty: (uid: string, delta: number) => void
+  onRemove: (uid: string) => void
+}) {
+  const modExtra = (item.modifiers ?? []).reduce((ms, m) => ms + m.price, 0)
+  const unitTotal = item.price + modExtra
+  return (
+    <li className="flex items-start gap-1.5 bg-gray-50 rounded-xl px-2.5 py-1.5 border border-gray-100">
+      <div className="flex-1 min-w-0">
+        <p className="font-semibold text-gray-900 text-sm leading-tight truncate">{item.name}</p>
+        {(item.modifiers ?? []).length > 0 && (
+          <div className="mt-0.5">
+            {item.modifiers!.map((m, idx) => (
+              <p key={idx} className="text-gray-500 text-xs leading-tight pl-2">
+                · {m.optionName}
+                {m.price > 0 && (
+                  <span className="text-teal-600"> +{formatARS(m.price)}</span>
+                )}
+              </p>
+            ))}
+          </div>
+        )}
+        <p className="text-teal-600 font-bold text-xs tabular-nums mt-0.5">
+          {formatARS(unitTotal)} × {item.quantity} = {formatARS(unitTotal * item.quantity)}
+        </p>
+      </div>
+      <div className="flex items-center gap-0.5 shrink-0 mt-0.5">
+        <button
+          onClick={() => onUpdateQty(item.uid, -1)}
+          className="w-6 h-6 rounded-md bg-gray-200 hover:bg-gray-300 active:scale-90 flex items-center justify-center font-black text-gray-700 text-sm transition-all"
+          aria-label="Quitar uno"
+        >
+          −
+        </button>
+        <span className="w-6 text-center font-black text-gray-900 tabular-nums text-sm">{item.quantity}</span>
+        <button
+          onClick={() => onUpdateQty(item.uid, +1)}
+          className="w-6 h-6 rounded-md bg-teal-100 hover:bg-teal-200 active:scale-90 flex items-center justify-center font-black text-teal-700 text-sm transition-all"
+          aria-label="Agregar uno"
+        >
+          +
+        </button>
+        <button
+          onClick={() => onRemove(item.uid)}
+          className="w-6 h-6 rounded-md bg-red-100 hover:bg-red-200 active:scale-90 flex items-center justify-center text-red-600 font-black text-xs transition-all ml-0.5"
+          aria-label="Eliminar"
+        >
+          ✕
+        </button>
+      </div>
+    </li>
+  )
+}
+
 // ─── Ticket Panel ─────────────────────────────────────────────────────────────
 
 function TicketPanel({
   items,
   diningOption,
+  persons,
+  activePerson,
   onUpdateQty,
   onRemove,
   onDiningChange,
+  onPersonsChange,
+  onActivePersonChange,
   onOpenConfirm,
 }: {
   items: TicketItem[]
   diningOption: DiningOption
-  onUpdateQty: (id: string, delta: number) => void
-  onRemove: (id: string) => void
+  persons: number
+  activePerson: number
+  onUpdateQty: (uid: string, delta: number) => void
+  onRemove: (uid: string) => void
   onDiningChange: (v: DiningOption) => void
+  onPersonsChange: (v: number) => void
+  onActivePersonChange: (v: number) => void
   onOpenConfirm: () => void
 }) {
   const total = items.reduce((s, i) => {
@@ -1067,6 +1138,8 @@ function TicketPanel({
   }, 0)
   const isEmpty = items.length === 0
   const itemCount = items.reduce((s, i) => s + i.quantity, 0)
+
+  const multiPerson = persons > 1
 
   return (
     <div className="flex flex-col h-full bg-white" style={{ minHeight: 0 }}>
@@ -1090,6 +1163,55 @@ function TicketPanel({
         </select>
       </div>
 
+      {/* Persons selector */}
+      <div className="px-3 pt-2 pb-1.5 shrink-0 border-b border-gray-100">
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-bold text-gray-500 whitespace-nowrap">Personas:</span>
+          <button
+            onClick={() => {
+              const next = Math.max(1, persons - 1)
+              onPersonsChange(next)
+              if (activePerson > next) onActivePersonChange(next)
+            }}
+            className="w-6 h-6 rounded-md bg-gray-200 hover:bg-gray-300 active:scale-90 flex items-center justify-center font-black text-gray-700 text-sm transition-all"
+            aria-label="Menos personas"
+          >
+            −
+          </button>
+          <span className="w-5 text-center font-black text-gray-900 tabular-nums text-sm">{persons}</span>
+          <button
+            onClick={() => onPersonsChange(Math.min(9, persons + 1))}
+            className="w-6 h-6 rounded-md bg-teal-100 hover:bg-teal-200 active:scale-90 flex items-center justify-center font-black text-teal-700 text-sm transition-all"
+            aria-label="Más personas"
+          >
+            +
+          </button>
+          {/* Person tabs (only when > 1) */}
+          {multiPerson && (
+            <div className="flex gap-1 ml-1 flex-wrap">
+              {Array.from({ length: persons }, (_, i) => i + 1).map((p) => (
+                <button
+                  key={p}
+                  onClick={() => onActivePersonChange(p)}
+                  className={`px-2 py-0.5 rounded-full text-xs font-bold transition-all active:scale-95 ${
+                    activePerson === p
+                      ? 'bg-teal-600 text-white shadow-sm'
+                      : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                  }`}
+                >
+                  P{p}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+        {multiPerson && (
+          <p className="text-[10px] text-teal-600 font-semibold mt-1 leading-none">
+            Agregando para Persona {activePerson}
+          </p>
+        )}
+      </div>
+
       {/* Items list — flex-1, scrollable */}
       <div className="flex-1 overflow-y-auto px-3 py-2" style={{ minHeight: 0 }}>
         {isEmpty ? (
@@ -1098,61 +1220,37 @@ function TicketPanel({
             <p className="text-sm font-semibold">Sin items</p>
             <p className="text-xs">Tocá un plato para agregar</p>
           </div>
-        ) : (
-          <ul className="flex flex-col gap-1">
-            {items.map((item) => {
-              const modExtra = (item.modifiers ?? []).reduce((ms, m) => ms + m.price, 0)
-              const unitTotal = item.price + modExtra
+        ) : multiPerson ? (
+          // Multi-person view: grouped by person
+          <div className="flex flex-col gap-2">
+            {Array.from({ length: persons }, (_, i) => i + 1).map((p) => {
+              const personItems = items.filter((it) => it.person_number === p)
+              if (personItems.length === 0) return null
+              const personTotal = personItems.reduce((s, it) => {
+                const modExtra = (it.modifiers ?? []).reduce((ms, m) => ms + m.price, 0)
+                return s + (it.price + modExtra) * it.quantity
+              }, 0)
               return (
-                <li
-                  key={item.menu_item_id}
-                  className="flex items-start gap-1.5 bg-gray-50 rounded-xl px-2.5 py-1.5 border border-gray-100"
-                >
-                  <div className="flex-1 min-w-0">
-                    <p className="font-semibold text-gray-900 text-sm leading-tight truncate">{item.name}</p>
-                    {(item.modifiers ?? []).length > 0 && (
-                      <div className="mt-0.5">
-                        {item.modifiers!.map((m, idx) => (
-                          <p key={idx} className="text-gray-500 text-xs leading-tight pl-2">
-                            · {m.optionName}
-                            {m.price > 0 && (
-                              <span className="text-teal-600"> +{formatARS(m.price)}</span>
-                            )}
-                          </p>
-                        ))}
-                      </div>
-                    )}
-                    <p className="text-teal-600 font-bold text-xs tabular-nums mt-0.5">
-                      {formatARS(unitTotal)} × {item.quantity} = {formatARS(unitTotal * item.quantity)}
-                    </p>
+                <div key={p}>
+                  <div className="flex items-center justify-between px-1 mb-1">
+                    <span className="text-xs font-black text-teal-700 uppercase tracking-wide">P{p}:</span>
+                    <span className="text-xs font-bold text-gray-500 tabular-nums">{formatARS(personTotal)}</span>
                   </div>
-                  <div className="flex items-center gap-0.5 shrink-0 mt-0.5">
-                    <button
-                      onClick={() => onUpdateQty(item.menu_item_id, -1)}
-                      className="w-6 h-6 rounded-md bg-gray-200 hover:bg-gray-300 active:scale-90 flex items-center justify-center font-black text-gray-700 text-sm transition-all"
-                      aria-label="Quitar uno"
-                    >
-                      −
-                    </button>
-                    <span className="w-6 text-center font-black text-gray-900 tabular-nums text-sm">{item.quantity}</span>
-                    <button
-                      onClick={() => onUpdateQty(item.menu_item_id, +1)}
-                      className="w-6 h-6 rounded-md bg-teal-100 hover:bg-teal-200 active:scale-90 flex items-center justify-center font-black text-teal-700 text-sm transition-all"
-                      aria-label="Agregar uno"
-                    >
-                      +
-                    </button>
-                    <button
-                      onClick={() => onRemove(item.menu_item_id)}
-                      className="w-6 h-6 rounded-md bg-red-100 hover:bg-red-200 active:scale-90 flex items-center justify-center text-red-600 font-black text-xs transition-all ml-0.5"
-                      aria-label="Eliminar"
-                    >
-                      ✕
-                    </button>
-                  </div>
-                </li>
+                  <ul className="flex flex-col gap-1">
+                    {personItems.map((item) => (
+                      <TicketItemRow key={item.uid} item={item} onUpdateQty={onUpdateQty} onRemove={onRemove} />
+                    ))}
+                  </ul>
+                </div>
               )
             })}
+          </div>
+        ) : (
+          // Single-person view: flat list (unchanged)
+          <ul className="flex flex-col gap-1">
+            {items.map((item) => (
+              <TicketItemRow key={item.uid} item={item} onUpdateQty={onUpdateQty} onRemove={onRemove} />
+            ))}
           </ul>
         )}
       </div>
@@ -1227,6 +1325,10 @@ export default function POSPage() {
   // Modifier modal state
   const [pendingItem, setPendingItem] = useState<MenuItem | null>(null)
   const [pendingModifiers, setPendingModifiers] = useState<Modifier[]>([])
+
+  // Persons state (per-person ordering)
+  const [persons, setPersons] = useState(1)
+  const [activePerson, setActivePerson] = useState(1)
 
   // Ticket state
   const [ticketItems, setTicketItems] = useState<TicketItem[]>([])
@@ -1314,46 +1416,49 @@ export default function POSPage() {
   // Add item to ticket (called after modifier selection or directly)
   const addItemToTicket = useCallback((item: MenuItem, modifiers?: SelectedModifier[]) => {
     setTicketItems((prev) => {
-      // Items with modifiers are always added as new entries (unique combo)
-      // Items without modifiers can be merged by menu_item_id
-      if (!modifiers || modifiers.length === 0) {
-        const existing = prev.find(
-          (i) => i.menu_item_id === item.id && (!i.modifiers || i.modifiers.length === 0)
-        )
+      const personNum = persons > 1 ? activePerson : null
+      const noMods = !modifiers || modifiers.length === 0
+
+      if (noMods) {
+        // Build uid for single-person or multi-person no-mod item
+        const uid = `${item.id}__p${personNum ?? 0}`
+        const existing = prev.find((i) => i.uid === uid)
         if (existing) {
-          return prev.map((i) =>
-            i.menu_item_id === item.id && (!i.modifiers || i.modifiers.length === 0)
-              ? { ...i, quantity: i.quantity + 1 }
-              : i
-          )
+          return prev.map((i) => i.uid === uid ? { ...i, quantity: i.quantity + 1 } : i)
         }
         return [
           ...prev,
           {
+            uid,
             menu_item_id: item.id,
             name: item.name,
             price: item.price,
             quantity: 1,
             image_url: item.image_url,
+            person_number: personNum,
           },
         ]
       }
 
       // With modifiers: always new entry (unique modifier combination)
+      const modHash = (modifiers ?? []).map((m) => m.optionId).sort().join(',')
+      const uid = `${item.id}__p${personNum ?? 0}__m${modHash}__${Date.now()}`
       return [
         ...prev,
         {
+          uid,
           menu_item_id: item.id,
           name: item.name,
           price: item.price,
           quantity: 1,
           image_url: item.image_url,
           modifiers,
+          person_number: personNum,
         },
       ]
     })
     setTicketOpen(true)
-  }, [])
+  }, [persons, activePerson])
 
   const handleAddItem = useCallback((item: MenuItem) => {
     const modifierIds = itemModifierMap[item.id] ?? []
@@ -1386,18 +1491,18 @@ export default function POSPage() {
     setPendingModifiers([])
   }, [])
 
-  const handleUpdateQty = useCallback((id: string, delta: number) => {
+  const handleUpdateQty = useCallback((uid: string, delta: number) => {
     setTicketItems((prev) => {
-      const item = prev.find((i) => i.menu_item_id === id)
+      const item = prev.find((i) => i.uid === uid)
       if (!item) return prev
       const newQty = item.quantity + delta
-      if (newQty <= 0) return prev.filter((i) => i.menu_item_id !== id)
-      return prev.map((i) => i.menu_item_id === id ? { ...i, quantity: newQty } : i)
+      if (newQty <= 0) return prev.filter((i) => i.uid !== uid)
+      return prev.map((i) => i.uid === uid ? { ...i, quantity: newQty } : i)
     })
   }, [])
 
-  const handleRemove = useCallback((id: string) => {
-    setTicketItems((prev) => prev.filter((i) => i.menu_item_id !== id))
+  const handleRemove = useCallback((uid: string) => {
+    setTicketItems((prev) => prev.filter((i) => i.uid !== uid))
   }, [])
 
   const handleSubmit = useCallback(async () => {
@@ -1409,13 +1514,14 @@ export default function POSPage() {
         return s + (i.price + modExtra) * i.quantity
       }, 0)
 
-      // Build items with line_note for modifiers
+      // Build items with line_note for modifiers + person_number if multi-person
       const itemsPayload = ticketItems.map((item) => ({
         menu_item_id: item.menu_item_id,
         name: item.name,
         quantity: item.quantity,
         price: item.price + (item.modifiers ?? []).reduce((s, m) => s + m.price, 0),
         line_note: buildLineNote(item.modifiers ?? []),
+        ...(persons > 1 && item.person_number ? { person_number: item.person_number } : {}),
       }))
 
       // Mesa goes in notes for kitchen extraction (header), user note is separate
@@ -1434,6 +1540,7 @@ export default function POSPage() {
           payment_method: paymentMethod,
           customer_name: customerName || 'POS',
           notes: finalNotes,
+          persons: persons > 1 ? persons : 1,
         }),
       })
       const data = await res.json()
@@ -1463,6 +1570,8 @@ export default function POSPage() {
       setOrderNotes('')
       setTicketOpen(false)
       setShowConfirmModal(false)
+      setPersons(1)
+      setActivePerson(1)
       setToast('Pedido enviado a cocina')
 
       // Print ticket via popup window
@@ -1474,7 +1583,7 @@ export default function POSPage() {
     } finally {
       setSubmitting(false)
     }
-  }, [ticketItems, diningOption, tableNumber, paymentMethod, customerName, orderNotes])
+  }, [ticketItems, diningOption, tableNumber, paymentMethod, customerName, orderNotes, persons])
 
   const ticketCount = ticketItems.reduce((s, i) => s + i.quantity, 0)
 
@@ -1669,9 +1778,13 @@ export default function POSPage() {
             <TicketPanel
               items={ticketItems}
               diningOption={diningOption}
+              persons={persons}
+              activePerson={activePerson}
               onUpdateQty={handleUpdateQty}
               onRemove={handleRemove}
               onDiningChange={setDiningOption}
+              onPersonsChange={setPersons}
+              onActivePersonChange={setActivePerson}
               onOpenConfirm={() => setShowConfirmModal(true)}
             />
           )}
