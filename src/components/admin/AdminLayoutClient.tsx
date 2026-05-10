@@ -3,13 +3,13 @@
 import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
-import { ChefHat, LayoutGrid, ShoppingBag, LogOut, Menu as MenuIcon, X, ChevronLeft, ChevronRight, QrCode, Store, Bell, Tag, ArrowUpDown, Users, Settings, Sliders, DollarSign, BarChart2 } from 'lucide-react'
+import { ChefHat, LayoutGrid, ShoppingBag, LogOut, Menu as MenuIcon, X, ChevronLeft, ChevronRight, QrCode, Store, Bell, Tag, ArrowUpDown, Users, Settings, Sliders, DollarSign, BarChart2, Calculator } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { User } from '@supabase/supabase-js'
 
 interface AdminLayoutClientProps {
   children: React.ReactNode
-  active: 'dashboard' | 'menu' | 'categorias' | 'ordenar' | 'orders' | 'qr' | 'loyverse' | 'notificaciones' | 'clientes' | 'configuracion' | 'modificadores' | 'caja' | 'analytics'
+  active: 'dashboard' | 'menu' | 'categorias' | 'ordenar' | 'orders' | 'qr' | 'loyverse' | 'notificaciones' | 'clientes' | 'configuracion' | 'modificadores' | 'caja' | 'analytics' | 'costs'
 }
 
 const NAV_ITEMS = [
@@ -21,6 +21,7 @@ const NAV_ITEMS = [
   { href: '/admin/clientes', label: 'Clientes', icon: Users, key: 'clientes' as const },
   { href: '/admin/caja', label: 'Caja', icon: DollarSign, key: 'caja' as const },
   { href: '/admin/analytics', label: 'Analytics', icon: BarChart2, key: 'analytics' as const },
+  { href: '/admin/costs', label: 'Costos', icon: Calculator, key: 'costs' as const },
   { href: '/admin/qr', label: 'Códigos QR', icon: QrCode, key: 'qr' as const },
   { href: '/admin/loyverse', label: 'Loyverse', icon: Store, key: 'loyverse' as const },
   { href: '/admin/modificadores', label: 'Modificadores', icon: Sliders, key: 'modificadores' as const },
@@ -29,7 +30,7 @@ const NAV_ITEMS = [
 ]
 
 interface SidebarProps {
-  active: 'dashboard' | 'menu' | 'categorias' | 'ordenar' | 'orders' | 'qr' | 'loyverse' | 'notificaciones' | 'clientes' | 'configuracion' | 'modificadores' | 'caja' | 'analytics'
+  active: 'dashboard' | 'menu' | 'categorias' | 'ordenar' | 'orders' | 'qr' | 'loyverse' | 'notificaciones' | 'clientes' | 'configuracion' | 'modificadores' | 'caja' | 'analytics' | 'costs'
   user: User | null
   onLogout: () => void
   collapsed: boolean
