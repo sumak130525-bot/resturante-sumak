@@ -3,13 +3,13 @@
 import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
-import { ChefHat, LayoutGrid, ShoppingBag, LogOut, Menu as MenuIcon, X, ChevronLeft, ChevronRight, QrCode, Store, Bell, Tag, ArrowUpDown, Users, Settings, Sliders, DollarSign, BarChart2, Calculator, TrendingUp, FileText, Package } from 'lucide-react'
+import { ChefHat, LayoutGrid, ShoppingBag, LogOut, Menu as MenuIcon, X, ChevronLeft, ChevronRight, QrCode, Store, Bell, Tag, ArrowUpDown, Users, Settings, Sliders, DollarSign, BarChart2, Calculator, TrendingUp, FileText, Package, Lightbulb } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { User } from '@supabase/supabase-js'
 
 interface AdminLayoutClientProps {
   children: React.ReactNode
-  active: 'dashboard' | 'menu' | 'categorias' | 'ordenar' | 'orders' | 'qr' | 'loyverse' | 'notificaciones' | 'clientes' | 'configuracion' | 'modificadores' | 'caja' | 'analytics' | 'costs' | 'profitability' | 'reports' | 'inventory'
+  active: 'dashboard' | 'menu' | 'categorias' | 'ordenar' | 'orders' | 'qr' | 'loyverse' | 'notificaciones' | 'clientes' | 'configuracion' | 'modificadores' | 'caja' | 'analytics' | 'costs' | 'profitability' | 'reports' | 'inventory' | 'predictions'
 }
 
 const NAV_ITEMS = [
@@ -22,6 +22,7 @@ const NAV_ITEMS = [
   { href: '/admin/caja', label: 'Caja', icon: DollarSign, key: 'caja' as const },
   { href: '/admin/analytics', label: 'Analytics', icon: BarChart2, key: 'analytics' as const },
   { href: '/admin/analytics/profitability', label: 'Rentabilidad', icon: TrendingUp, key: 'profitability' as const },
+  { href: '/admin/analytics/predictions', label: 'Predicciones', icon: Lightbulb, key: 'predictions' as const },
   { href: '/admin/costs', label: 'Costos', icon: Calculator, key: 'costs' as const },
   { href: '/admin/inventory', label: 'Inventario', icon: Package, key: 'inventory' as const },
   { href: '/admin/reports', label: 'Reportes', icon: FileText, key: 'reports' as const },
@@ -33,7 +34,7 @@ const NAV_ITEMS = [
 ]
 
 interface SidebarProps {
-  active: 'dashboard' | 'menu' | 'categorias' | 'ordenar' | 'orders' | 'qr' | 'loyverse' | 'notificaciones' | 'clientes' | 'configuracion' | 'modificadores' | 'caja' | 'analytics' | 'costs' | 'profitability' | 'reports' | 'inventory'
+  active: 'dashboard' | 'menu' | 'categorias' | 'ordenar' | 'orders' | 'qr' | 'loyverse' | 'notificaciones' | 'clientes' | 'configuracion' | 'modificadores' | 'caja' | 'analytics' | 'costs' | 'profitability' | 'reports' | 'inventory' | 'predictions'
   user: User | null
   onLogout: () => void
   collapsed: boolean
