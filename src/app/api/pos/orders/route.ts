@@ -167,6 +167,51 @@ export async function POST(request: NextRequest) {
       void cashErr
     }
 
+    // ── Auto-consume ingredients from inventory ───────────────────────────────
+    try {
+      for (const item of (items as PosOrderItem[])) {
+        // Get recipe items for this menu item
+        const { data: recipeItems } = await supabase
+          .from('recipe_items')
+          .select('ingredient_id, quantity')
+          .eq('menu_item_id', item.menu_item_id)
+
+        if (!recipeItems || recipeItems.length === 0) continue
+
+        for (const ri of recipeItems) {
+          const consumed = ri.quantity * item.quantity
+
+          // Get current inventory row
+          const { data: invRow } = await supabase
+            .from('inventory')
+            .select('id, stock')
+            .eq('ingredient_id', ri.ingredient_id)
+            .single()
+
+          if (invRow) {
+            const newStock = Math.max(0, Number(invRow.stock) - consumed)
+            await supabase
+              .from('inventory')
+              .update({ stock: newStock, updated_at: new Date().toISOString() })
+              .eq('ingredient_id', ri.ingredient_id)
+          }
+
+          // Always register consumption movement
+          await supabase
+            .from('inventory_movements')
+            .insert({
+              ingredient_id: ri.ingredient_id,
+              type: 'consumption',
+              quantity: consumed,
+              notes: `Pedido POS #${order.id.slice(-6)} - ${item.name}`,
+            })
+        }
+      }
+    } catch (invErr) {
+      // Non-fatal: don't fail the order if inventory discount fails
+      void invErr
+    }
+
     return NextResponse.json({ success: true, order_id: order.id }, { status: 201 })
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Error interno'
