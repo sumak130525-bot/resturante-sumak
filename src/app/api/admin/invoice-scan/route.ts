@@ -59,7 +59,7 @@ export async function POST(request: NextRequest) {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${groqKey}` },
       body: JSON.stringify({
-        model: 'llama-4-scout-17b-16e-instruct',
+        model: 'meta-llama/llama-4-scout-17b-16e-instruct',
         messages: [
           {
             role: 'user',
