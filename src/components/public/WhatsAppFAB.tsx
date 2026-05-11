@@ -25,9 +25,12 @@ export function WhatsAppFAB({ cart, total, mesa }: WhatsAppFABProps) {
   }
 
   const handleWhatsApp = () => {
-    if (!hasItems) return
-    const url = buildWhatsAppURL(cart, total, mesa)
-    window.open(url, '_blank', 'noopener,noreferrer')
+    if (!hasItems) {
+      window.open('https://wa.me/5492617526242', '_blank', 'noopener,noreferrer')
+    } else {
+      const url = buildWhatsAppURL(cart, total, mesa)
+      window.open(url, '_blank', 'noopener,noreferrer')
+    }
   }
 
   return (
@@ -36,15 +39,13 @@ export function WhatsAppFAB({ cart, total, mesa }: WhatsAppFABProps) {
       {/* ── WhatsApp (más cercano a la esquina, abajo) ── */}
       <button
         onClick={handleWhatsApp}
-        title={hasItems ? 'Enviar pedido por WhatsApp' : 'Agrega platos para pedir por WhatsApp'}
+        title={hasItems ? 'Enviar pedido por WhatsApp' : 'Chateá con nosotros por WhatsApp'}
         aria-label="WhatsApp"
         className={cn(
           'relative w-14 h-14 rounded-full shadow-lg',
           'flex items-center justify-center',
           'transition-all duration-300',
-          hasItems
-            ? 'bg-[#25D366] hover:bg-[#1ebe5d] hover:scale-110 active:scale-95 cursor-pointer'
-            : 'bg-[#25D366]/50 cursor-default'
+          'bg-[#25D366] hover:bg-[#1ebe5d] hover:scale-110 active:scale-95 cursor-pointer'
         )}
       >
         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" className="w-7 h-7 fill-white">
