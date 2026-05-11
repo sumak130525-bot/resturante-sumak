@@ -61,7 +61,7 @@ export async function GET(req: NextRequest) {
   // Fetch all non-cancelled orders in range
   const { data: orders, error: ordersError } = await sb
     .from('orders')
-    .select('id, total, status, source, created_at, payment_method, dining_option, persons')
+    .select('id, total, status, source, channel, created_at, payment_method, dining_option, persons')
     .neq('status', 'cancelled')
     .gte('created_at', from)
     .lte('created_at', to)
@@ -73,6 +73,7 @@ export async function GET(req: NextRequest) {
     id: string
     total: number
     source: string | null
+    channel: string | null
     created_at: string
     payment_method: string | null
     dining_option: string | null
@@ -114,7 +115,8 @@ export async function GET(req: NextRequest) {
   const hourMap = new Map<number, number>()
   for (let h = 0; h < 24; h++) hourMap.set(h, 0)
   for (const o of orderList) {
-    const h = new Date(o.created_at).getHours()
+    const argDate = new Date(o.created_at)
+    const h = (argDate.getUTCHours() - 3 + 24) % 24
     hourMap.set(h, (hourMap.get(h) ?? 0) + (o.total ?? 0))
   }
   const salesByHour = Array.from(hourMap.entries()).map(([hour, total]) => ({
@@ -159,11 +161,14 @@ export async function GET(req: NextRequest) {
   }
   const diningOptions = Array.from(diningMap.entries()).map(([name, value]) => ({ name, value }))
 
-  // --- Sales by source ---
+  // --- Sales by source (channel) ---
   const sourceMap = new Map<string, number>()
   for (const o of orderList) {
-    let src = o.source ?? 'WhatsApp'
-    if (!src || src === 'null') src = 'WhatsApp'
+    let src: string
+    if (o.channel === 'pos') src = 'POS'
+    else if (o.channel === 'web') src = 'Web'
+    else if (o.channel === 'whatsapp') src = 'WhatsApp'
+    else src = 'Otro'
     sourceMap.set(src, (sourceMap.get(src) ?? 0) + (o.total ?? 0))
   }
   const salesBySource = Array.from(sourceMap.entries()).map(([name, value]) => ({ name, value }))
