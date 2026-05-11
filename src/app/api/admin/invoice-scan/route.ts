@@ -54,7 +54,7 @@ export async function POST(request: NextRequest) {
   const prompt = `Analiza esta factura/ticket de compra. Extrae los datos en formato JSON exacto: {"supplier": string, "date": string, "items": [{"name": string, "quantity": number, "unit": string, "unit_price": number, "total": number}], "total": number}. Las unidades válidas son: kg, lt, unidad, g, ml, docena, caja, bolsa, paquete. Si no puedes leer algún campo pon null. Solo responde con el JSON, sin texto adicional, sin markdown, sin bloques de código.`
 
   const geminiRes = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
+    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -73,8 +73,8 @@ export async function POST(request: NextRequest) {
 
   if (!geminiRes.ok) {
     const errText = await geminiRes.text()
-    console.error('Gemini error:', errText)
-    return NextResponse.json({ error: 'Error al procesar imagen con Gemini', detail: errText }, { status: 502 })
+    console.error('Gemini error:', geminiRes.status, errText)
+    return NextResponse.json({ error: `Error Gemini (${geminiRes.status}): ${errText.slice(0, 200)}` }, { status: 502 })
   }
 
   const geminiData = await geminiRes.json()
