@@ -1884,17 +1884,68 @@ export default function POSPage() {
                 return <div key={`empty-${position}`} className="w-full h-full" />
               })
             ) : (
-              // Category tab: simple list of items from that category
-              categoryItems.map((item) => (
-                <POSDishCard
-                  key={item.id}
-                  item={item}
-                  onAdd={handleAddItem}
-                  locale={locale}
-                  editMode={false}
-                  onUnassign={handleUnassign}
-                />
-              ))
+              // Category tab: items from that category, grouped by subcategory if Bebidas
+              (() => {
+                const activeCat = categories.find((c) => c.slug === activeCategory)
+                const isBebidas =
+                  activeCat?.slug === 'bebidas' ||
+                  activeCat?.name?.toLowerCase().includes('bebida')
+                const hasSubcategories = isBebidas && categoryItems.some((i) => i.subcategory)
+
+                if (!hasSubcategories) {
+                  return categoryItems.map((item) => (
+                    <POSDishCard
+                      key={item.id}
+                      item={item}
+                      onAdd={handleAddItem}
+                      locale={locale}
+                      editMode={false}
+                      onUnassign={handleUnassign}
+                    />
+                  ))
+                }
+
+                // Bebidas with subcategories: group and render with separators
+                const SUBCATEGORY_ORDER_POS = ['Naturales de la casa', 'Sin alcohol', 'Con alcohol']
+                const subMap = new Map<string, typeof categoryItems>()
+                for (const item of categoryItems) {
+                  const key = item.subcategory ?? ''
+                  if (!subMap.has(key)) subMap.set(key, [])
+                  subMap.get(key)!.push(item)
+                }
+                const groups: { subcategory: string | null; items: typeof categoryItems }[] = []
+                for (const sub of SUBCATEGORY_ORDER_POS) {
+                  if (subMap.has(sub)) groups.push({ subcategory: sub, items: subMap.get(sub)! })
+                }
+                if (subMap.has('')) groups.push({ subcategory: null, items: subMap.get('')! })
+
+                return groups.flatMap(({ subcategory, items: subItems }) => [
+                  ...(subcategory
+                    ? [
+                        <div
+                          key={`sep-${subcategory}`}
+                          style={{ gridColumn: '1 / -1' }}
+                          className="flex flex-col pt-1 pb-0.5"
+                        >
+                          <span className="text-sumak-gold font-bold text-xs uppercase tracking-widest leading-none">
+                            {subcategory}
+                          </span>
+                          <div className="h-px bg-sumak-gold/30 mt-1" />
+                        </div>,
+                      ]
+                    : []),
+                  ...subItems.map((item) => (
+                    <POSDishCard
+                      key={item.id}
+                      item={item}
+                      onAdd={handleAddItem}
+                      locale={locale}
+                      editMode={false}
+                      onUnassign={handleUnassign}
+                    />
+                  )),
+                ])
+              })()
             )}
           </main>
         </div>

@@ -1,8 +1,18 @@
 'use client'
 
+// IMPORTANTE: Ejecutar en Supabase antes de usar este campo:
+// ALTER TABLE menu_items ADD COLUMN IF NOT EXISTS subcategory text DEFAULT NULL;
+
 import { useState, useRef } from 'react'
 import { Loader2, Save, X, ChevronDown, ChevronUp, Upload, Image as ImageIcon } from 'lucide-react'
 import type { MenuItem, Category } from '@/lib/types'
+
+const BEBIDAS_SUBCATEGORIES = [
+  { value: '', label: '— Ninguna —' },
+  { value: 'Naturales de la casa', label: 'Naturales de la casa' },
+  { value: 'Sin alcohol', label: 'Sin alcohol' },
+  { value: 'Con alcohol', label: 'Con alcohol' },
+]
 
 interface MenuItemFormProps {
   item?: MenuItem | null
@@ -25,6 +35,7 @@ export function MenuItemForm({ item, categories, onSave, onClose }: MenuItemForm
     description_es: item?.description_es || item?.description || '',
     description_en: item?.description_en ?? '',
     description_qu: item?.description_qu ?? '',
+    subcategory: item?.subcategory ?? '',
   })
   const [loading, setLoading] = useState(false)
   const [uploading, setUploading] = useState(false)
@@ -33,6 +44,12 @@ export function MenuItemForm({ item, categories, onSave, onClose }: MenuItemForm
   const [pendingFile, setPendingFile] = useState<File | null>(null)
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+  // Detect if selected category is Bebidas (by slug or name)
+  const selectedCat = categories.find((c) => c.id === form.category_id)
+  const isBebidas =
+    selectedCat?.slug === 'bebidas' ||
+    selectedCat?.name?.toLowerCase().includes('bebida')
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -57,6 +74,7 @@ export function MenuItemForm({ item, categories, onSave, onClose }: MenuItemForm
         description_es: form.description_es || null,
         description_en: form.description_en || null,
         description_qu: form.description_qu || null,
+        subcategory: isBebidas && form.subcategory ? form.subcategory : null,
       }, pendingFile ?? undefined)
       onClose()
     } catch (err: unknown) {
@@ -130,7 +148,7 @@ export function MenuItemForm({ item, categories, onSave, onClose }: MenuItemForm
               <label className="block text-sm font-medium text-gray-700 mb-1">Categoría *</label>
               <select
                 value={form.category_id}
-                onChange={(e) => setForm({ ...form, category_id: e.target.value })}
+                onChange={(e) => setForm({ ...form, category_id: e.target.value, subcategory: '' })}
                 className="input-field"
                 required
               >
@@ -139,6 +157,21 @@ export function MenuItemForm({ item, categories, onSave, onClose }: MenuItemForm
                 ))}
               </select>
             </div>
+
+            {isBebidas && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Subcategoría</label>
+                <select
+                  value={form.subcategory}
+                  onChange={(e) => setForm({ ...form, subcategory: e.target.value })}
+                  className="input-field"
+                >
+                  {BEBIDAS_SUBCATEGORIES.map((opt) => (
+                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                  ))}
+                </select>
+              </div>
+            )}
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Imagen del plato</label>

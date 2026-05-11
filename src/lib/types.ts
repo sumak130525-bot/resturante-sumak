@@ -23,6 +23,7 @@ export type MenuItem = {
   available_qty: number | null
   active: boolean
   display_order?: number | null
+  subcategory?: string | null
   created_at: string
   categories?: Category
 }
@@ -80,6 +81,7 @@ type MenuItemRow = {
   available_qty: number | null
   active: boolean
   display_order?: number | null
+  subcategory?: string | null
   created_at: string
 }
 
