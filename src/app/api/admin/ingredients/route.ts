@@ -125,20 +125,44 @@ export async function POST(request: NextRequest) {
 export async function PUT(request: NextRequest) {
   const body = await request.json()
   const { id, ...updates } = body
+  if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 })
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const admin = await getUntypedClient(true) as any
 
-  const { data, error } = await admin
-    .from('ingredients')
-    .update(updates)
-    .eq('id', id)
-    .select()
-    .single()
+  let data: Record<string, unknown> | null = null
 
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  if (Object.keys(updates).length > 0) {
+    const { data: updated, error } = await admin
+      .from('ingredients')
+      .update(updates)
+      .eq('id', id)
+      .select()
+      .single()
+
+    if (error) {
+      console.error('[ingredients] PUT update error:', error.message)
+      return NextResponse.json({ error: error.message }, { status: 500 })
+    }
+    data = updated
+  } else {
+    // No fields to update — just fetch the current row to get the name for auto-linking
+    const { data: fetched, error } = await admin
+      .from('ingredients')
+      .select('*')
+      .eq('id', id)
+      .single()
+
+    if (error) {
+      console.error('[ingredients] PUT fetch error:', error.message)
+      return NextResponse.json({ error: error.message }, { status: 500 })
+    }
+    data = fetched
+  }
+
+  if (!data) return NextResponse.json({ error: 'Ingredient not found' }, { status: 404 })
 
   // Auto-link to menu_item (using current name from DB)
-  const linkedMenuItemId = await linkIngredientToMenuItem(admin, data.id, data.name)
+  const linkedMenuItemId = await linkIngredientToMenuItem(admin, data.id as string, data.name as string)
 
   return NextResponse.json({ ...data, linked_menu_item_id: linkedMenuItemId })
 }

@@ -34,8 +34,9 @@ export async function GET() {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
 
+  // Use service-role client so RLS never blocks recipe_items / ingredients reads
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const db = supabase as any
+  const db = await getUntypedClient(true) as any
 
   const [menuRes, recipeRes, plateCostsRes, ingredientsRes] = await Promise.all([
     db.from('menu_items').select('id, name, price').eq('active', true).order('name'),
@@ -45,6 +46,9 @@ export async function GET() {
   ])
 
   if (menuRes.error) return NextResponse.json({ error: menuRes.error.message }, { status: 500 })
+  if (recipeRes.error) console.error('[costs] recipe_items query error:', recipeRes.error.message)
+  if (ingredientsRes.error) console.error('[costs] ingredients query error:', ingredientsRes.error.message)
+  if (plateCostsRes.error) console.error('[costs] plate_costs query error:', plateCostsRes.error.message)
 
   // Build lookup maps
   const ingredientPriceMap: Record<string, number> = {}

@@ -218,18 +218,21 @@ export default function InvoiceScanPage() {
         let ingredientId: string
 
         if (existing) {
-          // Update price if available
+          // Always PUT to trigger auto-link; include price_per_unit if available
           let linked = false
-          if (unitPrice !== null) {
-            const putRes = await fetch('/api/admin/ingredients', {
-              method: 'PUT',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ id: existing.id, price_per_unit: unitPrice }),
-            })
-            if (putRes.ok) {
-              const putData = await putRes.json().catch(() => ({}))
-              linked = !!putData.linked_menu_item_id
-            }
+          const putBody: Record<string, unknown> = { id: existing.id }
+          if (unitPrice !== null) putBody.price_per_unit = unitPrice
+          const putRes = await fetch('/api/admin/ingredients', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(putBody),
+          })
+          if (putRes.ok) {
+            const putData = await putRes.json().catch(() => ({}))
+            linked = !!putData.linked_menu_item_id
+          } else {
+            const errBody = await putRes.json().catch(() => ({}))
+            console.error('[invoice-scan] Error en PUT ingrediente:', existing.id, putRes.status, errBody)
           }
           ingredientId = existing.id
           results.push({ name: item.name.trim(), action: 'updated', linked })
