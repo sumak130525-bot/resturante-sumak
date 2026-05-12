@@ -119,11 +119,6 @@ export async function GET() {
 
 // POST: registrar compra o ajuste
 export async function POST(request: NextRequest) {
-  const supabase = await getClient()
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: { user } } = await (supabase as any).auth.getUser()
-  if (!user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
-
   const body = await request.json()
   const { ingredient_id, type, quantity, notes, price, date } = body
 

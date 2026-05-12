@@ -24,12 +24,10 @@ async function getUntypedClient(useServiceRole = false) {
 
 // GET: list all ingredients
 export async function GET() {
-  const supabase = await getUntypedClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
-
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data, error } = await (supabase as any)
+  const db = await getUntypedClient(true) as any
+
+  const { data, error } = await db
     .from('ingredients')
     .select('*')
     .order('name')
@@ -40,10 +38,6 @@ export async function GET() {
 
 // POST: create ingredient
 export async function POST(request: NextRequest) {
-  const supabase = await getUntypedClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
-
   const body = await request.json()
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const admin = await getUntypedClient(true) as any
@@ -60,10 +54,6 @@ export async function POST(request: NextRequest) {
 
 // PUT: update ingredient
 export async function PUT(request: NextRequest) {
-  const supabase = await getUntypedClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
-
   const body = await request.json()
   const { id, ...updates } = body
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

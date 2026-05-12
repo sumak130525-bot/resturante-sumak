@@ -199,7 +199,7 @@ export default function InvoiceScanPage() {
     try {
       // 1. Fetch existing ingredients
       const ingRes = await fetch('/api/admin/ingredients')
-      const existingIngredients: { id: string; name: string; unit: string; cost_per_unit?: number }[] =
+      const existingIngredients: { id: string; name: string; unit: string; price_per_unit?: number }[] =
         ingRes.ok ? await ingRes.json() : []
 
       for (const item of invoiceData.items) {
@@ -222,7 +222,7 @@ export default function InvoiceScanPage() {
             await fetch('/api/admin/ingredients', {
               method: 'PUT',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ id: existing.id, cost_per_unit: unitPrice }),
+              body: JSON.stringify({ id: existing.id, price_per_unit: unitPrice }),
             })
           }
           ingredientId = existing.id
@@ -235,11 +235,13 @@ export default function InvoiceScanPage() {
             body: JSON.stringify({
               name: item.name.trim(),
               unit: item.unit ?? 'kg',
-              cost_per_unit: unitPrice ?? 0,
+              price_per_unit: unitPrice ?? 0,
             }),
           })
 
           if (!createRes.ok) {
+            const errBody = await createRes.json().catch(() => ({}))
+            console.error('Error creando ingrediente:', item.name, createRes.status, errBody)
             results.push({ name: item.name.trim(), action: 'skipped' })
             continue
           }
