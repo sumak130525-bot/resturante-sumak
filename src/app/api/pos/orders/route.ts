@@ -126,7 +126,7 @@ export async function POST(request: NextRequest) {
       }
     } catch (stockErr) {
       // Non-fatal: don't fail the order if stock decrement fails
-      void stockErr
+      console.error('[POS orders] stock decrement error:', stockErr)
     }
 
     // ── Auto-record cash movement for the sale ────────────────────────────────
@@ -171,33 +171,44 @@ export async function POST(request: NextRequest) {
     try {
       for (const item of (items as PosOrderItem[])) {
         // Get recipe items for this menu item
-        const { data: recipeItems } = await supabase
+        const { data: recipeItems, error: recipeErr } = await supabase
           .from('recipe_items')
           .select('ingredient_id, quantity')
           .eq('menu_item_id', item.menu_item_id)
 
+        if (recipeErr) {
+          console.error('[POS orders] recipe_items fetch error:', recipeErr.message)
+          continue
+        }
         if (!recipeItems || recipeItems.length === 0) continue
 
         for (const ri of recipeItems) {
           const consumed = ri.quantity * item.quantity
 
           // Get current inventory row
-          const { data: invRow } = await supabase
+          const { data: invRow, error: invFetchErr } = await supabase
             .from('inventory')
             .select('id, stock')
             .eq('ingredient_id', ri.ingredient_id)
             .single()
 
+          if (invFetchErr) {
+            console.error('[POS orders] inventory fetch error:', invFetchErr.message, 'ingredient_id:', ri.ingredient_id)
+          }
+
           if (invRow) {
             const newStock = Math.max(0, Number(invRow.stock) - consumed)
-            await supabase
+            const { error: invUpdateErr } = await supabase
               .from('inventory')
               .update({ stock: newStock, updated_at: new Date().toISOString() })
               .eq('ingredient_id', ri.ingredient_id)
+            if (invUpdateErr) {
+              console.error('[POS orders] inventory update error:', invUpdateErr.message, 'ingredient_id:', ri.ingredient_id)
+            }
           }
 
           // Always register consumption movement
-          await supabase
+          const { error: movErr } = await supabase
             .from('inventory_movements')
             .insert({
               ingredient_id: ri.ingredient_id,
@@ -205,11 +216,14 @@ export async function POST(request: NextRequest) {
               quantity: consumed,
               notes: `Pedido POS #${order.id.slice(-6)} - ${item.name}`,
             })
+          if (movErr) {
+            console.error('[POS orders] inventory_movements insert error:', movErr.message, 'ingredient_id:', ri.ingredient_id)
+          }
         }
       }
     } catch (invErr) {
       // Non-fatal: don't fail the order if inventory discount fails
-      void invErr
+      console.error('[POS orders] inventory auto-consume error:', invErr)
     }
 
     return NextResponse.json({ success: true, order_id: order.id }, { status: 201 })
