@@ -167,21 +167,34 @@ export async function PUT(request: NextRequest) {
   return NextResponse.json({ ...data, linked_menu_item_id: linkedMenuItemId })
 }
 
-// DELETE: remove ingredient
+// DELETE: remove ingredient (cascades recipe_items and inventory_movements)
 export async function DELETE(request: NextRequest) {
-  const supabase = await getUntypedClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
-
   const { id } = await request.json()
+  if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 })
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const admin = await getUntypedClient(true) as any
 
+  // 1. Delete recipe_items referencing this ingredient
+  const { error: riErr } = await admin
+    .from('recipe_items')
+    .delete()
+    .eq('ingredient_id', id)
+  if (riErr) return NextResponse.json({ error: `recipe_items: ${riErr.message}` }, { status: 500 })
+
+  // 2. Delete inventory_movements referencing this ingredient
+  const { error: imErr } = await admin
+    .from('inventory_movements')
+    .delete()
+    .eq('ingredient_id', id)
+  if (imErr) return NextResponse.json({ error: `inventory_movements: ${imErr.message}` }, { status: 500 })
+
+  // 3. Delete the ingredient itself
   const { error } = await admin
     .from('ingredients')
     .delete()
     .eq('id', id)
-
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
   return NextResponse.json({ success: true })
 }
