@@ -55,6 +55,8 @@ type PrintData = {
   diningOption: DiningOption
   tableNumber: string
   paymentMethod: PaymentMethod
+  cashAmount?: number
+  transferAmount?: number
   customerName: string
 }
 
@@ -111,7 +113,11 @@ function buildTicketText(data: PrintData, cfg: TicketConfig = DEFAULT_TICKET_CON
   const clienteLine = (cfg.showCustomerName ?? true) && data.customerName && data.customerName !== 'POS'
     ? addMargin(`Cliente: ${data.customerName}`) : ''
 
-  const paymentLabel = data.paymentMethod === 'Transferencia' ? 'TRANSFER' : data.paymentMethod.toUpperCase()
+  const paymentLabel = data.paymentMethod === 'Transferencia'
+    ? 'TRANSFER'
+    : data.paymentMethod === 'Mixto'
+      ? 'MIXTO'
+      : data.paymentMethod.toUpperCase()
 
   const infoLines: string[] = []
   if (cfg.showDate ?? true) infoLines.push(addMargin(`${data.dateStr}  ${data.timeStr}`))
@@ -131,7 +137,15 @@ function buildTicketText(data: PrintData, cfg: TicketConfig = DEFAULT_TICKET_CON
   // showOrderNote controls whether a note line is shown when available
 
   const totalLine = addMargin(`TOTAL: ${total}`)
-  const payLine = (cfg.showPaymentMethod ?? true) ? addMargin(`Pago: ${paymentLabel}`) : ''
+  let payLine = ''
+  if (cfg.showPaymentMethod ?? true) {
+    const parts = [addMargin(`Pago: ${paymentLabel}`)]
+    if (data.paymentMethod === 'Mixto') {
+      if (data.cashAmount) parts.push(addMargin(`  Efectivo: ${formatTicketMoney(data.cashAmount)}`))
+      if (data.transferAmount) parts.push(addMargin(`  Transfer: ${formatTicketMoney(data.transferAmount)}`))
+    }
+    payLine = parts.join('\n')
+  }
 
   // Build item section — with person grouping if showPersonDetail is enabled
   let itemSection: string[]
@@ -249,7 +263,7 @@ type TicketItem = {
 }
 
 type DiningOption = 'Comer dentro' | 'Para llevar'
-type PaymentMethod = 'Efectivo' | 'Transferencia'
+type PaymentMethod = 'Efectivo' | 'Transferencia' | 'Mixto'
 
 // ─── Build line_note string from modifiers (Loyverse format) ─────────────────
 
@@ -993,12 +1007,17 @@ function ConfirmModal({
   diningOption,
   tableNumber,
   paymentMethod,
+  cashAmount,
+  transferAmount,
   customerName,
   orderNotes,
   customers,
   submitting,
+  total,
   onTableChange,
   onPaymentChange,
+  onCashAmountChange,
+  onTransferAmountChange,
   onCustomerChange,
   onNotesChange,
   onCancel,
@@ -1007,17 +1026,29 @@ function ConfirmModal({
   diningOption: DiningOption
   tableNumber: string
   paymentMethod: PaymentMethod
+  cashAmount: string
+  transferAmount: string
   customerName: string
   orderNotes: string
   customers: FrequentCustomer[]
   submitting: boolean
+  total: number
   onTableChange: (v: string) => void
   onPaymentChange: (v: PaymentMethod) => void
+  onCashAmountChange: (v: string) => void
+  onTransferAmountChange: (v: string) => void
   onCustomerChange: (v: string) => void
   onNotesChange: (v: string) => void
   onCancel: () => void
   onConfirm: () => void
 }) {
+  // Validation for mixed payment
+  const mixedValid = paymentMethod !== 'Mixto' || (() => {
+    const ca = parseFloat(cashAmount.replace(',', '.') || '0')
+    const ta = parseFloat(transferAmount.replace(',', '.') || '0')
+    return Math.abs(ca + ta - total) < 1
+  })()
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
@@ -1051,8 +1082,8 @@ function ConfirmModal({
           {/* Payment method */}
           <div>
             <p className="text-xs font-bold text-gray-500 mb-1">Método de pago</p>
-            <div className="grid grid-cols-2 gap-1.5">
-              {(['Efectivo', 'Transferencia'] as PaymentMethod[]).map((pm) => (
+            <div className="grid grid-cols-3 gap-1.5">
+              {(['Efectivo', 'Transferencia', 'Mixto'] as PaymentMethod[]).map((pm) => (
                 <button
                   key={pm}
                   onClick={() => onPaymentChange(pm)}
@@ -1062,10 +1093,54 @@ function ConfirmModal({
                       : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                   }`}
                 >
-                  {pm === 'Efectivo' ? '💵 Efectivo' : '📲 Transfer'}
+                  {pm === 'Efectivo' ? '💵 Efectivo' : pm === 'Transferencia' ? '📲 Transfer' : '💰 Mixto'}
                 </button>
               ))}
             </div>
+
+            {/* Mixed payment fields */}
+            {paymentMethod === 'Mixto' && (
+              <div className="mt-3 flex flex-col gap-2">
+                <div>
+                  <p className="text-xs font-semibold text-gray-500 mb-1">Monto efectivo</p>
+                  <input
+                    type="number"
+                    inputMode="decimal"
+                    min={0}
+                    value={cashAmount}
+                    onChange={(e) => onCashAmountChange(e.target.value)}
+                    placeholder="$ 0"
+                    className="w-full rounded-xl border border-gray-200 px-3 py-2 text-base font-bold text-gray-900 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-teal-400 tabular-nums"
+                  />
+                </div>
+                <div>
+                  <p className="text-xs font-semibold text-gray-500 mb-1">Monto transferencia</p>
+                  <input
+                    type="number"
+                    inputMode="decimal"
+                    min={0}
+                    value={transferAmount}
+                    onChange={(e) => onTransferAmountChange(e.target.value)}
+                    placeholder="$ 0"
+                    className="w-full rounded-xl border border-gray-200 px-3 py-2 text-base font-bold text-gray-900 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-teal-400 tabular-nums"
+                  />
+                </div>
+                {/* Validation feedback */}
+                {(() => {
+                  const ca = parseFloat(cashAmount.replace(',', '.') || '0')
+                  const ta = parseFloat(transferAmount.replace(',', '.') || '0')
+                  const diff = ca + ta - total
+                  if (Math.abs(diff) < 1) {
+                    return <p className="text-xs text-green-600 font-semibold">✓ Suma correcta</p>
+                  }
+                  return (
+                    <p className="text-xs text-red-500 font-semibold">
+                      La suma debe ser {formatARS(total)} (falta {formatARS(Math.abs(diff))})
+                    </p>
+                  )
+                })()}
+              </div>
+            )}
           </div>
 
           {/* Customer */}
@@ -1102,14 +1177,181 @@ function ConfirmModal({
           </button>
           <button
             onClick={onConfirm}
-            disabled={submitting}
+            disabled={submitting || !mixedValid}
             className={`flex-1 py-3 rounded-xl font-bold text-sm transition-all active:scale-95 shadow-md ${
-              submitting
+              submitting || !mixedValid
                 ? 'bg-gray-300 text-gray-400 cursor-not-allowed'
                 : 'bg-green-500 hover:bg-green-600 text-white cursor-pointer'
             }`}
           >
             {submitting ? 'Enviando...' : 'Confirmar y Enviar'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── Change Payment Modal (for sent orders) ───────────────────────────────────
+
+type SentOrder = {
+  id: string
+  order_number?: number | null
+  customer_name: string
+  total: number
+  payment_method: string
+  cash_amount?: number | null
+  transfer_amount?: number | null
+  created_at: string
+}
+
+function ChangePaymentModal({
+  order,
+  onClose,
+  onSuccess,
+}: {
+  order: SentOrder
+  onClose: () => void
+  onSuccess: () => void
+}) {
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>(() => {
+    if (order.payment_method === 'mixed') return 'Mixto'
+    if (order.payment_method === 'transfer') return 'Transferencia'
+    return 'Efectivo'
+  })
+  const [cashAmount, setCashAmount] = useState(order.cash_amount ? String(order.cash_amount) : '')
+  const [transferAmount, setTransferAmount] = useState(order.transfer_amount ? String(order.transfer_amount) : '')
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const mixedValid = paymentMethod !== 'Mixto' || (() => {
+    const ca = parseFloat(cashAmount.replace(',', '.') || '0')
+    const ta = parseFloat(transferAmount.replace(',', '.') || '0')
+    return Math.abs(ca + ta - order.total) < 1
+  })()
+
+  const handleSave = async () => {
+    setSaving(true)
+    setError(null)
+    try {
+      const ca = paymentMethod === 'Mixto' ? parseFloat(cashAmount.replace(',', '.') || '0') : null
+      const ta = paymentMethod === 'Mixto' ? parseFloat(transferAmount.replace(',', '.') || '0') : null
+      const pm = paymentMethod === 'Mixto' ? 'mixed' : paymentMethod === 'Transferencia' ? 'transfer' : 'cash'
+
+      const res = await fetch(`/api/pos/orders/${order.id}/payment`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ payment_method: pm, cash_amount: ca, transfer_amount: ta }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error ?? 'Error al actualizar')
+      onSuccess()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Error')
+    }
+    setSaving(false)
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60"
+      onClick={(e) => { if (e.target === e.currentTarget) onClose() }}
+    >
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm mx-4 flex flex-col overflow-hidden">
+        {/* Header */}
+        <div className="px-5 py-4 bg-orange-500 flex items-center justify-between">
+          <div>
+            <h3 className="text-white font-black text-lg leading-none">Cambiar método de pago</h3>
+            <p className="text-orange-100 text-xs mt-0.5">{order.customer_name} · {formatARS(order.total)}</p>
+          </div>
+          <button onClick={onClose} className="text-white/70 hover:text-white text-xl leading-none">✕</button>
+        </div>
+
+        {/* Body */}
+        <div className="px-5 py-4 flex flex-col gap-4">
+          <div>
+            <p className="text-xs font-bold text-gray-500 mb-1">Método de pago</p>
+            <div className="grid grid-cols-3 gap-1.5">
+              {(['Efectivo', 'Transferencia', 'Mixto'] as PaymentMethod[]).map((pm) => (
+                <button
+                  key={pm}
+                  onClick={() => setPaymentMethod(pm)}
+                  className={`py-2.5 rounded-xl font-bold text-sm transition-all active:scale-95 ${
+                    paymentMethod === pm
+                      ? 'bg-orange-500 text-white shadow-sm'
+                      : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                  }`}
+                >
+                  {pm === 'Efectivo' ? '💵 Efectivo' : pm === 'Transferencia' ? '📲 Transfer' : '💰 Mixto'}
+                </button>
+              ))}
+            </div>
+
+            {paymentMethod === 'Mixto' && (
+              <div className="mt-3 flex flex-col gap-2">
+                <div>
+                  <p className="text-xs font-semibold text-gray-500 mb-1">Monto efectivo</p>
+                  <input
+                    type="number"
+                    inputMode="decimal"
+                    min={0}
+                    value={cashAmount}
+                    onChange={(e) => setCashAmount(e.target.value)}
+                    placeholder="$ 0"
+                    className="w-full rounded-xl border border-gray-200 px-3 py-2 text-base font-bold text-gray-900 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-orange-400 tabular-nums"
+                  />
+                </div>
+                <div>
+                  <p className="text-xs font-semibold text-gray-500 mb-1">Monto transferencia</p>
+                  <input
+                    type="number"
+                    inputMode="decimal"
+                    min={0}
+                    value={transferAmount}
+                    onChange={(e) => setTransferAmount(e.target.value)}
+                    placeholder="$ 0"
+                    className="w-full rounded-xl border border-gray-200 px-3 py-2 text-base font-bold text-gray-900 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-orange-400 tabular-nums"
+                  />
+                </div>
+                {(() => {
+                  const ca = parseFloat(cashAmount.replace(',', '.') || '0')
+                  const ta = parseFloat(transferAmount.replace(',', '.') || '0')
+                  const diff = ca + ta - order.total
+                  if (Math.abs(diff) < 1) {
+                    return <p className="text-xs text-green-600 font-semibold">✓ Suma correcta</p>
+                  }
+                  return (
+                    <p className="text-xs text-red-500 font-semibold">
+                      La suma debe ser {formatARS(order.total)}
+                    </p>
+                  )
+                })()}
+              </div>
+            )}
+          </div>
+
+          {error && <p className="text-red-600 text-sm font-semibold">{error}</p>}
+        </div>
+
+        {/* Footer */}
+        <div className="px-5 pb-5 flex gap-3">
+          <button
+            onClick={onClose}
+            disabled={saving}
+            className="flex-1 py-3 rounded-xl font-bold text-sm bg-gray-100 text-gray-700 hover:bg-gray-200 active:scale-95 transition-all"
+          >
+            Cancelar
+          </button>
+          <button
+            onClick={handleSave}
+            disabled={saving || !mixedValid}
+            className={`flex-1 py-3 rounded-xl font-bold text-sm transition-all active:scale-95 shadow-md ${
+              saving || !mixedValid
+                ? 'bg-gray-300 text-gray-400 cursor-not-allowed'
+                : 'bg-orange-500 hover:bg-orange-600 text-white cursor-pointer'
+            }`}
+          >
+            {saving ? 'Guardando...' : 'Guardar'}
           </button>
         </div>
       </div>
@@ -1456,6 +1698,8 @@ export default function POSPage() {
   const [diningOption, setDiningOption] = useState<DiningOption>('Comer dentro')
   const [tableNumber, setTableNumber] = useState('')
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('Efectivo')
+  const [cashAmount, setCashAmount] = useState('')
+  const [transferAmount, setTransferAmount] = useState('')
   const [customerName, setCustomerName] = useState('')
   const [orderNotes, setOrderNotes] = useState('')
   const [submitting, setSubmitting] = useState(false)
@@ -1463,6 +1707,28 @@ export default function POSPage() {
   const [showPrintBtn, setShowPrintBtn] = useState(false)
   const [showConfirmModal, setShowConfirmModal] = useState(false)
   const [showCashModal, setShowCashModal] = useState(false)
+
+  // Sent orders panel (Feature 2)
+  const [sentOrders, setSentOrders] = useState<SentOrder[]>([])
+  const [loadingSentOrders, setLoadingSentOrders] = useState(false)
+  const [showSentOrders, setShowSentOrders] = useState(false)
+  const [changePaymentOrder, setChangePaymentOrder] = useState<SentOrder | null>(null)
+
+  const loadSentOrders = useCallback(async () => {
+    setLoadingSentOrders(true)
+    try {
+      const res = await fetch('/api/pos/orders/recent')
+      if (res.ok) {
+        const data = await res.json()
+        setSentOrders(data.orders ?? [])
+      }
+    } catch (e) { void e }
+    setLoadingSentOrders(false)
+  }, [])
+
+  useEffect(() => {
+    if (showSentOrders) loadSentOrders()
+  }, [showSentOrders, loadSentOrders])
 
   // Ticket panel open/close
   const [ticketOpen, setTicketOpen] = useState(false)
@@ -1669,7 +1935,13 @@ export default function POSPage() {
           total,
           dining_option: diningOption,
           table_number: diningOption === 'Comer dentro' && tableNumber ? Number(tableNumber) : null,
-          payment_method: paymentMethod,
+          payment_method: paymentMethod === 'Mixto' ? 'mixed' : paymentMethod === 'Transferencia' ? 'transfer' : 'cash',
+          cash_amount: paymentMethod === 'Mixto'
+            ? parseFloat(cashAmount.replace(',', '.') || '0')
+            : paymentMethod === 'Efectivo' ? total : null,
+          transfer_amount: paymentMethod === 'Mixto'
+            ? parseFloat(transferAmount.replace(',', '.') || '0')
+            : paymentMethod === 'Transferencia' ? total : null,
           customer_name: customerName || 'POS',
           notes: finalNotes,
           persons: persons > 1 ? persons : 1,
@@ -1692,6 +1964,8 @@ export default function POSPage() {
         diningOption,
         tableNumber,
         paymentMethod,
+        cashAmount: paymentMethod === 'Mixto' ? parseFloat(cashAmount.replace(',', '.') || '0') : undefined,
+        transferAmount: paymentMethod === 'Mixto' ? parseFloat(transferAmount.replace(',', '.') || '0') : undefined,
         customerName: customerName || '',
       }
 
@@ -1700,6 +1974,8 @@ export default function POSPage() {
       setTableNumber('')
       setCustomerName('')
       setOrderNotes('')
+      setCashAmount('')
+      setTransferAmount('')
       setTicketOpen(false)
       setShowConfirmModal(false)
       setPersons(1)
@@ -1715,7 +1991,7 @@ export default function POSPage() {
     } finally {
       setSubmitting(false)
     }
-  }, [ticketItems, diningOption, tableNumber, paymentMethod, customerName, orderNotes, persons])
+  }, [ticketItems, diningOption, tableNumber, paymentMethod, cashAmount, transferAmount, customerName, orderNotes, persons])
 
   const ticketCount = ticketItems.reduce((s, i) => s + i.quantity, 0)
 
@@ -1783,6 +2059,14 @@ export default function POSPage() {
           className="flex items-center justify-center w-8 h-8 rounded-lg bg-sumak-brown-mid text-sumak-gold hover:bg-sumak-brown-light active:scale-95 transition-all shrink-0 font-bold text-base"
         >
           $
+        </button>
+        {/* Sent orders button (change payment) */}
+        <button
+          onClick={() => setShowSentOrders(true)}
+          title="Pedidos enviados"
+          className="flex items-center justify-center w-8 h-8 rounded-lg bg-sumak-brown-mid text-sumak-gold hover:bg-sumak-brown-light active:scale-95 transition-all shrink-0 font-bold text-base"
+        >
+          📋
         </button>
         {/* Edit mode button — only visible in Todos tab */}
         {activeCategory === 'all' && (
@@ -1991,12 +2275,17 @@ export default function POSPage() {
           diningOption={diningOption}
           tableNumber={tableNumber}
           paymentMethod={paymentMethod}
+          cashAmount={cashAmount}
+          transferAmount={transferAmount}
           customerName={customerName}
           orderNotes={orderNotes}
           customers={customers}
           submitting={submitting}
+          total={ticketItems.reduce((s, i) => s + (i.price + (i.modifiers ?? []).reduce((ms, m) => ms + m.price, 0)) * i.quantity, 0)}
           onTableChange={setTableNumber}
           onPaymentChange={setPaymentMethod}
+          onCashAmountChange={setCashAmount}
+          onTransferAmountChange={setTransferAmount}
           onCustomerChange={setCustomerName}
           onNotesChange={setOrderNotes}
           onCancel={() => setShowConfirmModal(false)}
@@ -2007,6 +2296,90 @@ export default function POSPage() {
       {/* ── Cash Movements Modal ── */}
       {showCashModal && (
         <CashMovementsModal onClose={() => setShowCashModal(false)} />
+      )}
+
+      {/* ── Sent Orders Panel ── */}
+      {showSentOrders && (
+        <div
+          className="fixed inset-0 z-50 flex items-end justify-center bg-black/50"
+          onClick={(e) => { if (e.target === e.currentTarget) setShowSentOrders(false) }}
+        >
+          <div className="bg-white rounded-t-2xl shadow-2xl w-full max-w-lg flex flex-col overflow-hidden" style={{ maxHeight: '70vh' }}>
+            {/* Header */}
+            <div className="px-5 py-4 bg-teal-600 flex items-center justify-between shrink-0">
+              <div>
+                <h3 className="text-white font-black text-lg leading-none">Pedidos recientes</h3>
+                <p className="text-teal-100 text-xs mt-0.5">Últimos pedidos del turno</p>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={loadSentOrders}
+                  disabled={loadingSentOrders}
+                  className="text-teal-100 hover:text-white text-sm font-semibold disabled:opacity-50"
+                >
+                  {loadingSentOrders ? '...' : '↺ Actualizar'}
+                </button>
+                <button onClick={() => setShowSentOrders(false)} className="text-white/70 hover:text-white text-xl leading-none ml-2">✕</button>
+              </div>
+            </div>
+
+            {/* List */}
+            <div className="flex-1 overflow-y-auto px-4 py-3" style={{ minHeight: 0 }}>
+              {loadingSentOrders ? (
+                <div className="space-y-2">
+                  {[1, 2, 3].map((i) => <div key={i} className="h-14 bg-gray-100 rounded-xl animate-pulse" />)}
+                </div>
+              ) : sentOrders.length === 0 ? (
+                <p className="text-center text-gray-400 text-sm py-8">Sin pedidos recientes</p>
+              ) : (
+                <ul className="flex flex-col gap-2">
+                  {sentOrders.map((order) => {
+                    const pmLabel =
+                      order.payment_method === 'mixed' ? '💰 Mixto'
+                      : order.payment_method === 'transfer' ? '📲 Transfer'
+                      : '💵 Efectivo'
+                    return (
+                      <li key={order.id} className="flex items-center gap-3 bg-gray-50 rounded-xl px-3 py-2.5 border border-gray-100">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className="font-bold text-sm text-gray-900 truncate">{order.customer_name}</span>
+                            <span className="text-xs text-gray-400">{new Date(order.created_at).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })}</span>
+                          </div>
+                          <div className="flex items-center gap-2 mt-0.5">
+                            <span className="text-xs font-bold text-teal-700 tabular-nums">{formatARS(order.total)}</span>
+                            <span className="text-xs text-gray-500">{pmLabel}</span>
+                            {order.payment_method === 'mixed' && order.cash_amount != null && order.transfer_amount != null && (
+                              <span className="text-xs text-gray-400">({formatARS(order.cash_amount)} ef + {formatARS(order.transfer_amount)} tr)</span>
+                            )}
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => { setChangePaymentOrder(order); setShowSentOrders(false) }}
+                          className="shrink-0 px-3 py-1.5 rounded-lg bg-orange-100 hover:bg-orange-200 text-orange-700 font-bold text-xs active:scale-95 transition-all"
+                          title="Cambiar método de pago"
+                        >
+                          ✎ Pago
+                        </button>
+                      </li>
+                    )
+                  })}
+                </ul>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Change Payment Modal ── */}
+      {changePaymentOrder && (
+        <ChangePaymentModal
+          order={changePaymentOrder}
+          onClose={() => setChangePaymentOrder(null)}
+          onSuccess={() => {
+            setChangePaymentOrder(null)
+            setToast('Método de pago actualizado')
+          }}
+        />
       )}
 
       {/* ── Assign Modal (edit mode) ── */}

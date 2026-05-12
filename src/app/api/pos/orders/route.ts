@@ -28,6 +28,8 @@ export async function POST(request: NextRequest) {
       dining_option,
       table_number,
       payment_method,
+      cash_amount,
+      transfer_amount,
       customer_name,
       notes: customNotes,
       persons,
@@ -57,6 +59,11 @@ export async function POST(request: NextRequest) {
       query: "ALTER TABLE order_items ADD COLUMN IF NOT EXISTS person_number integer;"
     }).then(() => {}, () => {})
 
+    // Ensure cash_amount and transfer_amount columns exist on orders
+    await supabase.rpc('exec_sql', {
+      query: "ALTER TABLE orders ADD COLUMN IF NOT EXISTS cash_amount numeric; ALTER TABLE orders ADD COLUMN IF NOT EXISTS transfer_amount numeric;"
+    }).then(() => {}, () => {})
+
     // Usar nota personalizada del usuario tal cual viene del POS
     const orderNotes = customNotes && String(customNotes).trim() ? String(customNotes).trim() : null
 
@@ -72,6 +79,8 @@ export async function POST(request: NextRequest) {
         channel: 'pos',
         dining_option: dining_option || null,
         payment_method: payment_method || null,
+        cash_amount: cash_amount ?? null,
+        transfer_amount: transfer_amount ?? null,
         persons: persons && Number(persons) > 1 ? Number(persons) : 1,
       })
       .select()
@@ -132,7 +141,9 @@ export async function POST(request: NextRequest) {
     // ── Auto-record cash movement for the sale ────────────────────────────────
     try {
       const movementType =
-        (payment_method === 'Efectivo') ? 'venta_efectivo' : 'venta_transferencia'
+        (payment_method === 'cash') ? 'venta_efectivo'
+        : (payment_method === 'mixed') ? 'venta_efectivo'
+        : 'venta_transferencia'
 
       // Get current open shift (if any)
       let shiftId: string | null = null
