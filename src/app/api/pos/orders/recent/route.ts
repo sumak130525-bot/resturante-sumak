@@ -19,7 +19,7 @@ export async function GET() {
 
     const { data, error } = await supabase
       .from('orders')
-      .select('id, customer_name, total, payment_method, cash_amount, transfer_amount, created_at, status')
+      .select('id, order_number, customer_name, total, payment_method, cash_amount, transfer_amount, created_at, status')
       .eq('channel', 'pos')
       .gte('created_at', since)
       .order('created_at', { ascending: false })

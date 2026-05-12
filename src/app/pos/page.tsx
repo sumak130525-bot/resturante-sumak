@@ -1203,6 +1203,7 @@ type SentOrder = {
   cash_amount?: number | null
   transfer_amount?: number | null
   created_at: string
+  status?: string | null
 }
 
 function ChangePaymentModal({
@@ -1352,6 +1353,88 @@ function ChangePaymentModal({
             }`}
           >
             {saving ? 'Guardando...' : 'Guardar'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── Cancel Order Modal ───────────────────────────────────────────────────────
+
+function CancelOrderModal({
+  order,
+  onClose,
+  onSuccess,
+}: {
+  order: SentOrder
+  onClose: () => void
+  onSuccess: () => void
+}) {
+  const [cancelling, setCancelling] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const handleConfirm = async () => {
+    setCancelling(true)
+    setError(null)
+    try {
+      const res = await fetch(`/api/pos/orders/${order.id}/cancel`, { method: 'PATCH' })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error ?? 'Error al anular')
+      onSuccess()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Error')
+    }
+    setCancelling(false)
+  }
+
+  const orderLabel = order.order_number
+    ? `P-${String(order.order_number).padStart(3, '0')}`
+    : order.id.slice(-6)
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60"
+      onClick={(e) => { if (e.target === e.currentTarget) onClose() }}
+    >
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm mx-4 flex flex-col overflow-hidden">
+        {/* Header */}
+        <div className="px-5 py-4 bg-red-600 flex items-center justify-between">
+          <div>
+            <h3 className="text-white font-black text-lg leading-none">Anular pedido</h3>
+            <p className="text-red-100 text-xs mt-0.5">{order.customer_name} · {formatARS(order.total)}</p>
+          </div>
+          <button onClick={onClose} className="text-white/70 hover:text-white text-xl leading-none">✕</button>
+        </div>
+
+        {/* Body */}
+        <div className="px-5 py-5 flex flex-col gap-3">
+          <p className="text-gray-800 text-sm font-semibold">
+            ¿Anular pedido <span className="font-black text-gray-900">{orderLabel}</span> por <span className="font-black text-red-600">{formatARS(order.total)}</span>?
+          </p>
+          <p className="text-gray-500 text-xs">Se registrará la devolución en caja y se revertirá el stock de inventario.</p>
+          {error && <p className="text-red-600 text-sm font-semibold">{error}</p>}
+        </div>
+
+        {/* Footer */}
+        <div className="px-5 pb-5 flex gap-3">
+          <button
+            onClick={onClose}
+            disabled={cancelling}
+            className="flex-1 py-3 rounded-xl font-bold text-sm bg-gray-100 text-gray-700 hover:bg-gray-200 active:scale-95 transition-all"
+          >
+            Cancelar
+          </button>
+          <button
+            onClick={handleConfirm}
+            disabled={cancelling}
+            className={`flex-1 py-3 rounded-xl font-bold text-sm transition-all active:scale-95 shadow-md ${
+              cancelling
+                ? 'bg-gray-300 text-gray-400 cursor-not-allowed'
+                : 'bg-red-600 hover:bg-red-700 text-white cursor-pointer'
+            }`}
+          >
+            {cancelling ? 'Anulando...' : 'Confirmar anulación'}
           </button>
         </div>
       </div>
@@ -1713,6 +1796,7 @@ export default function POSPage() {
   const [loadingSentOrders, setLoadingSentOrders] = useState(false)
   const [showSentOrders, setShowSentOrders] = useState(false)
   const [changePaymentOrder, setChangePaymentOrder] = useState<SentOrder | null>(null)
+  const [cancelOrder, setCancelOrder] = useState<SentOrder | null>(null)
 
   const loadSentOrders = useCallback(async () => {
     setLoadingSentOrders(true)
@@ -2338,28 +2422,46 @@ export default function POSPage() {
                       order.payment_method === 'mixed' ? '💰 Mixto'
                       : order.payment_method === 'transfer' ? '📲 Transfer'
                       : '💵 Efectivo'
+                    const isCancelled = order.status === 'cancelled'
+                    const isDelivered = order.status === 'delivered'
                     return (
-                      <li key={order.id} className="flex items-center gap-3 bg-gray-50 rounded-xl px-3 py-2.5 border border-gray-100">
+                      <li key={order.id} className={`flex items-center gap-3 rounded-xl px-3 py-2.5 border ${isCancelled ? 'bg-red-50 border-red-200 opacity-75' : 'bg-gray-50 border-gray-100'}`}>
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2">
-                            <span className="font-bold text-sm text-gray-900 truncate">{order.customer_name}</span>
+                            <span className={`font-bold text-sm truncate ${isCancelled ? 'line-through text-gray-400' : 'text-gray-900'}`}>{order.customer_name}</span>
+                            {isCancelled && (
+                              <span className="shrink-0 px-1.5 py-0.5 rounded-full bg-red-600 text-white text-[10px] font-black uppercase">Anulado</span>
+                            )}
                             <span className="text-xs text-gray-400">{new Date(order.created_at).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })}</span>
                           </div>
                           <div className="flex items-center gap-2 mt-0.5">
-                            <span className="text-xs font-bold text-teal-700 tabular-nums">{formatARS(order.total)}</span>
+                            <span className={`text-xs font-bold tabular-nums ${isCancelled ? 'text-gray-400 line-through' : 'text-teal-700'}`}>{formatARS(order.total)}</span>
                             <span className="text-xs text-gray-500">{pmLabel}</span>
                             {order.payment_method === 'mixed' && order.cash_amount != null && order.transfer_amount != null && (
                               <span className="text-xs text-gray-400">({formatARS(order.cash_amount)} ef + {formatARS(order.transfer_amount)} tr)</span>
                             )}
                           </div>
                         </div>
-                        <button
-                          onClick={() => { setChangePaymentOrder(order); setShowSentOrders(false) }}
-                          className="shrink-0 px-3 py-1.5 rounded-lg bg-orange-100 hover:bg-orange-200 text-orange-700 font-bold text-xs active:scale-95 transition-all"
-                          title="Cambiar método de pago"
-                        >
-                          ✎ Pago
-                        </button>
+                        {!isCancelled && (
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            {!isDelivered && (
+                              <button
+                                onClick={() => { setCancelOrder(order); setShowSentOrders(false) }}
+                                className="px-3 py-1.5 rounded-lg bg-red-100 hover:bg-red-200 text-red-700 font-bold text-xs active:scale-95 transition-all"
+                                title="Anular pedido"
+                              >
+                                Anular
+                              </button>
+                            )}
+                            <button
+                              onClick={() => { setChangePaymentOrder(order); setShowSentOrders(false) }}
+                              className="px-3 py-1.5 rounded-lg bg-orange-100 hover:bg-orange-200 text-orange-700 font-bold text-xs active:scale-95 transition-all"
+                              title="Cambiar método de pago"
+                            >
+                              ✎ Pago
+                            </button>
+                          </div>
+                        )}
                       </li>
                     )
                   })}
@@ -2378,6 +2480,19 @@ export default function POSPage() {
           onSuccess={() => {
             setChangePaymentOrder(null)
             setToast('Método de pago actualizado')
+          }}
+        />
+      )}
+
+      {/* ── Cancel Order Modal ── */}
+      {cancelOrder && (
+        <CancelOrderModal
+          order={cancelOrder}
+          onClose={() => setCancelOrder(null)}
+          onSuccess={() => {
+            setCancelOrder(null)
+            loadSentOrders()
+            setToast('Pedido anulado y devolución registrada')
           }}
         />
       )}
