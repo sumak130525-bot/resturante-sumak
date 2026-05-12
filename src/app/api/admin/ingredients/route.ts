@@ -23,67 +23,38 @@ async function getUntypedClient(useServiceRole = false) {
 }
 
 /**
- * Fuzzy name match: returns true if names share a meaningful substring.
- * 'Coca Cola 500ml' matches 'Coca Cola'; bidirectional includes, case-insensitive.
- */
-function fuzzyMatch(a: string, b: string): boolean {
-  const al = a.toLowerCase().trim()
-  const bl = b.toLowerCase().trim()
-  return al === bl || al.includes(bl) || bl.includes(al)
-}
-
-/**
- * After saving an ingredient, look for a menu_item with a similar name and
- * upsert a recipe_item linking them with quantity=1.
- * This makes beverages (resold as-is) automatically appear in /admin/costs.
+ * If menu_item_id is provided, upsert a recipe_item linking ingredient → menu_item.
+ * Returns true if a link was created/already existed, false otherwise.
  */
 async function linkIngredientToMenuItem(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   admin: any,
   ingredientId: string,
-  ingredientName: string
-): Promise<string | null> {
+  menuItemId: string
+): Promise<boolean> {
   try {
-    const { data: menuItems, error } = await admin
-      .from('menu_items')
-      .select('id, name')
-      .eq('active', true)
-
-    if (error || !menuItems) {
-      console.error('[invoice-scan] Error fetching menu_items for auto-link:', error?.message)
-      return null
-    }
-
-    const matched = (menuItems as { id: string; name: string }[]).find((mi) =>
-      fuzzyMatch(mi.name, ingredientName)
-    )
-
-    if (!matched) return null
-
-    // Upsert: if a recipe_item already exists for this menu_item+ingredient pair, skip.
-    // We use delete+insert pattern to avoid duplicate key issues without a unique constraint.
     const { data: existing } = await admin
       .from('recipe_items')
       .select('id')
-      .eq('menu_item_id', matched.id)
+      .eq('menu_item_id', menuItemId)
       .eq('ingredient_id', ingredientId)
       .maybeSingle()
 
     if (!existing) {
       const { error: riErr } = await admin
         .from('recipe_items')
-        .insert({ menu_item_id: matched.id, ingredient_id: ingredientId, quantity: 1 })
+        .insert({ menu_item_id: menuItemId, ingredient_id: ingredientId, quantity: 1 })
 
       if (riErr) {
-        console.error('[invoice-scan] Error inserting recipe_item:', riErr.message)
-        return null
+        console.error('[ingredients] Error inserting recipe_item:', riErr.message)
+        return false
       }
     }
 
-    return matched.id
+    return true
   } catch (e) {
-    console.error('[invoice-scan] linkIngredientToMenuItem unexpected error:', e)
-    return null
+    console.error('[ingredients] linkIngredientToMenuItem unexpected error:', e)
+    return false
   }
 }
 
@@ -101,30 +72,33 @@ export async function GET() {
   return NextResponse.json(data)
 }
 
-// POST: create ingredient (and auto-link to menu_item if name matches)
+// POST: create ingredient (optionally link to menu_item if menu_item_id provided)
 export async function POST(request: NextRequest) {
   const body = await request.json()
+  const { menu_item_id, ...ingredientFields } = body
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const admin = await getUntypedClient(true) as any
 
   const { data, error } = await admin
     .from('ingredients')
-    .insert(body)
+    .insert(ingredientFields)
     .select()
     .single()
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
-  // Auto-link to menu_item
-  const linkedMenuItemId = await linkIngredientToMenuItem(admin, data.id, data.name)
+  let linked = false
+  if (menu_item_id) {
+    linked = await linkIngredientToMenuItem(admin, data.id, menu_item_id)
+  }
 
-  return NextResponse.json({ ...data, linked_menu_item_id: linkedMenuItemId }, { status: 201 })
+  return NextResponse.json({ ...data, linked_menu_item_id: linked ? menu_item_id : null }, { status: 201 })
 }
 
-// PUT: update ingredient (and auto-link to menu_item if name matches)
+// PUT: update ingredient (optionally link to menu_item if menu_item_id provided)
 export async function PUT(request: NextRequest) {
   const body = await request.json()
-  const { id, ...updates } = body
+  const { id, menu_item_id, ...updates } = body
   if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 })
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const admin = await getUntypedClient(true) as any
@@ -145,7 +119,6 @@ export async function PUT(request: NextRequest) {
     }
     data = updated
   } else {
-    // No fields to update — just fetch the current row to get the name for auto-linking
     const { data: fetched, error } = await admin
       .from('ingredients')
       .select('*')
@@ -161,10 +134,12 @@ export async function PUT(request: NextRequest) {
 
   if (!data) return NextResponse.json({ error: 'Ingredient not found' }, { status: 404 })
 
-  // Auto-link to menu_item (using current name from DB)
-  const linkedMenuItemId = await linkIngredientToMenuItem(admin, data.id as string, data.name as string)
+  let linked = false
+  if (menu_item_id) {
+    linked = await linkIngredientToMenuItem(admin, data.id as string, menu_item_id)
+  }
 
-  return NextResponse.json({ ...data, linked_menu_item_id: linkedMenuItemId })
+  return NextResponse.json({ ...data, linked_menu_item_id: linked ? menu_item_id : null })
 }
 
 // DELETE: remove ingredient (cascades recipe_items and inventory_movements)

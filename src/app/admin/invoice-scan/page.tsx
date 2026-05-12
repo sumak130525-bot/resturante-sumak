@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef, useCallback } from 'react'
+import { useState, useRef, useCallback, useEffect } from 'react'
 import { AdminLayoutClient } from '@/components/admin/AdminLayoutClient'
 import {
   ScanLine,
@@ -40,6 +40,12 @@ interface SaveResult {
   action: 'created' | 'updated' | 'skipped'
   stock?: number
   linked?: boolean
+}
+
+interface MenuItem {
+  id: string
+  name: string
+  category?: string | null
 }
 
 // ──────────────────────────────────────────────
@@ -107,7 +113,27 @@ export default function InvoiceScanPage() {
   const [saveError, setSaveError] = useState<string | null>(null)
   const [dragOver, setDragOver] = useState(false)
 
+  // Menu items for the manual dropdown
+  const [menuItems, setMenuItems] = useState<MenuItem[]>([])
+  // Map: row index → selected menu_item_id ('' = no link)
+  const [menuLinks, setMenuLinks] = useState<Record<number, string>>({})
+
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+  // Fetch menu_items once on mount
+  useEffect(() => {
+    fetch('/api/admin/menu')
+      .then((r) => r.json())
+      .then((data: unknown) => {
+        if (Array.isArray(data)) {
+          const sorted = (data as (MenuItem & { active?: boolean })[])
+            .filter((m) => m && m.id && m.name && m.active !== false)
+            .sort((a, b) => a.name.localeCompare(b.name, 'es'))
+          setMenuItems(sorted)
+        }
+      })
+      .catch(() => {/* non-critical, silently ignore */})
+  }, [])
 
   const handleFile = useCallback((file: File) => {
     if (!file.type.startsWith('image/')) {
@@ -120,6 +146,7 @@ export default function InvoiceScanPage() {
     setSaveResults(null)
     setScanError(null)
     setSaveError(null)
+    setMenuLinks({})
   }, [])
 
   const handleDrop = useCallback((e: React.DragEvent) => {
@@ -136,6 +163,7 @@ export default function InvoiceScanPage() {
     setInvoiceData(null)
     setSaveResults(null)
     setSaveError(null)
+    setMenuLinks({})
 
     try {
       const base64 = await fileToBase64(imageFile)
@@ -179,6 +207,15 @@ export default function InvoiceScanPage() {
   const removeItem = (idx: number) => {
     if (!invoiceData) return
     setInvoiceData({ ...invoiceData, items: invoiceData.items.filter((_, i) => i !== idx) })
+    setMenuLinks((prev) => {
+      const next: Record<number, string> = {}
+      Object.entries(prev).forEach(([k, v]) => {
+        const ki = Number(k)
+        if (ki < idx) next[ki] = v
+        else if (ki > idx) next[ki - 1] = v
+      })
+      return next
+    })
   }
 
   const addItem = () => {
@@ -203,30 +240,31 @@ export default function InvoiceScanPage() {
       const existingIngredients: { id: string; name: string; unit: string; price_per_unit?: number }[] =
         ingRes.ok ? await ingRes.json() : []
 
-      for (const item of invoiceData.items) {
+      for (let idx = 0; idx < invoiceData.items.length; idx++) {
+        const item = invoiceData.items[idx]
         if (!item.name || item.name.trim() === '') continue
 
         const nameLower = item.name.trim().toLowerCase()
         const unitPrice = item.unit_price ?? (item.total && item.quantity ? item.total / item.quantity : null)
+        const selectedMenuItemId = menuLinks[idx] || null
 
-        // Fuzzy match: check if any existing ingredient name contains or is contained
-        const existing = existingIngredients.find((ing) => {
-          const ingLower = ing.name.toLowerCase()
-          return ingLower === nameLower || ingLower.includes(nameLower) || nameLower.includes(ingLower)
-        })
+        // Match by exact name only (no fuzzy)
+        const existing = existingIngredients.find((ing) => ing.name.toLowerCase() === nameLower)
 
         let ingredientId: string
 
         if (existing) {
-          // Always PUT to trigger auto-link; include price_per_unit if available
-          let linked = false
           const putBody: Record<string, unknown> = { id: existing.id }
           if (unitPrice !== null) putBody.price_per_unit = unitPrice
+          if (selectedMenuItemId) putBody.menu_item_id = selectedMenuItemId
+
           const putRes = await fetch('/api/admin/ingredients', {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(putBody),
           })
+
+          let linked = false
           if (putRes.ok) {
             const putData = await putRes.json().catch(() => ({}))
             linked = !!putData.linked_menu_item_id
@@ -238,14 +276,17 @@ export default function InvoiceScanPage() {
           results.push({ name: item.name.trim(), action: 'updated', linked })
         } else {
           // Create new ingredient
+          const createBody: Record<string, unknown> = {
+            name: item.name.trim(),
+            unit: item.unit ?? 'unidad',
+            price_per_unit: unitPrice ?? 0,
+          }
+          if (selectedMenuItemId) createBody.menu_item_id = selectedMenuItemId
+
           const createRes = await fetch('/api/admin/ingredients', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              name: item.name.trim(),
-              unit: item.unit ?? 'unidad',
-              price_per_unit: unitPrice ?? 0,
-            }),
+            body: JSON.stringify(createBody),
           })
 
           if (!createRes.ok) {
@@ -261,7 +302,6 @@ export default function InvoiceScanPage() {
         }
 
         // 2. Register purchase in inventory
-        // quantity = units purchased; unit_cost = price per unit (for last_purchase_price)
         if (item.quantity !== null && item.quantity > 0) {
           await fetch('/api/admin/inventory', {
             method: 'POST',
@@ -293,6 +333,7 @@ export default function InvoiceScanPage() {
     setSaveResults(null)
     setScanError(null)
     setSaveError(null)
+    setMenuLinks({})
   }
 
   const created = saveResults?.filter((r) => r.action === 'created').length ?? 0
@@ -300,7 +341,7 @@ export default function InvoiceScanPage() {
 
   return (
     <AdminLayoutClient active="invoice-scan">
-      <div className="max-w-5xl mx-auto">
+      <div className="max-w-6xl mx-auto">
         {/* Header */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-8">
           <div>
@@ -404,7 +445,7 @@ export default function InvoiceScanPage() {
                   {[
                     { n: '1', text: 'Subí una foto de la factura o ticket' },
                     { n: '2', text: 'Gemini Vision extrae productos, precios y cantidades' },
-                    { n: '3', text: 'Revisá y corregí los datos si es necesario' },
+                    { n: '3', text: 'Elegí manualmente a qué producto del menú corresponde cada ítem' },
                     { n: '4', text: 'Guardá para actualizar inventario e ingredientes' },
                   ].map(({ n, text }) => (
                     <div key={n} className="flex items-start gap-2">
@@ -513,6 +554,7 @@ export default function InvoiceScanPage() {
                         <th className="text-left p-3 text-xs font-semibold text-gray-500 uppercase tracking-wide w-20">Unidad</th>
                         <th className="text-left p-3 text-xs font-semibold text-gray-500 uppercase tracking-wide w-24">P. Unit.</th>
                         <th className="text-left p-3 text-xs font-semibold text-gray-500 uppercase tracking-wide w-24">Total</th>
+                        <th className="text-left p-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Producto del menú</th>
                         <th className="p-3 w-10" />
                       </tr>
                     </thead>
@@ -561,6 +603,23 @@ export default function InvoiceScanPage() {
                               type="number"
                               placeholder="0.00"
                             />
+                          </td>
+                          <td className="p-3 min-w-[180px]">
+                            <select
+                              className="w-full text-sm bg-white border border-gray-200 hover:border-indigo-300 focus:border-indigo-500 focus:outline-none rounded-lg px-2 py-1 transition-colors"
+                              value={menuLinks[idx] ?? ''}
+                              onChange={(e) => setMenuLinks((prev) => ({ ...prev, [idx]: e.target.value }))}
+                            >
+                              <option value="">— Sin vincular —</option>
+                              {menuItems.map((mi) => (
+                                <option key={mi.id} value={mi.id}>{mi.name}</option>
+                              ))}
+                            </select>
+                            {menuLinks[idx] && (
+                              <span className="inline-block mt-1 px-1.5 py-0.5 rounded text-xs bg-violet-100 text-violet-700">
+                                Vinculado
+                              </span>
+                            )}
                           </td>
                           <td className="p-3">
                             <button
