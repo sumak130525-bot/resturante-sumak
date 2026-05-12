@@ -39,6 +39,7 @@ interface SaveResult {
   name: string
   action: 'created' | 'updated' | 'skipped'
   stock?: number
+  linked?: boolean
 }
 
 // ──────────────────────────────────────────────
@@ -218,15 +219,20 @@ export default function InvoiceScanPage() {
 
         if (existing) {
           // Update price if available
+          let linked = false
           if (unitPrice !== null) {
-            await fetch('/api/admin/ingredients', {
+            const putRes = await fetch('/api/admin/ingredients', {
               method: 'PUT',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ id: existing.id, price_per_unit: unitPrice }),
             })
+            if (putRes.ok) {
+              const putData = await putRes.json().catch(() => ({}))
+              linked = !!putData.linked_menu_item_id
+            }
           }
           ingredientId = existing.id
-          results.push({ name: item.name.trim(), action: 'updated' })
+          results.push({ name: item.name.trim(), action: 'updated', linked })
         } else {
           // Create new ingredient
           const createRes = await fetch('/api/admin/ingredients', {
@@ -234,7 +240,7 @@ export default function InvoiceScanPage() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               name: item.name.trim(),
-              unit: item.unit ?? 'kg',
+              unit: item.unit ?? 'unidad',
               price_per_unit: unitPrice ?? 0,
             }),
           })
@@ -242,16 +248,17 @@ export default function InvoiceScanPage() {
           if (!createRes.ok) {
             const errBody = await createRes.json().catch(() => ({}))
             console.error('Error creando ingrediente:', item.name, createRes.status, errBody)
-            results.push({ name: item.name.trim(), action: 'skipped' })
+            results.push({ name: item.name.trim(), action: 'skipped', linked: false })
             continue
           }
 
           const created = await createRes.json()
           ingredientId = created.id
-          results.push({ name: item.name.trim(), action: 'created' })
+          results.push({ name: item.name.trim(), action: 'created', linked: !!created.linked_menu_item_id })
         }
 
         // 2. Register purchase in inventory
+        // quantity = units purchased; unit_cost = price per unit (for last_purchase_price)
         if (item.quantity !== null && item.quantity > 0) {
           await fetch('/api/admin/inventory', {
             method: 'POST',
@@ -260,7 +267,7 @@ export default function InvoiceScanPage() {
               ingredient_id: ingredientId,
               type: 'purchase',
               quantity: item.quantity,
-              price: item.total ?? undefined,
+              price: unitPrice !== null ? unitPrice * item.quantity : (item.total ?? undefined),
               notes: invoiceData.supplier ? `Factura: ${invoiceData.supplier}` : 'Factura escaneada',
               date: invoiceData.date ? new Date(invoiceData.date).toISOString() : undefined,
             }),
@@ -438,6 +445,11 @@ export default function InvoiceScanPage() {
                       }`}>
                         {r.action === 'created' ? 'Creado' : r.action === 'updated' ? 'Actualizado' : 'Omitido'}
                       </span>
+                      {r.linked && (
+                        <span className="px-1.5 py-0.5 rounded text-xs bg-violet-100 text-violet-700">
+                          Vinculado al menú
+                        </span>
+                      )}
                     </div>
                   ))}
                 </div>
