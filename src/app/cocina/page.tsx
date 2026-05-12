@@ -285,6 +285,7 @@ type KdsItem = {
   modifiers?: string[]
   note?: string | null
   person_number?: number | null
+  subcategory?: string | null
 }
 
 type KdsOrder = {
@@ -342,18 +343,6 @@ function getOrderLabel(order: KdsOrder): string {
   return order.number
 }
 
-// ─── Filtro bebidas botella (solo POS) ───────────────────────────────────────
-
-const BOTTLE_KEYWORDS = [
-  'coca', 'pepsi', 'fanta', 'sprite', 'agua mineral', 'cerveza',
-  'gaseosa', 'energizante', 'speed', 'red bull', 'manaos',
-]
-
-function isBottleDrink(name: string): boolean {
-  const lower = name.toLowerCase()
-  return BOTTLE_KEYWORDS.some((kw) => lower.includes(kw)) && !lower.includes('jarra')
-}
-
 // ─── Componente Card ──────────────────────────────────────────────────────────
 
 function OrderCard({
@@ -373,9 +362,11 @@ function OrderCard({
     return loadStruck(order.id)
   })
 
-  // ── Filtrar bebidas botella en pedidos POS (no WhatsApp) ──
+  // ── Filtrar bebidas envasadas (Sin alcohol / Con alcohol) en pedidos POS (no WhatsApp) ──
   const isPOS = order.source === 'POS' && order.channel !== 'whatsapp'
-  const displayItems = isPOS ? order.items.filter((item) => !isBottleDrink(item.name)) : order.items
+  const displayItems = isPOS
+    ? order.items.filter((item) => item.subcategory !== 'Sin alcohol' && item.subcategory !== 'Con alcohol')
+    : order.items
 
   if (isPOS && displayItems.length === 0) return null
 
@@ -853,7 +844,7 @@ export default function CocinaPage() {
   // ── Fetch ──────────────────────────────────────────────────────────────────
   const deliveredFetchedRef = useRef(false)
 
-  const fetchOrders = useCallback(async () => {
+  const fetchOrders = useCallback(async (triggeredByRealtime = false) => {
     try {
       const res = await fetch('/api/cocina/orders', { cache: 'no-store' })
       if (!res.ok) return
@@ -861,14 +852,28 @@ export default function CocinaPage() {
 
       const data = raw.filter((o) => !dismissedIdsRef.current.has(o.id))
 
+      // Calcular cuántos pedidos de la nueva lista tendrían items visibles en cocina
+      const visibleCount = data.filter((o) => {
+        const isPOS = o.source === 'POS' && o.channel !== 'whatsapp'
+        if (!isPOS) return true
+        return o.items.some(
+          (item) => item.subcategory !== 'Sin alcohol' && item.subcategory !== 'Con alcohol'
+        )
+      }).length
+
       setOrders(data)
 
-      if (prevCountRef.current > 0 && data.length > prevCountRef.current) {
-        console.log('[cocina] Polling fallback: pedidos aumentaron de', prevCountRef.current, 'a', data.length)
+      const prevVisible = prevCountRef.current
+      if (triggeredByRealtime && visibleCount > prevVisible) {
+        console.log('[cocina] Realtime: nuevos pedidos visibles, reproduciendo sonido')
         await playBeep()
-        setLastCount((c) => c + (data.length - prevCountRef.current))
+        setLastCount((c) => c + (visibleCount - prevVisible))
+      } else if (!triggeredByRealtime && prevVisible > 0 && visibleCount > prevVisible) {
+        console.log('[cocina] Polling fallback: pedidos visibles aumentaron de', prevVisible, 'a', visibleCount)
+        await playBeep()
+        setLastCount((c) => c + (visibleCount - prevVisible))
       }
-      prevCountRef.current = data.length
+      prevCountRef.current = visibleCount
 
       // Carga inicial de pedidos entregados del día (solo una vez al montar)
       if (!deliveredFetchedRef.current) {
@@ -910,8 +915,7 @@ export default function CocinaPage() {
       .channel('cocina-orders-realtime')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'orders' }, (payload) => {
         console.log('[cocina] Realtime INSERT detected:', (payload.new as { id?: string })?.id)
-        playBeep()
-        fetchOrders()
+        fetchOrders(true)
       })
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'orders' }, () => {
         fetchOrders()
@@ -921,7 +925,7 @@ export default function CocinaPage() {
       })
       .subscribe()
     return () => { supabase.removeChannel(channel) }
-  }, [fetchOrders, playBeep])
+  }, [fetchOrders])
 
   // ── Marcar como ENTREGADO ──────────────────────────────────────────────────
   const handleDeliver = useCallback(async (id: string, source: 'WEB' | 'LOCAL' | 'POS') => {

@@ -13,6 +13,7 @@ export type KdsItem = {
   modifiers?: string[]
   note?: string | null
   person_number?: number | null
+  subcategory?: string | null
 }
 
 export type KdsOrder = {
@@ -59,7 +60,7 @@ async function getWebOrders(): Promise<KdsOrder[]> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data, error } = await (supabase as any)
     .from('orders')
-    .select('*, order_items(quantity, unit_price, line_note, person_number, menu_items(name))')
+    .select('*, order_items(quantity, unit_price, line_note, person_number, menu_items(name, subcategory))')
     .gte('created_at', since)
     .not('status', 'in', '("delivered","cancelled")')
     .order('created_at', { ascending: true })
@@ -87,6 +88,7 @@ async function getWebOrders(): Promise<KdsOrder[]> {
         price: i.unit_price,
         note: i.line_note ?? null,
         person_number: i.person_number ?? null,
+        subcategory: i.menu_items?.subcategory ?? null,
       })),
       total: o.total,
       notes: o.notes,
@@ -335,7 +337,7 @@ async function getDeliveredOrdersToday(): Promise<KdsOrder[]> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data, error } = await (supabase as any)
     .from('orders')
-    .select('*, order_items(quantity, unit_price, line_note, person_number, menu_items(name))')
+    .select('*, order_items(quantity, unit_price, line_note, person_number, menu_items(name, subcategory))')
     .eq('status', 'delivered')
     .gte('created_at', todayStart.toISOString())
     .order('created_at', { ascending: false })
@@ -363,6 +365,7 @@ async function getDeliveredOrdersToday(): Promise<KdsOrder[]> {
         price: i.unit_price,
         note: i.line_note ?? null,
         person_number: i.person_number ?? null,
+        subcategory: i.menu_items?.subcategory ?? null,
       })),
       total: o.total,
       notes: o.notes,
