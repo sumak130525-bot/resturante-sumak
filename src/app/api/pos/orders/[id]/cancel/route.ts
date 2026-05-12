@@ -25,7 +25,7 @@ export async function PATCH(
     // ── 1. Fetch the order ────────────────────────────────────────────────────
     const { data: order, error: fetchErr } = await supabase
       .from('orders')
-      .select('id, status, total, payment_method, cash_amount, transfer_amount, order_number')
+      .select('id, status, total, payment_method, cash_amount, transfer_amount')
       .eq('id', id)
       .single()
 
@@ -80,9 +80,7 @@ export async function PATCH(
         shiftId = newShift?.id ?? null
       }
 
-      const orderLabel = order.order_number
-        ? `#${order.order_number}`
-        : `#${String(id).slice(-6)}`
+      const orderLabel = `#${String(id).slice(-6)}`
 
       const pm = order.payment_method
 

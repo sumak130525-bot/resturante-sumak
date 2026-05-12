@@ -1196,7 +1196,6 @@ function ConfirmModal({
 
 type SentOrder = {
   id: string
-  order_number?: number | null
   customer_name: string
   total: number
   payment_method: string
@@ -1388,9 +1387,7 @@ function CancelOrderModal({
     setCancelling(false)
   }
 
-  const orderLabel = order.order_number
-    ? `P-${String(order.order_number).padStart(3, '0')}`
-    : order.id.slice(-6)
+  const orderLabel = order.id.slice(-6)
 
   return (
     <div
