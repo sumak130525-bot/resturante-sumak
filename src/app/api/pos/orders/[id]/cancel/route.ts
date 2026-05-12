@@ -57,76 +57,10 @@ export async function PATCH(
       throw new Error(`Error al cancelar pedido: ${updateErr.message}`)
     }
 
-    // ── 3. Register refund in cash_movements ──────────────────────────────────
-    try {
-      // Get current open shift (or create one)
-      let shiftId: string | null = null
-      const { data: openShift } = await supabase
-        .from('cash_shifts')
-        .select('id')
-        .eq('status', 'open')
-        .order('opened_at', { ascending: false })
-        .limit(1)
-        .single()
-
-      if (openShift) {
-        shiftId = openShift.id
-      } else {
-        const { data: newShift } = await supabase
-          .from('cash_shifts')
-          .insert({ opening_amount: 0, status: 'open' })
-          .select('id')
-          .single()
-        shiftId = newShift?.id ?? null
-      }
-
-      const orderLabel = `#${String(id).slice(-6)}`
-
-      const pm = order.payment_method
-
-      if (pm === 'cash') {
-        // Full cash refund
-        await supabase.from('cash_movements').insert({
-          type: 'egreso',
-          amount: Number(order.total),
-          description: `Devolución pedido ${orderLabel}`,
-          shift_id: shiftId,
-        })
-      } else if (pm === 'transfer') {
-        // Transfer refund (recorded as egreso with description indicating transfer)
-        await supabase.from('cash_movements').insert({
-          type: 'egreso',
-          amount: Number(order.total),
-          description: `Devolución transferencia pedido ${orderLabel}`,
-          shift_id: shiftId,
-        })
-      } else if (pm === 'mixed') {
-        // Mixed: refund cash portion and transfer portion separately
-        const cashAmt = Number(order.cash_amount ?? 0)
-        const transferAmt = Number(order.transfer_amount ?? 0)
-        if (cashAmt > 0) {
-          await supabase.from('cash_movements').insert({
-            type: 'egreso',
-            amount: cashAmt,
-            description: `Devolución efectivo pedido ${orderLabel}`,
-            shift_id: shiftId,
-          })
-        }
-        if (transferAmt > 0) {
-          await supabase.from('cash_movements').insert({
-            type: 'egreso',
-            amount: transferAmt,
-            description: `Devolución transferencia pedido ${orderLabel}`,
-            shift_id: shiftId,
-          })
-        }
-      }
-    } catch (cashErr) {
-      console.error('[cancel order] cash_movements error:', cashErr)
-      // Non-fatal
-    }
-
-    // ── 4. Revert inventory (recipe_items) ────────────────────────────────────
+    // ── 3. Revert inventory (recipe_items) ────────────────────────────────────
+    // NOTE: cash_movements registration is handled on the frontend (CashMovementsModal)
+    // to give the cashier a chance to confirm and open the cash drawer.
+    // Do NOT register cash_movements here to avoid duplication.
     try {
       // Get all order_items for this order
       const { data: orderItems, error: itemsErr } = await supabase
@@ -190,7 +124,14 @@ export async function PATCH(
       // Non-fatal
     }
 
-    return NextResponse.json({ success: true, id }, { status: 200 })
+    return NextResponse.json({
+      success: true,
+      id,
+      payment_method: order.payment_method,
+      total: order.total,
+      cash_amount: order.cash_amount,
+      transfer_amount: order.transfer_amount,
+    }, { status: 200 })
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Error interno'
     console.error('[PATCH /api/pos/orders/[id]/cancel]', message)

@@ -608,10 +608,12 @@ type CashMovement = {
   created_at: string
 }
 
-function CashMovementsModal({ onClose }: { onClose: () => void }) {
-  const [tab, setTab] = useState<'ingreso' | 'egreso'>('ingreso')
-  const [amount, setAmount] = useState('')
-  const [description, setDescription] = useState('')
+type PrefillEgreso = { amount: number; description: string }
+
+function CashMovementsModal({ onClose, prefillEgreso }: { onClose: () => void; prefillEgreso?: PrefillEgreso }) {
+  const [tab, setTab] = useState<'ingreso' | 'egreso'>(prefillEgreso ? 'egreso' : 'ingreso')
+  const [amount, setAmount] = useState(prefillEgreso ? String(prefillEgreso.amount) : '')
+  const [description, setDescription] = useState(prefillEgreso ? prefillEgreso.description : '')
   const [submitting, setSubmitting] = useState(false)
   const [movements, setMovements] = useState<CashMovement[]>([])
   const [loadingMovements, setLoadingMovements] = useState(true)
@@ -1361,6 +1363,14 @@ function ChangePaymentModal({
 
 // ─── Cancel Order Modal ───────────────────────────────────────────────────────
 
+type CancelResult = {
+  payment_method: string
+  total: number
+  cash_amount?: number | null
+  transfer_amount?: number | null
+  orderId: string
+}
+
 function CancelOrderModal({
   order,
   onClose,
@@ -1368,7 +1378,7 @@ function CancelOrderModal({
 }: {
   order: SentOrder
   onClose: () => void
-  onSuccess: () => void
+  onSuccess: (result: CancelResult) => void
 }) {
   const [cancelling, setCancelling] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -1380,7 +1390,13 @@ function CancelOrderModal({
       const res = await fetch(`/api/pos/orders/${order.id}/cancel`, { method: 'PATCH' })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error ?? 'Error al anular')
-      onSuccess()
+      onSuccess({
+        payment_method: data.payment_method ?? order.payment_method,
+        total: data.total ?? order.total,
+        cash_amount: data.cash_amount ?? order.cash_amount,
+        transfer_amount: data.transfer_amount ?? order.transfer_amount,
+        orderId: order.id,
+      })
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error')
     }
@@ -1787,6 +1803,7 @@ export default function POSPage() {
   const [showPrintBtn, setShowPrintBtn] = useState(false)
   const [showConfirmModal, setShowConfirmModal] = useState(false)
   const [showCashModal, setShowCashModal] = useState(false)
+  const [cashModalPrefill, setCashModalPrefill] = useState<PrefillEgreso | undefined>(undefined)
 
   // Sent orders panel (Feature 2)
   const [sentOrders, setSentOrders] = useState<SentOrder[]>([])
@@ -2376,7 +2393,10 @@ export default function POSPage() {
 
       {/* ── Cash Movements Modal ── */}
       {showCashModal && (
-        <CashMovementsModal onClose={() => setShowCashModal(false)} />
+        <CashMovementsModal
+          onClose={() => { setShowCashModal(false); setCashModalPrefill(undefined) }}
+          prefillEgreso={cashModalPrefill}
+        />
       )}
 
       {/* ── Sent Orders Panel ── */}
@@ -2486,10 +2506,34 @@ export default function POSPage() {
         <CancelOrderModal
           order={cancelOrder}
           onClose={() => setCancelOrder(null)}
-          onSuccess={() => {
+          onSuccess={(result) => {
             setCancelOrder(null)
             loadSentOrders()
-            setToast('Pedido anulado y devolución registrada')
+            const orderLabel = result.orderId.slice(-6)
+            if (result.payment_method === 'cash') {
+              setCashModalPrefill({
+                amount: Number(result.total),
+                description: `Devolución pedido #${orderLabel}`,
+              })
+              setShowCashModal(true)
+            } else if (result.payment_method === 'mixed') {
+              const cashAmt = Number(result.cash_amount ?? 0)
+              const transferAmt = Number(result.transfer_amount ?? 0)
+              if (cashAmt > 0) {
+                const desc = transferAmt > 0
+                  ? `Devolución efectivo pedido #${orderLabel} (también devolver ${formatARS(transferAmt)} por transfer)`
+                  : `Devolución efectivo pedido #${orderLabel}`
+                setCashModalPrefill({ amount: cashAmt, description: desc })
+                setShowCashModal(true)
+              } else if (transferAmt > 0) {
+                setToast(`Pedido anulado. Realizar devolución de ${formatARS(transferAmt)} por transferencia`)
+              } else {
+                setToast('Pedido anulado')
+              }
+            } else {
+              // transfer
+              setToast(`Pedido anulado. Realizar devolución de ${formatARS(Number(result.total))} por transferencia`)
+            }
           }}
         />
       )}
