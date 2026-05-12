@@ -20,31 +20,55 @@ async function getSupabase(serviceRole = false) {
   )
 }
 
+// Argentina is UTC-3. All period boundaries are computed in Argentina local time,
+// then converted to UTC for Supabase queries.
+const ARG_OFFSET_MS = -3 * 60 * 60 * 1000 // -3 hours in ms
+
+/** Returns the current date/time in Argentina as a plain Date whose UTC values
+ *  represent the Argentina wall-clock time (i.e. argNow.getUTCFullYear() etc.
+ *  give the Argentina calendar fields). */
+function nowInArgentina(): Date {
+  return new Date(Date.now() + ARG_OFFSET_MS)
+}
+
+/** Converts a "fake UTC" Argentina date back to a real UTC ISO string. */
+function argToUtcIso(argDate: Date): string {
+  return new Date(argDate.getTime() - ARG_OFFSET_MS).toISOString()
+}
+
 function getPeriodRange(period: string): { from: string; to: string } {
-  const now = new Date()
-  let from: Date
-  const to = new Date(now)
+  const argNow = nowInArgentina()
+  const y = argNow.getUTCFullYear()
+  const m = argNow.getUTCMonth()
+  const d = argNow.getUTCDate()
+
+  let argFrom: Date
 
   switch (period) {
     case 'today':
-      from = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0)
+      // Start of today 00:00:00 Argentina
+      argFrom = new Date(Date.UTC(y, m, d, 0, 0, 0))
       break
     case 'week':
-      from = new Date(now)
-      from.setDate(now.getDate() - 6)
-      from.setHours(0, 0, 0, 0)
+      // Start of 6 days ago 00:00:00 Argentina
+      argFrom = new Date(Date.UTC(y, m, d - 6, 0, 0, 0))
       break
     case 'month':
-      from = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0)
+      // Start of this month Argentina
+      argFrom = new Date(Date.UTC(y, m, 1, 0, 0, 0))
       break
     case 'year':
-      from = new Date(now.getFullYear(), 0, 1, 0, 0, 0)
+      // Start of this year Argentina
+      argFrom = new Date(Date.UTC(y, 0, 1, 0, 0, 0))
       break
     default:
-      from = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0)
+      argFrom = new Date(Date.UTC(y, m, d, 0, 0, 0))
   }
 
-  return { from: from.toISOString(), to: to.toISOString() }
+  return {
+    from: argToUtcIso(argFrom),
+    to: new Date().toISOString(), // "now" in real UTC — upper bound is always current moment
+  }
 }
 
 export async function GET(req: NextRequest) {
@@ -97,8 +121,7 @@ export async function GET(req: NextRequest) {
   const avgTicket = orderCount > 0 ? totalSales / orderCount : 0
 
   // Hours in range
-  const { from: fromDate } = getPeriodRange(period)
-  const fromMs = new Date(fromDate).getTime()
+  const fromMs = new Date(from).getTime()
   const toMs = new Date(to).getTime()
   const hoursInPeriod = Math.max(1, (toMs - fromMs) / (1000 * 60 * 60))
   const ordersPerHour = orderCount / hoursInPeriod
@@ -106,7 +129,9 @@ export async function GET(req: NextRequest) {
   // --- Sales by day ---
   const dayMap = new Map<string, number>()
   for (const o of orderList) {
-    const day = o.created_at.slice(0, 10) // YYYY-MM-DD
+    // Convert UTC timestamp to Argentina date string (UTC-3)
+    const argDate = new Date(new Date(o.created_at).getTime() + ARG_OFFSET_MS)
+    const day = argDate.toISOString().slice(0, 10) // YYYY-MM-DD in Argentina time
     dayMap.set(day, (dayMap.get(day) ?? 0) + (o.total ?? 0))
   }
   const salesByDay = Array.from(dayMap.entries()).map(([date, total]) => ({ date, total }))
