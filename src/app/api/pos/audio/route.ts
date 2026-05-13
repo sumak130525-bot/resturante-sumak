@@ -17,6 +17,8 @@ async function ensureInfrastructure(supabase: ReturnType<typeof getAdminClient>)
   if (initialized) return
   initialized = true
 
+  console.log('[audio route] ensureInfrastructure: creando tabla si no existe...')
+
   // Create audio_messages table if it doesn't exist
   await supabase.rpc('exec_sql', {
     query: `
@@ -28,7 +30,10 @@ async function ensureInfrastructure(supabase: ReturnType<typeof getAdminClient>)
         played      boolean NOT NULL DEFAULT false
       );
     `,
-  }).then(() => {}, () => {})
+  }).then(
+    () => console.log('[audio route] Tabla audio_messages OK'),
+    (err) => console.warn('[audio route] rpc exec_sql warning:', err)
+  )
 
   // Create storage bucket (if it doesn't exist) — errors are silently ignored
   const { error: bucketError } = await supabase.storage.createBucket('audio-messages', {
@@ -39,6 +44,8 @@ async function ensureInfrastructure(supabase: ReturnType<typeof getAdminClient>)
 
   if (bucketError && !bucketError.message.includes('already exists')) {
     console.warn('[audio route] bucket create warning:', bucketError.message)
+  } else {
+    console.log('[audio route] Bucket audio-messages OK')
   }
 }
 
@@ -74,6 +81,8 @@ async function cleanupOldAudio(supabase: ReturnType<typeof getAdminClient>) {
         .from('audio_messages')
         .delete()
         .in('id', oldRows.map((r) => r.id))
+
+      console.log('[audio route] Limpiados', oldRows.length, 'registros viejos')
     }
   } catch {
     // Non-fatal
@@ -82,6 +91,9 @@ async function cleanupOldAudio(supabase: ReturnType<typeof getAdminClient>) {
 
 // ── POST /api/pos/audio ────────────────────────────────────────────────────────
 export async function POST(request: NextRequest) {
+  const requestId = Date.now()
+  console.log(`[audio route][${requestId}] POST /api/pos/audio recibido`)
+
   try {
     const supabase = getAdminClient()
     await ensureInfrastructure(supabase)
@@ -90,21 +102,32 @@ export async function POST(request: NextRequest) {
     const audioFile = formData.get('audio') as File | null
     const fromDevice = formData.get('from_device') as string | null
 
+    console.log(`[audio route][${requestId}] from_device: ${fromDevice}, audioFile: ${audioFile?.name ?? 'null'}, size: ${audioFile?.size ?? 0} bytes`)
+
     if (!audioFile) {
+      console.error(`[audio route][${requestId}] ERROR: falta archivo de audio`)
       return NextResponse.json({ error: 'Se requiere el archivo de audio' }, { status: 400 })
     }
 
     if (fromDevice !== 'pos' && fromDevice !== 'cocina') {
+      console.error(`[audio route][${requestId}] ERROR: from_device inválido: ${fromDevice}`)
       return NextResponse.json({ error: 'from_device debe ser "pos" o "cocina"' }, { status: 400 })
+    }
+
+    if (audioFile.size < 100) {
+      console.error(`[audio route][${requestId}] ERROR: archivo demasiado pequeño (${audioFile.size} bytes)`)
+      return NextResponse.json({ error: 'Archivo de audio demasiado pequeño' }, { status: 400 })
     }
 
     // Convert File to ArrayBuffer → Buffer
     const arrayBuffer = await audioFile.arrayBuffer()
     const buffer = Buffer.from(arrayBuffer)
+    console.log(`[audio route][${requestId}] Buffer preparado: ${buffer.length} bytes, mimeType: ${audioFile.type}`)
 
     // Determine extension from MIME
     const ext = audioFile.type.includes('ogg') ? 'ogg' : 'webm'
     const fileName = `${fromDevice}/${Date.now()}.${ext}`
+    console.log(`[audio route][${requestId}] Subiendo a Storage: ${fileName}`)
 
     // Upload to Supabase Storage
     const { error: uploadError } = await supabase.storage
@@ -115,9 +138,11 @@ export async function POST(request: NextRequest) {
       })
 
     if (uploadError) {
-      console.error('[audio route] upload error:', uploadError.message)
+      console.error(`[audio route][${requestId}] Upload ERROR:`, uploadError.message)
       return NextResponse.json({ error: `Upload falló: ${uploadError.message}` }, { status: 500 })
     }
+
+    console.log(`[audio route][${requestId}] Upload OK → ${fileName}`)
 
     // Get public URL
     const { data: urlData } = supabase.storage
@@ -125,8 +150,10 @@ export async function POST(request: NextRequest) {
       .getPublicUrl(fileName)
 
     const audioUrl = urlData.publicUrl
+    console.log(`[audio route][${requestId}] URL pública: ${audioUrl}`)
 
     // Insert row into audio_messages (Realtime will notify the other device)
+    console.log(`[audio route][${requestId}] Insertando en audio_messages...`)
     const { data: inserted, error: insertError } = await supabase
       .from('audio_messages')
       .insert({
@@ -138,9 +165,11 @@ export async function POST(request: NextRequest) {
       .single()
 
     if (insertError) {
-      console.error('[audio route] insert error:', insertError.message)
+      console.error(`[audio route][${requestId}] Insert ERROR:`, insertError.message)
       return NextResponse.json({ error: `DB insert falló: ${insertError.message}` }, { status: 500 })
     }
+
+    console.log(`[audio route][${requestId}] Insert OK → id: ${inserted.id}`)
 
     // Run cleanup in background (don't await)
     cleanupOldAudio(supabase).catch(() => {})
@@ -148,7 +177,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: true, id: inserted.id }, { status: 201 })
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Error interno'
-    console.error('[audio route]', message)
+    console.error(`[audio route][${requestId}] EXCEPCIÓN:`, message)
     return NextResponse.json({ error: message }, { status: 500 })
   }
 }
