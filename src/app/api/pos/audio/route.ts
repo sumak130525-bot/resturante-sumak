@@ -133,7 +133,7 @@ export async function POST(request: NextRequest) {
     const { error: uploadError } = await supabase.storage
       .from('audio-messages')
       .upload(fileName, buffer, {
-        contentType: audioFile.type || 'audio/webm',
+        contentType: audioFile.type.includes('ogg') ? 'audio/ogg' : 'audio/webm',
         upsert: false,
       })
 
