@@ -6,6 +6,7 @@ import type { MenuItem } from '@/lib/types'
 import { useTranslation, getItemName, type Locale } from '@/lib/i18n'
 import { useLanguagesEnabled } from '@/hooks/useLanguagesEnabled'
 import { type TicketConfig, DEFAULT_TICKET_CONFIG } from '@/types/ticket-config'
+import WalkieTalkie from '@/components/WalkieTalkie'
 
 // ─── Ticket helpers ───────────────────────────────────────────────────────────
 
@@ -2629,6 +2630,8 @@ export default function POSPage() {
           ✏️
         </button>
         )}
+        {/* Walkie-talkie */}
+        <WalkieTalkie device="pos" />
         {/* Ticket toggle button */}
         <button
           onClick={() => setTicketOpen((o) => !o)}

@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react'
 import Image from 'next/image'
 import { createClient } from '@/lib/supabase/client'
+import WalkieTalkie from '@/components/WalkieTalkie'
 
 // ─── LocalStorage helpers para dismissed IDs ─────────────────────────────────
 
@@ -1040,6 +1041,7 @@ export default function CocinaPage() {
               +{lastCount} nuevos
             </span>
           )}
+          <WalkieTalkie device="cocina" idleClassName="bg-white/20 text-white hover:bg-white/30" />
           <SoundSelector value={soundOption} onChange={handleSoundChange} />
           <span className="hidden sm:inline text-teal-100">Actualiza cada 5s</span>
           <span className="w-2 h-2 rounded-full bg-green-300 animate-pulse" />
