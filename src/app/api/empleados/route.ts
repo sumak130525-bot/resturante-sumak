@@ -12,6 +12,10 @@
  *   created_at  timestamptz NOT NULL DEFAULT now()
  * );
  *
+ * -- Add PIN column (run if table already exists):
+ * ALTER TABLE public.employees ADD COLUMN IF NOT EXISTS pin text;
+ * CREATE UNIQUE INDEX IF NOT EXISTS employees_pin_unique ON public.employees(pin) WHERE pin IS NOT NULL;
+ *
  * CREATE TABLE IF NOT EXISTS public.time_entries (
  *   id           uuid PRIMARY KEY DEFAULT gen_random_uuid(),
  *   employee_id  uuid NOT NULL REFERENCES public.employees(id) ON DELETE CASCADE,
@@ -94,14 +98,38 @@ export async function POST(req: NextRequest) {
   if (!user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
 
   const body = await req.json()
-  const { name, role, hourly_rate } = body
+  const { name, role, hourly_rate, pin } = body
   if (!name) return NextResponse.json({ error: 'name es requerido' }, { status: 400 })
+
+  // Validate PIN if provided
+  if (pin !== undefined && pin !== null && pin !== '') {
+    if (!/^\d{4}$/.test(String(pin))) {
+      return NextResponse.json({ error: 'El PIN debe ser exactamente 4 dígitos' }, { status: 400 })
+    }
+    // Check uniqueness
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const sbCheck = await getServiceClient() as any
+    const { data: existing } = await sbCheck
+      .from('employees')
+      .select('id')
+      .eq('pin', String(pin))
+      .maybeSingle()
+    if (existing) return NextResponse.json({ error: 'Este PIN ya está asignado a otro empleado' }, { status: 409 })
+  }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const sb = await getServiceClient() as any
+  const insertData: Record<string, unknown> = {
+    name,
+    role: role ?? '',
+    hourly_rate: hourly_rate ?? 0,
+    active: true,
+  }
+  if (pin !== undefined && pin !== null && pin !== '') insertData.pin = String(pin)
+
   const { data, error } = await sb
     .from('employees')
-    .insert({ name, role: role ?? '', hourly_rate: hourly_rate ?? 0, active: true })
+    .insert(insertData)
     .select()
     .single()
 
@@ -115,14 +143,32 @@ export async function PUT(req: NextRequest) {
   if (!user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
 
   const body = await req.json()
-  const { id, name, role, hourly_rate, active } = body
+  const { id, name, role, hourly_rate, active, pin } = body
   if (!id) return NextResponse.json({ error: 'id es requerido' }, { status: 400 })
+
+  // Validate PIN if being set
+  if (pin !== undefined && pin !== null && pin !== '') {
+    if (!/^\d{4}$/.test(String(pin))) {
+      return NextResponse.json({ error: 'El PIN debe ser exactamente 4 dígitos' }, { status: 400 })
+    }
+    // Check uniqueness (exclude self)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const sbCheck = await getServiceClient() as any
+    const { data: existing } = await sbCheck
+      .from('employees')
+      .select('id')
+      .eq('pin', String(pin))
+      .neq('id', id)
+      .maybeSingle()
+    if (existing) return NextResponse.json({ error: 'Este PIN ya está asignado a otro empleado' }, { status: 409 })
+  }
 
   const updates: Record<string, unknown> = {}
   if (name !== undefined) updates.name = name
   if (role !== undefined) updates.role = role
   if (hourly_rate !== undefined) updates.hourly_rate = hourly_rate
   if (active !== undefined) updates.active = active
+  if (pin !== undefined) updates.pin = (pin === null || pin === '') ? null : String(pin)
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const sb = await getServiceClient() as any

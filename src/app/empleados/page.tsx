@@ -2,11 +2,10 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
-import { useRouter } from 'next/navigation'
 import {
   Users, Clock, History, Plus, Pencil, Trash2, Loader2,
   LogIn, LogOut, Lock, CheckCircle2, XCircle, Banknote, Printer,
-  ChevronDown, ChevronUp,
+  ChevronDown, ChevronUp, Eye, EyeOff, Delete, ArrowLeft,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -18,6 +17,7 @@ type Employee = {
   role: string
   hourly_rate: number
   active: boolean
+  pin?: string | null
   created_at: string
 }
 
@@ -60,6 +60,16 @@ type CalcResult = {
 
 type Tab = 'fichaje' | 'empleados' | 'historial' | 'pagos'
 
+type PinEmployee = {
+  id: string
+  name: string
+  role: string
+}
+
+type PinStatus = 'working' | 'finished' | 'not_clocked'
+
+type PinOpenEntry = { id: string; clock_in: string } | null
+
 // ─── Argentina time helpers ───────────────────────────────────────────────────
 
 const ARG_OFFSET_MS = -3 * 60 * 60 * 1000
@@ -100,6 +110,15 @@ function firstDayOfMonthArg(): string {
   return `${y}-${m}-01`
 }
 
+function nowArgTimeString(): string {
+  const d = new Date(Date.now() - ARG_OFFSET_MS)
+  return d.toLocaleTimeString('es-AR', {
+    hour: '2-digit',
+    minute: '2-digit',
+    timeZone: 'UTC',
+  })
+}
+
 function formatHours(h: number): string {
   const hh = Math.floor(h)
   const mm = Math.round((h - hh) * 60)
@@ -122,9 +141,321 @@ function formatDate(iso: string): string {
   })
 }
 
-// ─── Auth Gate ────────────────────────────────────────────────────────────────
+// ─── PIN Screen ───────────────────────────────────────────────────────────────
 
-function AuthGate({ onAuth }: { onAuth: () => void }) {
+type PinScreenPhase = 'keyboard' | 'employee' | 'confirm'
+
+function PinScreen({ onExitPin }: { onExitPin: () => void }) {
+  const [pin, setPin] = useState('')
+  const [showPin, setShowPin] = useState(false)
+  const [phase, setPhase] = useState<PinScreenPhase>('keyboard')
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [employee, setEmployee] = useState<PinEmployee | null>(null)
+  const [status, setStatus] = useState<PinStatus>('not_clocked')
+  const [openEntry, setOpenEntry] = useState<PinOpenEntry>(null)
+  const [actionLoading, setActionLoading] = useState(false)
+  const [confirmMsg, setConfirmMsg] = useState<string | null>(null)
+
+  const pressKey = (key: string) => {
+    if (pin.length < 4) {
+      const next = pin + key
+      setPin(next)
+      setError(null)
+      if (next.length === 4) {
+        // Auto-submit on 4th digit
+        submitPin(next)
+      }
+    }
+  }
+
+  const deleteKey = () => {
+    setPin((p) => p.slice(0, -1))
+    setError(null)
+  }
+
+  const submitPin = async (pinValue: string) => {
+    setLoading(true)
+    setError(null)
+    const res = await fetch('/api/empleados/pin', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pin: pinValue }),
+    })
+    if (res.ok) {
+      const d = await res.json()
+      setEmployee(d.employee)
+      setStatus(d.status)
+      setOpenEntry(d.open_entry)
+      setPhase('employee')
+    } else {
+      setError('PIN incorrecto')
+      setPin('')
+    }
+    setLoading(false)
+  }
+
+  const handleAction = async (action: 'entrada' | 'salida') => {
+    if (!employee) return
+    setActionLoading(true)
+    const res = await fetch('/api/empleados/fichaje', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ employee_id: employee.id, action }),
+    })
+    if (res.ok) {
+      const timeStr = nowArgTimeString()
+      setConfirmMsg(
+        action === 'entrada'
+          ? `Entrada registrada ${timeStr}`
+          : `Salida registrada ${timeStr}`
+      )
+      setPhase('confirm')
+      setTimeout(() => {
+        setPhase('keyboard')
+        setPin('')
+        setEmployee(null)
+        setConfirmMsg(null)
+        setError(null)
+      }, 3000)
+    } else {
+      const d = await res.json()
+      setError(d.error ?? 'Error al registrar')
+    }
+    setActionLoading(false)
+  }
+
+  const backToKeyboard = () => {
+    setPhase('keyboard')
+    setPin('')
+    setEmployee(null)
+    setError(null)
+  }
+
+  // ── Confirmation screen ──
+  if (phase === 'confirm') {
+    return (
+      <div className="min-h-screen bg-black flex flex-col items-center justify-center px-6">
+        <div className="flex flex-col items-center gap-6 animate-scale-in">
+          <div className="w-24 h-24 rounded-full bg-green-500/20 border-2 border-green-400 flex items-center justify-center">
+            <CheckCircle2 size={48} className="text-green-400" />
+          </div>
+          <p className="text-white text-2xl font-bold text-center">{confirmMsg}</p>
+          <p className="text-white/40 text-sm">Volviendo al teclado…</p>
+        </div>
+      </div>
+    )
+  }
+
+  // ── Employee action screen ──
+  if (phase === 'employee' && employee) {
+    return (
+      <div className="min-h-screen bg-black flex flex-col">
+        {/* Header */}
+        <div className="bg-[#3d2b1f] px-6 py-4 flex items-center gap-3">
+          <button
+            onClick={backToKeyboard}
+            className="text-white/60 hover:text-white transition-colors p-1"
+          >
+            <ArrowLeft size={22} />
+          </button>
+          <div>
+            <h1 className="text-white font-bold text-xl">{employee.name}</h1>
+            {employee.role && (
+              <p className="text-amber-300/70 text-sm">{employee.role}</p>
+            )}
+          </div>
+        </div>
+
+        {/* Status */}
+        <div className="flex-1 flex flex-col items-center justify-center px-6 gap-8">
+          <div className={cn(
+            'px-5 py-2.5 rounded-full text-base font-semibold',
+            status === 'working'
+              ? 'bg-green-500/20 text-green-400 border border-green-500/40'
+              : status === 'finished'
+              ? 'bg-gray-600/30 text-gray-400 border border-gray-500/30'
+              : 'bg-gray-700/30 text-gray-400 border border-gray-600/30'
+          )}>
+            {status === 'working' && openEntry
+              ? `Trabajando desde ${toArgTime(openEntry.clock_in)}`
+              : status === 'finished'
+              ? 'Turno finalizado hoy'
+              : 'No fichó hoy'}
+          </div>
+
+          {error && (
+            <div className="bg-red-900/40 border border-red-500/50 text-red-300 text-sm px-4 py-3 rounded-xl text-center">
+              {error}
+            </div>
+          )}
+
+          {/* Action buttons */}
+          <div className="w-full max-w-sm flex flex-col gap-5">
+            <button
+              onClick={() => handleAction('entrada')}
+              disabled={actionLoading || status === 'working' || status === 'finished'}
+              className={cn(
+                'w-full py-7 rounded-3xl text-2xl font-bold flex items-center justify-center gap-4 transition-all',
+                status === 'not_clocked'
+                  ? 'bg-green-600 text-white hover:bg-green-500 active:scale-95 shadow-lg shadow-green-900/50'
+                  : 'bg-gray-800 text-gray-600 cursor-not-allowed'
+              )}
+            >
+              {actionLoading ? <Loader2 size={32} className="animate-spin" /> : <LogIn size={32} />}
+              ENTRADA
+            </button>
+
+            <button
+              onClick={() => handleAction('salida')}
+              disabled={actionLoading || status !== 'working'}
+              className={cn(
+                'w-full py-7 rounded-3xl text-2xl font-bold flex items-center justify-center gap-4 transition-all',
+                status === 'working'
+                  ? 'bg-red-600 text-white hover:bg-red-500 active:scale-95 shadow-lg shadow-red-900/50'
+                  : 'bg-gray-800 text-gray-600 cursor-not-allowed'
+              )}
+            >
+              {actionLoading ? <Loader2 size={32} className="animate-spin" /> : <LogOut size={32} />}
+              FINALIZAR
+            </button>
+          </div>
+        </div>
+
+        {/* Exit PIN link */}
+        <div className="pb-8 text-center">
+          <button
+            onClick={onExitPin}
+            className="text-amber-500/70 hover:text-amber-400 text-sm transition-colors underline underline-offset-4"
+          >
+            Salir de modo PIN
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  // ── PIN Keyboard ──
+  const keys = ['7', '8', '9', '4', '5', '6', '1', '2', '3']
+
+  return (
+    <div className="min-h-screen bg-black flex flex-col">
+      {/* Header */}
+      <div className="bg-[#3d2b1f] px-6 py-5 text-center">
+        <h1 className="text-white text-2xl font-bold tracking-wide">Identifícate</h1>
+      </div>
+
+      {/* PIN display */}
+      <div className="flex flex-col items-center pt-10 pb-6 px-6 gap-4">
+        <div className="relative flex items-center">
+          <div className="flex gap-4 items-center min-h-[3rem]">
+            {pin.length === 0 ? (
+              <span className="text-white/30 text-lg tracking-widest">Ingresá tu PIN</span>
+            ) : (
+              Array.from({ length: 4 }).map((_, i) => (
+                <div
+                  key={i}
+                  className={cn(
+                    'w-5 h-5 rounded-full border-2 transition-all',
+                    i < pin.length
+                      ? 'bg-white border-white'
+                      : 'border-white/30 bg-transparent'
+                  )}
+                />
+              ))
+            )}
+          </div>
+          {pin.length > 0 && (
+            <button
+              onClick={() => setShowPin((s) => !s)}
+              className="ml-4 text-white/40 hover:text-white/70 transition-colors"
+            >
+              {showPin ? <EyeOff size={18} /> : <Eye size={18} />}
+            </button>
+          )}
+        </div>
+
+        {/* Show actual PIN digits if eye is open */}
+        {showPin && pin.length > 0 && (
+          <p className="text-white/70 text-3xl font-mono tracking-[0.5em]">{pin}</p>
+        )}
+
+        {error && (
+          <div className="mt-1 text-red-400 text-sm font-medium">{error}</div>
+        )}
+      </div>
+
+      {/* Keypad */}
+      <div className="flex-1 flex items-center justify-center px-6">
+        {loading ? (
+          <Loader2 size={40} className="animate-spin text-white/40" />
+        ) : (
+          <div className="w-full max-w-xs">
+            {/* 3x3 top grid */}
+            <div className="grid grid-cols-3 gap-5 mb-5">
+              {keys.map((k) => (
+                <button
+                  key={k}
+                  onClick={() => pressKey(k)}
+                  className="aspect-square rounded-full border-2 border-white/80 bg-black text-white text-3xl font-bold flex items-center justify-center hover:bg-white/10 active:bg-white/20 active:scale-95 transition-all select-none"
+                >
+                  {k}
+                </button>
+              ))}
+            </div>
+            {/* Bottom row: ⌫  0  Aceptar */}
+            <div className="grid grid-cols-3 gap-5">
+              <button
+                onClick={deleteKey}
+                className="aspect-square rounded-full border-2 border-white/30 bg-gray-700/60 text-white flex items-center justify-center hover:bg-gray-600/60 active:scale-95 transition-all select-none"
+              >
+                <Delete size={26} />
+              </button>
+              <button
+                onClick={() => pressKey('0')}
+                className="aspect-square rounded-full border-2 border-white/80 bg-black text-white text-3xl font-bold flex items-center justify-center hover:bg-white/10 active:bg-white/20 active:scale-95 transition-all select-none"
+              >
+                0
+              </button>
+              <button
+                onClick={() => pin.length > 0 && submitPin(pin)}
+                disabled={pin.length === 0}
+                className={cn(
+                  'aspect-square rounded-full border-2 text-sm font-bold flex items-center justify-center active:scale-95 transition-all select-none leading-tight text-center px-1',
+                  pin.length > 0
+                    ? 'border-orange-300/80 bg-orange-200/20 text-orange-200 hover:bg-orange-200/30'
+                    : 'border-white/10 bg-transparent text-white/20 cursor-not-allowed'
+                )}
+              >
+                OK
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Exit PIN link */}
+      <div className="pb-10 text-center">
+        <button
+          onClick={onExitPin}
+          className="text-amber-500/70 hover:text-amber-400 text-sm transition-colors underline underline-offset-4"
+        >
+          Salir de modo PIN
+        </button>
+      </div>
+    </div>
+  )
+}
+
+// ─── Admin Auth Gate ──────────────────────────────────────────────────────────
+
+function AdminAuthGate({
+  onAuth,
+  onCancel,
+}: {
+  onAuth: () => void
+  onCancel: () => void
+}) {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
@@ -145,33 +476,24 @@ function AuthGate({ onAuth }: { onAuth: () => void }) {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-hero-gradient px-4 relative overflow-hidden">
-      <div className="absolute inset-0 bg-noise opacity-40" />
-      <div className="absolute -top-32 -right-32 w-96 h-96 rounded-full border border-sumak-gold/10 animate-spin-slow pointer-events-none" />
-      <div className="absolute -bottom-24 -left-24 w-72 h-72 rounded-full border border-sumak-gold/8 animate-spin-slow pointer-events-none" style={{ animationDirection: 'reverse', animationDuration: '14s' }} />
-
-      <div className="relative w-full max-w-md animate-scale-in">
+    <div className="min-h-screen bg-black flex flex-col items-center justify-center px-6">
+      <div className="w-full max-w-sm animate-scale-in">
         <div className="text-center mb-8">
           <div className="inline-flex flex-col items-center gap-3">
-            <div className="w-16 h-16 rounded-2xl bg-gold-gradient flex items-center justify-center shadow-gold-glow">
-              <Users size={28} className="text-sumak-brown" />
+            <div className="w-14 h-14 rounded-2xl bg-amber-700 flex items-center justify-center">
+              <Lock size={24} className="text-white" />
             </div>
             <div>
-              <h1 className="font-serif font-bold text-3xl text-white tracking-wide">Empleados</h1>
-              <p className="text-white/50 text-sm mt-0.5">Control horario de personal</p>
+              <h1 className="text-white font-bold text-2xl">Acceso Admin</h1>
+              <p className="text-white/40 text-sm mt-0.5">Ingresá tus credenciales</p>
             </div>
           </div>
         </div>
 
-        <div className="glass rounded-2xl p-8 space-y-5">
-          <div className="flex items-center gap-2 mb-2">
-            <Lock size={14} className="text-sumak-brown-light" />
-            <p className="text-xs font-semibold text-sumak-brown-light tracking-wider uppercase">Acceso restringido</p>
-          </div>
-
+        <div className="bg-white/5 border border-white/10 rounded-2xl p-6 space-y-4">
           <form onSubmit={handleLogin} className="space-y-4">
             <div>
-              <label className="block text-xs font-bold tracking-wider uppercase text-sumak-brown-light mb-1.5">
+              <label className="block text-xs font-bold tracking-wider uppercase text-white/50 mb-1.5">
                 Correo electrónico
               </label>
               <input
@@ -179,12 +501,12 @@ function AuthGate({ onAuth }: { onAuth: () => void }) {
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="admin@sumak.com"
-                className="input-field"
+                className="w-full bg-black/50 border border-white/20 rounded-xl px-3 py-2.5 text-white text-sm placeholder-white/20 focus:outline-none focus:ring-2 focus:ring-amber-500/50"
                 required
               />
             </div>
             <div>
-              <label className="block text-xs font-bold tracking-wider uppercase text-sumak-brown-light mb-1.5">
+              <label className="block text-xs font-bold tracking-wider uppercase text-white/50 mb-1.5">
                 Contraseña
               </label>
               <input
@@ -192,23 +514,29 @@ function AuthGate({ onAuth }: { onAuth: () => void }) {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••"
-                className="input-field"
+                className="w-full bg-black/50 border border-white/20 rounded-xl px-3 py-2.5 text-white text-sm placeholder-white/20 focus:outline-none focus:ring-2 focus:ring-amber-500/50"
                 required
               />
             </div>
             {error && (
-              <div className="bg-red-50 border border-red-200 text-red-700 text-sm p-3 rounded-xl">{error}</div>
+              <div className="bg-red-900/40 border border-red-500/40 text-red-300 text-sm p-3 rounded-xl">{error}</div>
             )}
             <button
               type="submit"
               disabled={loading}
-              className={cn('btn-primary w-full flex items-center justify-center gap-2 py-3.5')}
+              className="w-full bg-amber-700 hover:bg-amber-600 text-white font-semibold py-3 rounded-xl transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
             >
-              {loading ? <><Loader2 size={17} className="animate-spin" />Entrando…</> : 'Ingresar'}
+              {loading ? <><Loader2 size={16} className="animate-spin" />Entrando…</> : 'Ingresar como admin'}
             </button>
           </form>
         </div>
-        <p className="text-center text-xs text-white/25 mt-6">Solo para administradores de Sumak Restaurante</p>
+
+        <button
+          onClick={onCancel}
+          className="w-full mt-4 text-white/40 hover:text-white/60 text-sm transition-colors py-2"
+        >
+          Cancelar — volver al teclado PIN
+        </button>
       </div>
     </div>
   )
@@ -228,14 +556,27 @@ function EmployeeModal({
   const [name, setName] = useState(employee?.name ?? '')
   const [role, setRole] = useState(employee?.role ?? '')
   const [hourlyRate, setHourlyRate] = useState(String(employee?.hourly_rate ?? ''))
+  const [pin, setPin] = useState(employee?.pin ?? '')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError(null)
+
+    // Validate PIN
+    if (pin && !/^\d{4}$/.test(pin)) {
+      setError('El PIN debe ser exactamente 4 dígitos numéricos')
+      return
+    }
+
     setSaving(true)
-    const body = { name, role, hourly_rate: Number(hourlyRate) }
+    const body = {
+      name,
+      role,
+      hourly_rate: Number(hourlyRate),
+      pin: pin || null,
+    }
     const res = employee
       ? await fetch('/api/empleados', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...body, id: employee.id }) })
       : await fetch('/api/empleados', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
@@ -286,6 +627,20 @@ function EmployeeModal({
               placeholder="0"
             />
           </div>
+          <div>
+            <label className="block text-xs font-bold text-gray-600 mb-1">PIN de fichaje (4 dígitos)</label>
+            <input
+              type="text"
+              inputMode="numeric"
+              pattern="\d{4}"
+              maxLength={4}
+              className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-sumak-brown/30 tracking-widest font-mono"
+              value={pin}
+              onChange={(e) => setPin(e.target.value.replace(/\D/g, '').slice(0, 4))}
+              placeholder="Ej: 1234"
+            />
+            <p className="text-xs text-gray-400 mt-1">El empleado usará este PIN para fichar entrada/salida. Dejar vacío si no tiene PIN.</p>
+          </div>
           {error && <div className="bg-red-50 border border-red-200 text-red-700 text-sm p-3 rounded-xl">{error}</div>}
           <div className="flex gap-3 pt-1">
             <button
@@ -310,13 +665,11 @@ function EmployeeModal({
   )
 }
 
-// ─── Tab: Fichaje ─────────────────────────────────────────────────────────────
+// ─── Tab: Fichaje (Admin view — read-only status) ─────────────────────────────
 
 function TabFichaje({ employees }: { employees: Employee[] }) {
   const [entries, setEntries] = useState<TimeEntry[]>([])
   const [loading, setLoading] = useState(true)
-  const [actionLoading, setActionLoading] = useState<string | null>(null)
-  const [error, setError] = useState<string | null>(null)
 
   const activeEmployees = employees.filter((e) => e.active)
 
@@ -327,23 +680,6 @@ function TabFichaje({ employees }: { employees: Employee[] }) {
   }, [])
 
   useEffect(() => { fetchEntries() }, [fetchEntries])
-
-  const handleAction = async (employee_id: string, action: 'entrada' | 'salida') => {
-    setError(null)
-    setActionLoading(employee_id + action)
-    const res = await fetch('/api/empleados/fichaje', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ employee_id, action }),
-    })
-    if (res.ok) {
-      await fetchEntries()
-    } else {
-      const d = await res.json()
-      setError(d.error ?? 'Error al registrar fichaje')
-    }
-    setActionLoading(null)
-  }
 
   // Map employee_id -> today's open entry
   const openEntryMap = new Map<string, TimeEntry>()
@@ -356,11 +692,16 @@ function TabFichaje({ employees }: { employees: Employee[] }) {
     }
   }
 
+  const working = activeEmployees.filter((e) => openEntryMap.has(e.id))
+  const finished = activeEmployees.filter((e) => !openEntryMap.has(e.id) && closedToday.has(e.id))
+  const notClocked = activeEmployees.filter((e) => !openEntryMap.has(e.id) && !closedToday.has(e.id))
+
   return (
-    <div className="space-y-4">
-      {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-xl px-4 py-3">{error}</div>
-      )}
+    <div className="space-y-5">
+      <div className="bg-blue-50 border border-blue-100 rounded-xl px-4 py-3 text-sm text-blue-700">
+        Los empleados fichan su entrada y salida usando su PIN desde la pantalla principal.
+      </div>
+
       {loading ? (
         <div className="flex items-center justify-center py-16 text-gray-400">
           <Loader2 size={24} className="animate-spin" />
@@ -368,86 +709,73 @@ function TabFichaje({ employees }: { employees: Employee[] }) {
       ) : activeEmployees.length === 0 ? (
         <div className="text-center py-16 text-gray-400 text-sm">No hay empleados activos</div>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
-          {activeEmployees.map((emp) => {
-            const openEntry = openEntryMap.get(emp.id)
-            const hasClosed = closedToday.has(emp.id) && !openEntry
-            const isWorking = !!openEntry
-            const isLoading = actionLoading === emp.id + 'entrada' || actionLoading === emp.id + 'salida'
-
-            return (
-              <div
-                key={emp.id}
-                className={cn(
-                  'bg-white rounded-2xl border p-5 space-y-4 shadow-sm transition-all',
-                  isWorking ? 'border-green-200' : hasClosed ? 'border-gray-100' : 'border-gray-100'
-                )}
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="font-semibold text-gray-800 text-base">{emp.name}</p>
-                    {emp.role && <p className="text-xs text-gray-400 mt-0.5">{emp.role}</p>}
-                  </div>
-                  <div className={cn(
-                    'text-xs font-semibold px-2.5 py-1 rounded-full',
-                    isWorking
-                      ? 'bg-green-100 text-green-700'
-                      : hasClosed
-                      ? 'bg-gray-100 text-gray-500'
-                      : 'bg-gray-100 text-gray-400'
-                  )}>
-                    {isWorking ? 'Trabajando' : hasClosed ? 'Finalizado' : 'Sin fichar'}
-                  </div>
-                </div>
-
-                <div className="text-sm text-gray-500">
-                  {isWorking && openEntry ? (
-                    <span className="flex items-center gap-1.5 text-green-700">
-                      <CheckCircle2 size={14} />
-                      Entrada: {toArgTime(openEntry.clock_in)}
-                    </span>
-                  ) : hasClosed ? (
-                    <span className="flex items-center gap-1.5 text-gray-400">
-                      <XCircle size={14} />
-                      Ya fichó hoy
-                    </span>
-                  ) : (
-                    <span className="text-gray-300">No fichó hoy</span>
-                  )}
-                </div>
-
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => handleAction(emp.id, 'entrada')}
-                    disabled={isLoading || isWorking || hasClosed}
-                    className={cn(
-                      'flex-1 flex items-center justify-center gap-1.5 text-sm font-medium py-2 rounded-xl transition-colors',
-                      !isWorking && !hasClosed
-                        ? 'bg-green-600 text-white hover:bg-green-700'
-                        : 'bg-gray-100 text-gray-300 cursor-not-allowed'
-                    )}
-                  >
-                    {actionLoading === emp.id + 'entrada' ? <Loader2 size={14} className="animate-spin" /> : <LogIn size={14} />}
-                    Entrada
-                  </button>
-                  <button
-                    onClick={() => handleAction(emp.id, 'salida')}
-                    disabled={isLoading || !isWorking}
-                    className={cn(
-                      'flex-1 flex items-center justify-center gap-1.5 text-sm font-medium py-2 rounded-xl transition-colors',
-                      isWorking
-                        ? 'bg-red-500 text-white hover:bg-red-600'
-                        : 'bg-gray-100 text-gray-300 cursor-not-allowed'
-                    )}
-                  >
-                    {actionLoading === emp.id + 'salida' ? <Loader2 size={14} className="animate-spin" /> : <LogOut size={14} />}
-                    Salida
-                  </button>
-                </div>
+        <>
+          {working.length > 0 && (
+            <div>
+              <h3 className="text-xs font-bold tracking-wider uppercase text-green-600 mb-3">
+                Trabajando ahora ({working.length})
+              </h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
+                {working.map((emp) => {
+                  const openEntry = openEntryMap.get(emp.id)
+                  return (
+                    <div key={emp.id} className="bg-white rounded-2xl border border-green-200 p-4 flex items-center gap-3 shadow-sm">
+                      <div className="w-2.5 h-2.5 rounded-full bg-green-500 flex-shrink-0 animate-pulse" />
+                      <div className="min-w-0">
+                        <p className="font-semibold text-gray-800 truncate">{emp.name}</p>
+                        {emp.role && <p className="text-xs text-gray-400">{emp.role}</p>}
+                        {openEntry && (
+                          <p className="text-xs text-green-600 mt-0.5 flex items-center gap-1">
+                            <CheckCircle2 size={11} />
+                            Desde {toArgTime(openEntry.clock_in)}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  )
+                })}
               </div>
-            )
-          })}
-        </div>
+            </div>
+          )}
+
+          {finished.length > 0 && (
+            <div>
+              <h3 className="text-xs font-bold tracking-wider uppercase text-gray-400 mb-3">
+                Finalizaron hoy ({finished.length})
+              </h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
+                {finished.map((emp) => (
+                  <div key={emp.id} className="bg-white rounded-2xl border border-gray-100 p-4 flex items-center gap-3 shadow-sm opacity-60">
+                    <XCircle size={14} className="text-gray-300 flex-shrink-0" />
+                    <div className="min-w-0">
+                      <p className="font-semibold text-gray-700 truncate">{emp.name}</p>
+                      {emp.role && <p className="text-xs text-gray-400">{emp.role}</p>}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {notClocked.length > 0 && (
+            <div>
+              <h3 className="text-xs font-bold tracking-wider uppercase text-gray-300 mb-3">
+                Sin fichar hoy ({notClocked.length})
+              </h3>
+              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
+                {notClocked.map((emp) => (
+                  <div key={emp.id} className="bg-white rounded-2xl border border-gray-100 p-4 flex items-center gap-3 shadow-sm opacity-40">
+                    <div className="w-2.5 h-2.5 rounded-full border border-gray-300 flex-shrink-0" />
+                    <div className="min-w-0">
+                      <p className="font-medium text-gray-600 truncate">{emp.name}</p>
+                      {emp.role && <p className="text-xs text-gray-400">{emp.role}</p>}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </>
       )}
     </div>
   )
@@ -527,6 +855,7 @@ function TabEmpleados({
               <tr>
                 <th className="text-left px-5 py-3.5 font-semibold text-gray-600">Nombre</th>
                 <th className="text-left px-5 py-3.5 font-semibold text-gray-600 hidden sm:table-cell">Cargo</th>
+                <th className="text-center px-5 py-3.5 font-semibold text-gray-600 hidden md:table-cell">PIN</th>
                 <th className="text-right px-5 py-3.5 font-semibold text-gray-600 hidden md:table-cell">$/hora</th>
                 <th className="text-center px-5 py-3.5 font-semibold text-gray-600">Estado</th>
                 <th className="text-right px-5 py-3.5 font-semibold text-gray-600">Acciones</th>
@@ -537,6 +866,15 @@ function TabEmpleados({
                 <tr key={emp.id} className="hover:bg-gray-50/50 transition-colors">
                   <td className="px-5 py-4 font-medium text-gray-800">{emp.name}</td>
                   <td className="px-5 py-4 text-gray-500 hidden sm:table-cell">{emp.role || '—'}</td>
+                  <td className="px-5 py-4 text-center hidden md:table-cell">
+                    {emp.pin ? (
+                      <span className="font-mono text-xs bg-amber-50 text-amber-700 border border-amber-200 px-2 py-0.5 rounded-lg">
+                        ••••
+                      </span>
+                    ) : (
+                      <span className="text-gray-300 text-xs">Sin PIN</span>
+                    )}
+                  </td>
                   <td className="px-5 py-4 text-gray-700 text-right hidden md:table-cell">
                     {formatARS(emp.hourly_rate)}
                   </td>
@@ -856,7 +1194,6 @@ function printSalaryReceipt(payment: EmployeePayment, empName: string, empRole: 
 // ─── Tab: Pagos ───────────────────────────────────────────────────────────────
 
 function TabPagos({ employees }: { employees: Employee[] }) {
-  // List state
   const [payments, setPayments] = useState<EmployeePayment[]>([])
   const [listLoading, setListLoading] = useState(false)
   const [listError, setListError] = useState<string | null>(null)
@@ -865,17 +1202,14 @@ function TabPagos({ employees }: { employees: Employee[] }) {
   const [filterTo, setFilterTo] = useState(todayArg())
   const [filterType, setFilterType] = useState('')
 
-  // Modal state
   const [modal, setModal] = useState<'none' | 'advance' | 'salary'>('none')
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
 
-  // Advance form
   const [advEmployee, setAdvEmployee] = useState('')
   const [advAmount, setAdvAmount] = useState('')
   const [advDescription, setAdvDescription] = useState('')
 
-  // Salary form
   const [salEmployee, setSalEmployee] = useState('')
   const [salFrom, setSalFrom] = useState(firstDayOfMonthArg())
   const [salTo, setSalTo] = useState(todayArg())
@@ -884,7 +1218,6 @@ function TabPagos({ employees }: { employees: Employee[] }) {
   const [calcError, setCalcError] = useState<string | null>(null)
   const [salCustomAmount, setSalCustomAmount] = useState('')
 
-  // Collapse rows
   const [expandedId, setExpandedId] = useState<string | null>(null)
 
   const fetchPayments = useCallback(async () => {
@@ -906,7 +1239,6 @@ function TabPagos({ employees }: { employees: Employee[] }) {
 
   useEffect(() => { fetchPayments() }, [fetchPayments])
 
-  // ── Advance submit ──
   const handleAdvanceSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setSaveError(null)
@@ -927,7 +1259,6 @@ function TabPagos({ employees }: { employees: Employee[] }) {
       setModal('none')
       resetAdvForm()
       await fetchPayments()
-      // Print receipt
       printAdvanceReceipt(pmt, emp?.name ?? '', emp?.role ?? '')
     } else {
       const d = await res.json()
@@ -936,7 +1267,6 @@ function TabPagos({ employees }: { employees: Employee[] }) {
     setSaving(false)
   }
 
-  // ── Salary calc ──
   const handleCalc = async () => {
     if (!salEmployee || !salFrom || !salTo) return
     setCalcLoading(true)
@@ -955,7 +1285,6 @@ function TabPagos({ employees }: { employees: Employee[] }) {
     setCalcLoading(false)
   }
 
-  // ── Salary submit ──
   const handleSalarySubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!calcResult) return
@@ -995,29 +1324,18 @@ function TabPagos({ employees }: { employees: Employee[] }) {
   }
 
   function resetAdvForm() {
-    setAdvEmployee('')
-    setAdvAmount('')
-    setAdvDescription('')
-    setSaveError(null)
+    setAdvEmployee(''); setAdvAmount(''); setAdvDescription(''); setSaveError(null)
   }
-
   function resetSalForm() {
-    setSalEmployee('')
-    setSalFrom(firstDayOfMonthArg())
-    setSalTo(todayArg())
-    setCalcResult(null)
-    setSalCustomAmount('')
-    setSaveError(null)
-    setCalcError(null)
+    setSalEmployee(''); setSalFrom(firstDayOfMonthArg()); setSalTo(todayArg())
+    setCalcResult(null); setSalCustomAmount(''); setSaveError(null); setCalcError(null)
   }
 
-  // Summary totals
   const totalAdvances = payments.filter((p) => p.type === 'advance').reduce((s, p) => s + Number(p.amount), 0)
   const totalSalaries = payments.filter((p) => p.type === 'salary').reduce((s, p) => s + Number(p.amount), 0)
 
   return (
     <div className="space-y-5">
-      {/* Action buttons */}
       <div className="flex flex-wrap gap-3 justify-end">
         <button
           onClick={() => { resetAdvForm(); setModal('advance') }}
@@ -1035,7 +1353,6 @@ function TabPagos({ employees }: { employees: Employee[] }) {
         </button>
       </div>
 
-      {/* Filters */}
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           <div>
@@ -1065,26 +1382,15 @@ function TabPagos({ employees }: { employees: Employee[] }) {
           </div>
           <div>
             <label className="block text-xs font-semibold text-gray-500 mb-1.5">Desde</label>
-            <input
-              type="date"
-              className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-sumak-brown/30"
-              value={filterFrom}
-              onChange={(e) => setFilterFrom(e.target.value)}
-            />
+            <input type="date" className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-sumak-brown/30" value={filterFrom} onChange={(e) => setFilterFrom(e.target.value)} />
           </div>
           <div>
             <label className="block text-xs font-semibold text-gray-500 mb-1.5">Hasta</label>
-            <input
-              type="date"
-              className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-sumak-brown/30"
-              value={filterTo}
-              onChange={(e) => setFilterTo(e.target.value)}
-            />
+            <input type="date" className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-sumak-brown/30" value={filterTo} onChange={(e) => setFilterTo(e.target.value)} />
           </div>
         </div>
       </div>
 
-      {/* Summary cards */}
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
         <div className="bg-white rounded-2xl border border-amber-100 p-4">
           <p className="text-xs text-gray-400 mb-1">Adelantos</p>
@@ -1107,13 +1413,10 @@ function TabPagos({ employees }: { employees: Employee[] }) {
         <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-xl px-4 py-3">{listError}</div>
       )}
 
-      {/* Payments table */}
       {listLoading ? (
         <div className="flex items-center justify-center py-16 text-gray-400"><Loader2 size={24} className="animate-spin" /></div>
       ) : payments.length === 0 ? (
-        <div className="text-center py-12 text-gray-400 text-sm bg-white rounded-2xl border border-gray-100">
-          Sin pagos en este período
-        </div>
+        <div className="text-center py-12 text-gray-400 text-sm bg-white rounded-2xl border border-gray-100">Sin pagos en este período</div>
       ) : (
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
           <table className="w-full text-sm">
@@ -1138,26 +1441,17 @@ function TabPagos({ employees }: { employees: Employee[] }) {
                       className="hover:bg-gray-50/50 transition-colors cursor-pointer"
                       onClick={() => setExpandedId(isExpanded ? null : pmt.id)}
                     >
-                      <td className="px-5 py-3.5 text-gray-600 font-medium whitespace-nowrap">
-                        {toArgDateTime(pmt.created_at)}
-                      </td>
+                      <td className="px-5 py-3.5 text-gray-600 font-medium whitespace-nowrap">{toArgDateTime(pmt.created_at)}</td>
                       <td className="px-5 py-3.5">
                         <p className="font-medium text-gray-800">{empName}</p>
                         {empRole && <p className="text-xs text-gray-400">{empRole}</p>}
                       </td>
                       <td className="px-5 py-3.5 hidden sm:table-cell">
-                        <span className={cn(
-                          'text-xs font-semibold px-2.5 py-1 rounded-full',
-                          pmt.type === 'advance'
-                            ? 'bg-amber-100 text-amber-700'
-                            : 'bg-green-100 text-green-700'
-                        )}>
+                        <span className={cn('text-xs font-semibold px-2.5 py-1 rounded-full', pmt.type === 'advance' ? 'bg-amber-100 text-amber-700' : 'bg-green-100 text-green-700')}>
                           {pmt.type === 'advance' ? 'Adelanto' : 'Sueldo'}
                         </span>
                       </td>
-                      <td className="px-5 py-3.5 text-right font-bold text-gray-800">
-                        {formatARS(pmt.amount)}
-                      </td>
+                      <td className="px-5 py-3.5 text-right font-bold text-gray-800">{formatARS(pmt.amount)}</td>
                       <td className="px-5 py-3.5 text-center">
                         <button
                           onClick={(e) => {
@@ -1176,9 +1470,7 @@ function TabPagos({ employees }: { employees: Employee[] }) {
                     {isExpanded && (
                       <tr key={pmt.id + '-detail'} className="bg-amber-50/30">
                         <td colSpan={5} className="px-5 py-3 text-xs text-gray-600 space-y-1">
-                          {pmt.type === 'advance' && pmt.description && (
-                            <div>Concepto: {pmt.description}</div>
-                          )}
+                          {pmt.type === 'advance' && pmt.description && <div>Concepto: {pmt.description}</div>}
                           {pmt.type === 'salary' && (
                             <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-6 gap-y-1">
                               <div>Período: {pmt.period_from ? `${formatDate(pmt.period_from)} – ${formatDate(pmt.period_to!)}` : '—'}</div>
@@ -1198,22 +1490,15 @@ function TabPagos({ employees }: { employees: Employee[] }) {
         </div>
       )}
 
-      {/* ── Advance Modal ── */}
+      {/* Advance Modal */}
       {modal === 'advance' && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6 space-y-5 animate-scale-in">
-            <h2 className="font-serif text-xl font-bold text-sumak-brown flex items-center gap-2">
-              <Banknote size={20} /> Registrar adelanto
-            </h2>
+            <h2 className="font-serif text-xl font-bold text-sumak-brown flex items-center gap-2"><Banknote size={20} /> Registrar adelanto</h2>
             <form onSubmit={handleAdvanceSubmit} className="space-y-4">
               <div>
                 <label className="block text-xs font-bold text-gray-600 mb-1">Empleado *</label>
-                <select
-                  className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-sumak-brown/30"
-                  value={advEmployee}
-                  onChange={(e) => setAdvEmployee(e.target.value)}
-                  required
-                >
+                <select className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-sumak-brown/30" value={advEmployee} onChange={(e) => setAdvEmployee(e.target.value)} required>
                   <option value="">Seleccionar…</option>
                   {employees.filter((e) => e.active).map((emp) => (
                     <option key={emp.id} value={emp.id}>{emp.name} {emp.role ? `(${emp.role})` : ''}</option>
@@ -1222,43 +1507,17 @@ function TabPagos({ employees }: { employees: Employee[] }) {
               </div>
               <div>
                 <label className="block text-xs font-bold text-gray-600 mb-1">Monto (ARS) *</label>
-                <input
-                  type="number"
-                  min="1"
-                  step="0.01"
-                  className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-sumak-brown/30"
-                  value={advAmount}
-                  onChange={(e) => setAdvAmount(e.target.value)}
-                  required
-                  placeholder="0"
-                />
+                <input type="number" min="1" step="0.01" className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-sumak-brown/30" value={advAmount} onChange={(e) => setAdvAmount(e.target.value)} required placeholder="0" />
               </div>
               <div>
                 <label className="block text-xs font-bold text-gray-600 mb-1">Descripción</label>
-                <input
-                  className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-sumak-brown/30"
-                  value={advDescription}
-                  onChange={(e) => setAdvDescription(e.target.value)}
-                  placeholder="Opcional"
-                />
+                <input className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-sumak-brown/30" value={advDescription} onChange={(e) => setAdvDescription(e.target.value)} placeholder="Opcional" />
               </div>
-              <p className="text-xs text-amber-700 bg-amber-50 rounded-xl px-3 py-2">
-                Se registrará como egreso en caja y se imprimirá el recibo.
-              </p>
+              <p className="text-xs text-amber-700 bg-amber-50 rounded-xl px-3 py-2">Se registrará como egreso en caja y se imprimirá el recibo.</p>
               {saveError && <div className="bg-red-50 border border-red-200 text-red-700 text-sm p-3 rounded-xl">{saveError}</div>}
               <div className="flex gap-3 pt-1">
-                <button
-                  type="button"
-                  onClick={() => { setModal('none'); resetAdvForm() }}
-                  className="flex-1 border border-gray-200 text-gray-600 rounded-xl py-2.5 text-sm font-medium hover:bg-gray-50 transition-colors"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  disabled={saving}
-                  className="flex-1 bg-amber-600 text-white rounded-xl py-2.5 text-sm font-medium hover:bg-amber-700 disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
-                >
+                <button type="button" onClick={() => { setModal('none'); resetAdvForm() }} className="flex-1 border border-gray-200 text-gray-600 rounded-xl py-2.5 text-sm font-medium hover:bg-gray-50 transition-colors">Cancelar</button>
+                <button type="submit" disabled={saving} className="flex-1 bg-amber-600 text-white rounded-xl py-2.5 text-sm font-medium hover:bg-amber-700 disabled:opacity-50 transition-colors flex items-center justify-center gap-2">
                   {saving ? <Loader2 size={15} className="animate-spin" /> : <Printer size={15} />}
                   {saving ? 'Guardando…' : 'Registrar e imprimir'}
                 </button>
@@ -1268,24 +1527,15 @@ function TabPagos({ employees }: { employees: Employee[] }) {
         </div>
       )}
 
-      {/* ── Salary Modal ── */}
+      {/* Salary Modal */}
       {modal === 'salary' && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4 overflow-y-auto">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg p-6 space-y-5 animate-scale-in my-4">
-            <h2 className="font-serif text-xl font-bold text-sumak-brown flex items-center gap-2">
-              <Banknote size={20} /> Pagar sueldo
-            </h2>
-
-            {/* Step 1: select employee and period, then calculate */}
+            <h2 className="font-serif text-xl font-bold text-sumak-brown flex items-center gap-2"><Banknote size={20} /> Pagar sueldo</h2>
             <div className="space-y-4">
               <div>
                 <label className="block text-xs font-bold text-gray-600 mb-1">Empleado *</label>
-                <select
-                  className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-sumak-brown/30"
-                  value={salEmployee}
-                  onChange={(e) => { setSalEmployee(e.target.value); setCalcResult(null) }}
-                  required
-                >
+                <select className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-sumak-brown/30" value={salEmployee} onChange={(e) => { setSalEmployee(e.target.value); setCalcResult(null) }} required>
                   <option value="">Seleccionar…</option>
                   {employees.map((emp) => (
                     <option key={emp.id} value={emp.id}>{emp.name} {emp.role ? `(${emp.role})` : ''}</option>
@@ -1295,109 +1545,46 @@ function TabPagos({ employees }: { employees: Employee[] }) {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-bold text-gray-600 mb-1">Período desde *</label>
-                  <input
-                    type="date"
-                    className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-sumak-brown/30"
-                    value={salFrom}
-                    onChange={(e) => { setSalFrom(e.target.value); setCalcResult(null) }}
-                    required
-                  />
+                  <input type="date" className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-sumak-brown/30" value={salFrom} onChange={(e) => { setSalFrom(e.target.value); setCalcResult(null) }} required />
                 </div>
                 <div>
                   <label className="block text-xs font-bold text-gray-600 mb-1">Período hasta *</label>
-                  <input
-                    type="date"
-                    className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-sumak-brown/30"
-                    value={salTo}
-                    onChange={(e) => { setSalTo(e.target.value); setCalcResult(null) }}
-                    required
-                  />
+                  <input type="date" className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-sumak-brown/30" value={salTo} onChange={(e) => { setSalTo(e.target.value); setCalcResult(null) }} required />
                 </div>
               </div>
-              <button
-                type="button"
-                onClick={handleCalc}
-                disabled={!salEmployee || !salFrom || !salTo || calcLoading}
-                className="w-full border border-sumak-brown text-sumak-brown rounded-xl py-2.5 text-sm font-medium hover:bg-sumak-brown/5 disabled:opacity-40 transition-colors flex items-center justify-center gap-2"
-              >
+              <button type="button" onClick={handleCalc} disabled={!salEmployee || !salFrom || !salTo || calcLoading} className="w-full border border-sumak-brown text-sumak-brown rounded-xl py-2.5 text-sm font-medium hover:bg-sumak-brown/5 disabled:opacity-40 transition-colors flex items-center justify-center gap-2">
                 {calcLoading ? <Loader2 size={15} className="animate-spin" /> : null}
                 {calcLoading ? 'Calculando…' : 'Calcular horas y montos'}
               </button>
-              {calcError && (
-                <div className="bg-red-50 border border-red-200 text-red-700 text-sm p-3 rounded-xl">{calcError}</div>
-              )}
+              {calcError && <div className="bg-red-50 border border-red-200 text-red-700 text-sm p-3 rounded-xl">{calcError}</div>}
             </div>
-
-            {/* Step 2: show result and confirm */}
             {calcResult && (
               <form onSubmit={handleSalarySubmit} className="space-y-4">
                 <div className="bg-gray-50 rounded-xl p-4 space-y-2 text-sm">
-                  <div className="flex justify-between">
-                    <span className="text-gray-500">Horas trabajadas</span>
-                    <span className="font-medium">{formatHours(calcResult.hours_worked)}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-500">Tarifa/hora</span>
-                    <span className="font-medium">{formatARS(calcResult.hourly_rate)}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-gray-500">Bruto</span>
-                    <span className="font-medium">{formatARS(calcResult.gross_amount)}</span>
-                  </div>
-                  <div className="flex justify-between text-red-600">
-                    <span>(−) Adelantos en el período</span>
-                    <span className="font-medium">{formatARS(calcResult.advances_total)}</span>
-                  </div>
-                  <div className="flex justify-between font-bold text-base border-t border-gray-200 pt-2">
-                    <span>Neto sugerido</span>
-                    <span className="text-green-700">{formatARS(calcResult.net_amount)}</span>
-                  </div>
+                  <div className="flex justify-between"><span className="text-gray-500">Horas trabajadas</span><span className="font-medium">{formatHours(calcResult.hours_worked)}</span></div>
+                  <div className="flex justify-between"><span className="text-gray-500">Tarifa/hora</span><span className="font-medium">{formatARS(calcResult.hourly_rate)}</span></div>
+                  <div className="flex justify-between"><span className="text-gray-500">Bruto</span><span className="font-medium">{formatARS(calcResult.gross_amount)}</span></div>
+                  <div className="flex justify-between text-red-600"><span>(−) Adelantos en el período</span><span className="font-medium">{formatARS(calcResult.advances_total)}</span></div>
+                  <div className="flex justify-between font-bold text-base border-t border-gray-200 pt-2"><span>Neto sugerido</span><span className="text-green-700">{formatARS(calcResult.net_amount)}</span></div>
                 </div>
                 <div>
                   <label className="block text-xs font-bold text-gray-600 mb-1">Monto a pagar (ARS) *</label>
-                  <input
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-sumak-brown/30"
-                    value={salCustomAmount}
-                    onChange={(e) => setSalCustomAmount(e.target.value)}
-                    required
-                  />
+                  <input type="number" min="0" step="0.01" className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-sumak-brown/30" value={salCustomAmount} onChange={(e) => setSalCustomAmount(e.target.value)} required />
                   <p className="text-xs text-gray-400 mt-1">Podés ajustar el monto si es necesario.</p>
                 </div>
-                <p className="text-xs text-green-700 bg-green-50 rounded-xl px-3 py-2">
-                  Se registrará como egreso en caja y se imprimirá el recibo de sueldo.
-                </p>
+                <p className="text-xs text-green-700 bg-green-50 rounded-xl px-3 py-2">Se registrará como egreso en caja y se imprimirá el recibo de sueldo.</p>
                 {saveError && <div className="bg-red-50 border border-red-200 text-red-700 text-sm p-3 rounded-xl">{saveError}</div>}
                 <div className="flex gap-3 pt-1">
-                  <button
-                    type="button"
-                    onClick={() => { setModal('none'); resetSalForm() }}
-                    className="flex-1 border border-gray-200 text-gray-600 rounded-xl py-2.5 text-sm font-medium hover:bg-gray-50 transition-colors"
-                  >
-                    Cancelar
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={saving}
-                    className="flex-1 bg-sumak-brown text-white rounded-xl py-2.5 text-sm font-medium hover:bg-sumak-brown/90 disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
-                  >
+                  <button type="button" onClick={() => { setModal('none'); resetSalForm() }} className="flex-1 border border-gray-200 text-gray-600 rounded-xl py-2.5 text-sm font-medium hover:bg-gray-50 transition-colors">Cancelar</button>
+                  <button type="submit" disabled={saving} className="flex-1 bg-sumak-brown text-white rounded-xl py-2.5 text-sm font-medium hover:bg-sumak-brown/90 disabled:opacity-50 transition-colors flex items-center justify-center gap-2">
                     {saving ? <Loader2 size={15} className="animate-spin" /> : <Printer size={15} />}
                     {saving ? 'Guardando…' : 'Pagar e imprimir recibo'}
                   </button>
                 </div>
               </form>
             )}
-
             {!calcResult && (
-              <button
-                type="button"
-                onClick={() => { setModal('none'); resetSalForm() }}
-                className="w-full border border-gray-200 text-gray-600 rounded-xl py-2.5 text-sm font-medium hover:bg-gray-50 transition-colors"
-              >
-                Cancelar
-              </button>
+              <button type="button" onClick={() => { setModal('none'); resetSalForm() }} className="w-full border border-gray-200 text-gray-600 rounded-xl py-2.5 text-sm font-medium hover:bg-gray-50 transition-colors">Cancelar</button>
             )}
           </div>
         </div>
@@ -1406,26 +1593,12 @@ function TabPagos({ employees }: { employees: Employee[] }) {
   )
 }
 
-// ─── Main Page ────────────────────────────────────────────────────────────────
+// ─── Admin Panel ──────────────────────────────────────────────────────────────
 
-export default function EmpleadosPage() {
-  const [authenticated, setAuthenticated] = useState(false)
-  const [checkingAuth, setCheckingAuth] = useState(true)
+function AdminPanel({ onBackToPin }: { onBackToPin: () => void }) {
   const [tab, setTab] = useState<Tab>('fichaje')
   const [employees, setEmployees] = useState<Employee[]>([])
   const [loadingEmployees, setLoadingEmployees] = useState(true)
-  const router = useRouter()
-
-  // Check existing Supabase session on mount
-  useEffect(() => {
-    const check = async () => {
-      const supabase = createClient()
-      const { data: { user } } = await supabase.auth.getUser()
-      if (user) setAuthenticated(true)
-      setCheckingAuth(false)
-    }
-    check()
-  }, [])
 
   const fetchEmployees = useCallback(async () => {
     setLoadingEmployees(true)
@@ -1434,26 +1607,12 @@ export default function EmpleadosPage() {
     setLoadingEmployees(false)
   }, [])
 
-  useEffect(() => {
-    if (authenticated) fetchEmployees()
-  }, [authenticated, fetchEmployees])
+  useEffect(() => { fetchEmployees() }, [fetchEmployees])
 
   const handleLogout = async () => {
     const supabase = createClient()
     await supabase.auth.signOut()
-    router.push('/')
-  }
-
-  if (checkingAuth) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <Loader2 size={28} className="animate-spin text-sumak-brown" />
-      </div>
-    )
-  }
-
-  if (!authenticated) {
-    return <AuthGate onAuth={() => setAuthenticated(true)} />
+    onBackToPin()
   }
 
   const TABS: { key: Tab; label: string; icon: React.ElementType }[] = [
@@ -1469,21 +1628,28 @@ export default function EmpleadosPage() {
       <div className="bg-sumak-brown text-white px-4 sm:px-6 py-4">
         <div className="max-w-5xl mx-auto flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <div className="w-9 h-9 bg-sumak-gold rounded-xl flex items-center justify-center font-serif font-bold text-sumak-brown text-base flex-shrink-0">
-              S
-            </div>
+            <div className="w-9 h-9 bg-sumak-gold rounded-xl flex items-center justify-center font-serif font-bold text-sumak-brown text-base flex-shrink-0">S</div>
             <div>
               <h1 className="font-serif font-bold text-lg leading-tight">Control Horario</h1>
-              <p className="text-xs text-amber-300">Sumak Restaurante</p>
+              <p className="text-xs text-amber-300">Sumak Restaurante — Admin</p>
             </div>
           </div>
-          <button
-            onClick={handleLogout}
-            className="flex items-center gap-1.5 text-amber-300 hover:text-white text-sm transition-colors"
-          >
-            <LogOut size={15} />
-            <span className="hidden sm:inline">Salir</span>
-          </button>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={onBackToPin}
+              className="flex items-center gap-1.5 text-amber-200 hover:text-white text-sm transition-colors border border-amber-400/30 px-3 py-1.5 rounded-lg hover:bg-white/10"
+            >
+              <ArrowLeft size={14} />
+              <span className="hidden sm:inline">Modo PIN</span>
+            </button>
+            <button
+              onClick={handleLogout}
+              className="flex items-center gap-1.5 text-amber-300 hover:text-white text-sm transition-colors"
+            >
+              <LogOut size={15} />
+              <span className="hidden sm:inline">Salir</span>
+            </button>
+          </div>
         </div>
       </div>
 
@@ -1513,16 +1679,65 @@ export default function EmpleadosPage() {
       {/* Content */}
       <div className="max-w-5xl mx-auto px-4 sm:px-6 py-6">
         {tab === 'fichaje' && <TabFichaje employees={employees} />}
-        {tab === 'empleados' && (
-          <TabEmpleados
-            employees={employees}
-            loading={loadingEmployees}
-            onRefresh={fetchEmployees}
-          />
-        )}
+        {tab === 'empleados' && <TabEmpleados employees={employees} loading={loadingEmployees} onRefresh={fetchEmployees} />}
         {tab === 'historial' && <TabHistorial employees={employees} />}
         {tab === 'pagos' && <TabPagos employees={employees} />}
       </div>
     </div>
+  )
+}
+
+// ─── Main Page ────────────────────────────────────────────────────────────────
+
+type AppMode = 'pin' | 'admin_auth' | 'admin'
+
+export default function EmpleadosPage() {
+  const [mode, setMode] = useState<AppMode>('pin')
+  const [checkingAuth, setCheckingAuth] = useState(true)
+
+  // On mount: check if already logged in as admin → go straight to admin panel
+  useEffect(() => {
+    const check = async () => {
+      const supabase = createClient()
+      const { data: { user } } = await supabase.auth.getUser()
+      if (user) setMode('admin')
+      setCheckingAuth(false)
+    }
+    check()
+  }, [])
+
+  if (checkingAuth) {
+    return (
+      <div className="min-h-screen bg-black flex items-center justify-center">
+        <Loader2 size={28} className="animate-spin text-white/30" />
+      </div>
+    )
+  }
+
+  if (mode === 'pin') {
+    return (
+      <PinScreen
+        onExitPin={() => setMode('admin_auth')}
+      />
+    )
+  }
+
+  if (mode === 'admin_auth') {
+    return (
+      <AdminAuthGate
+        onAuth={() => setMode('admin')}
+        onCancel={() => setMode('pin')}
+      />
+    )
+  }
+
+  return (
+    <AdminPanel
+      onBackToPin={async () => {
+        const supabase = createClient()
+        await supabase.auth.signOut()
+        setMode('pin')
+      }}
+    />
   )
 }
