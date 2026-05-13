@@ -5,7 +5,8 @@ import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import {
   Users, Clock, History, Plus, Pencil, Trash2, Loader2,
-  LogIn, LogOut, Lock, CheckCircle2, XCircle,
+  LogIn, LogOut, Lock, CheckCircle2, XCircle, Banknote, Printer,
+  ChevronDown, ChevronUp,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -30,7 +31,34 @@ type TimeEntry = {
   employees?: { name: string; role: string; hourly_rate: number } | null
 }
 
-type Tab = 'fichaje' | 'empleados' | 'historial'
+type EmployeePayment = {
+  id: string
+  employee_id: string
+  type: 'advance' | 'salary'
+  amount: number
+  description: string | null
+  period_from: string | null
+  period_to: string | null
+  hours_worked: number | null
+  gross_amount: number | null
+  advances_deducted: number | null
+  cash_movement_id: string | null
+  created_at: string
+  employees?: { name: string; role: string; hourly_rate: number } | null
+}
+
+type CalcResult = {
+  employee: { id: string; name: string; role: string; hourly_rate: number }
+  period_from: string
+  period_to: string
+  hours_worked: number
+  hourly_rate: number
+  gross_amount: number
+  advances_total: number
+  net_amount: number
+}
+
+type Tab = 'fichaje' | 'empleados' | 'historial' | 'pagos'
 
 // ─── Argentina time helpers ───────────────────────────────────────────────────
 
@@ -84,6 +112,14 @@ function formatARS(n: number): string {
     currency: 'ARS',
     minimumFractionDigits: 0,
   }).format(n)
+}
+
+function formatDate(iso: string): string {
+  return new Date(iso + 'T00:00:00').toLocaleDateString('es-AR', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+  })
 }
 
 // ─── Auth Gate ────────────────────────────────────────────────────────────────
@@ -713,6 +749,663 @@ function TabHistorial({ employees }: { employees: Employee[] }) {
   )
 }
 
+// ─── Receipt Print Helpers ────────────────────────────────────────────────────
+
+function printAdvanceReceipt(payment: EmployeePayment, empName: string, empRole: string) {
+  const dateStr = toArgDateTime(payment.created_at)
+  const html = `<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Recibo Adelanto</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Courier New', Courier, monospace; font-size: 11px; width: 72mm; padding: 4mm; }
+  .center { text-align: center; }
+  .bold { font-weight: bold; }
+  .separator { border-top: 1px dashed #000; margin: 3mm 0; }
+  .row { display: flex; justify-content: space-between; margin: 1mm 0; }
+  .title { font-size: 13px; font-weight: bold; margin-bottom: 2mm; }
+  .subtitle { font-size: 10px; margin-bottom: 1mm; }
+  .firma { margin-top: 10mm; border-top: 1px solid #000; padding-top: 2mm; width: 50mm; margin-left: auto; margin-right: auto; text-align: center; font-size: 10px; }
+  @media print { @page { margin: 0; size: 72mm auto; } body { padding: 2mm; } }
+</style>
+</head>
+<body>
+  <div class="center">
+    <div class="title">SUMAK RESTAURANTE</div>
+    <div class="subtitle">RECIBO DE ADELANTO</div>
+  </div>
+  <div class="separator"></div>
+  <div class="row"><span>Fecha:</span><span>${dateStr}</span></div>
+  <div class="row"><span>Empleado:</span><span>${empName}</span></div>
+  <div class="row"><span>Cargo:</span><span>${empRole || '—'}</span></div>
+  <div class="separator"></div>
+  <div class="row bold"><span>MONTO ADELANTADO:</span><span>${formatARS(payment.amount)}</span></div>
+  ${payment.description ? `<div class="row"><span>Concepto:</span><span>${payment.description}</span></div>` : ''}
+  <div class="separator"></div>
+  <div class="firma">Firma del empleado</div>
+</body>
+</html>`
+  sessionStorage.setItem('receipt_print', html)
+  const w = window.open('', '_blank', 'width=400,height=600')
+  if (w) {
+    w.document.write(html)
+    w.document.close()
+    w.focus()
+    setTimeout(() => { w.print(); w.close() }, 400)
+  }
+}
+
+function printSalaryReceipt(payment: EmployeePayment, empName: string, empRole: string) {
+  const dateStr = toArgDateTime(payment.created_at)
+  const periodStr = payment.period_from && payment.period_to
+    ? `${formatDate(payment.period_from)} al ${formatDate(payment.period_to)}`
+    : '—'
+  const html = `<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Recibo Sueldo</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Courier New', Courier, monospace; font-size: 11px; width: 72mm; padding: 4mm; }
+  .center { text-align: center; }
+  .bold { font-weight: bold; }
+  .separator { border-top: 1px dashed #000; margin: 3mm 0; }
+  .row { display: flex; justify-content: space-between; margin: 1mm 0; }
+  .title { font-size: 13px; font-weight: bold; margin-bottom: 2mm; }
+  .subtitle { font-size: 10px; margin-bottom: 1mm; }
+  .firma { margin-top: 10mm; border-top: 1px solid #000; padding-top: 2mm; width: 50mm; margin-left: auto; margin-right: auto; text-align: center; font-size: 10px; }
+  .deduccion { color: #c00; }
+  @media print { @page { margin: 0; size: 72mm auto; } body { padding: 2mm; } }
+</style>
+</head>
+<body>
+  <div class="center">
+    <div class="title">SUMAK RESTAURANTE</div>
+    <div class="subtitle">RECIBO DE SUELDO</div>
+  </div>
+  <div class="separator"></div>
+  <div class="row"><span>Fecha:</span><span>${dateStr}</span></div>
+  <div class="row"><span>Empleado:</span><span>${empName}</span></div>
+  <div class="row"><span>Cargo:</span><span>${empRole || '—'}</span></div>
+  <div class="separator"></div>
+  <div class="row"><span>Período:</span><span>${periodStr}</span></div>
+  <div class="row"><span>Horas trabajadas:</span><span>${formatHours(payment.hours_worked ?? 0)}</span></div>
+  <div class="row"><span>Tarifa/hora:</span><span>${formatARS(payment.employees?.hourly_rate ?? 0)}</span></div>
+  <div class="separator"></div>
+  <div class="row"><span>Bruto:</span><span>${formatARS(payment.gross_amount ?? 0)}</span></div>
+  <div class="row deduccion"><span>(-) Adelantos:</span><span>${formatARS(payment.advances_deducted ?? 0)}</span></div>
+  <div class="separator"></div>
+  <div class="row bold"><span>NETO A PAGAR:</span><span>${formatARS(payment.amount)}</span></div>
+  <div class="separator"></div>
+  <div class="firma">Firma del empleado</div>
+</body>
+</html>`
+  sessionStorage.setItem('receipt_print', html)
+  const w = window.open('', '_blank', 'width=400,height=700')
+  if (w) {
+    w.document.write(html)
+    w.document.close()
+    w.focus()
+    setTimeout(() => { w.print(); w.close() }, 400)
+  }
+}
+
+// ─── Tab: Pagos ───────────────────────────────────────────────────────────────
+
+function TabPagos({ employees }: { employees: Employee[] }) {
+  // List state
+  const [payments, setPayments] = useState<EmployeePayment[]>([])
+  const [listLoading, setListLoading] = useState(false)
+  const [listError, setListError] = useState<string | null>(null)
+  const [filterEmployee, setFilterEmployee] = useState('')
+  const [filterFrom, setFilterFrom] = useState(firstDayOfMonthArg())
+  const [filterTo, setFilterTo] = useState(todayArg())
+  const [filterType, setFilterType] = useState('')
+
+  // Modal state
+  const [modal, setModal] = useState<'none' | 'advance' | 'salary'>('none')
+  const [saving, setSaving] = useState(false)
+  const [saveError, setSaveError] = useState<string | null>(null)
+
+  // Advance form
+  const [advEmployee, setAdvEmployee] = useState('')
+  const [advAmount, setAdvAmount] = useState('')
+  const [advDescription, setAdvDescription] = useState('')
+
+  // Salary form
+  const [salEmployee, setSalEmployee] = useState('')
+  const [salFrom, setSalFrom] = useState(firstDayOfMonthArg())
+  const [salTo, setSalTo] = useState(todayArg())
+  const [calcResult, setCalcResult] = useState<CalcResult | null>(null)
+  const [calcLoading, setCalcLoading] = useState(false)
+  const [calcError, setCalcError] = useState<string | null>(null)
+  const [salCustomAmount, setSalCustomAmount] = useState('')
+
+  // Collapse rows
+  const [expandedId, setExpandedId] = useState<string | null>(null)
+
+  const fetchPayments = useCallback(async () => {
+    setListLoading(true)
+    setListError(null)
+    const params = new URLSearchParams()
+    if (filterEmployee) params.set('employee_id', filterEmployee)
+    if (filterFrom) params.set('from', filterFrom)
+    if (filterTo) params.set('to', filterTo)
+    if (filterType) params.set('type', filterType)
+    const res = await fetch(`/api/empleados/pagos?${params}`)
+    if (res.ok) setPayments(await res.json())
+    else {
+      const d = await res.json()
+      setListError(d.error ?? 'Error al cargar pagos')
+    }
+    setListLoading(false)
+  }, [filterEmployee, filterFrom, filterTo, filterType])
+
+  useEffect(() => { fetchPayments() }, [fetchPayments])
+
+  // ── Advance submit ──
+  const handleAdvanceSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setSaveError(null)
+    setSaving(true)
+    const res = await fetch('/api/empleados/pagos', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        employee_id: advEmployee,
+        type: 'advance',
+        amount: Number(advAmount),
+        description: advDescription || undefined,
+      }),
+    })
+    if (res.ok) {
+      const pmt: EmployeePayment = await res.json()
+      const emp = employees.find((e) => e.id === advEmployee)
+      setModal('none')
+      resetAdvForm()
+      await fetchPayments()
+      // Print receipt
+      printAdvanceReceipt(pmt, emp?.name ?? '', emp?.role ?? '')
+    } else {
+      const d = await res.json()
+      setSaveError(d.error ?? 'Error al registrar adelanto')
+    }
+    setSaving(false)
+  }
+
+  // ── Salary calc ──
+  const handleCalc = async () => {
+    if (!salEmployee || !salFrom || !salTo) return
+    setCalcLoading(true)
+    setCalcError(null)
+    setCalcResult(null)
+    const params = new URLSearchParams({ employee_id: salEmployee, period_from: salFrom, period_to: salTo })
+    const res = await fetch(`/api/empleados/pagos/calcular?${params}`)
+    if (res.ok) {
+      const d: CalcResult = await res.json()
+      setCalcResult(d)
+      setSalCustomAmount(String(d.net_amount))
+    } else {
+      const d = await res.json()
+      setCalcError(d.error ?? 'Error al calcular')
+    }
+    setCalcLoading(false)
+  }
+
+  // ── Salary submit ──
+  const handleSalarySubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!calcResult) return
+    setSaveError(null)
+    setSaving(true)
+    const netToPay = Number(salCustomAmount) || calcResult.net_amount
+    const res = await fetch('/api/empleados/pagos', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        employee_id: salEmployee,
+        type: 'salary',
+        amount: netToPay,
+        period_from: salFrom,
+        period_to: salTo,
+        hours_worked: calcResult.hours_worked,
+        gross_amount: calcResult.gross_amount,
+        advances_deducted: calcResult.advances_total,
+      }),
+    })
+    if (res.ok) {
+      const pmt: EmployeePayment = await res.json()
+      const emp = employees.find((e) => e.id === salEmployee)
+      setModal('none')
+      resetSalForm()
+      await fetchPayments()
+      printSalaryReceipt(
+        { ...pmt, employees: { name: emp?.name ?? '', role: emp?.role ?? '', hourly_rate: calcResult.hourly_rate } },
+        emp?.name ?? '',
+        emp?.role ?? ''
+      )
+    } else {
+      const d = await res.json()
+      setSaveError(d.error ?? 'Error al registrar sueldo')
+    }
+    setSaving(false)
+  }
+
+  function resetAdvForm() {
+    setAdvEmployee('')
+    setAdvAmount('')
+    setAdvDescription('')
+    setSaveError(null)
+  }
+
+  function resetSalForm() {
+    setSalEmployee('')
+    setSalFrom(firstDayOfMonthArg())
+    setSalTo(todayArg())
+    setCalcResult(null)
+    setSalCustomAmount('')
+    setSaveError(null)
+    setCalcError(null)
+  }
+
+  // Summary totals
+  const totalAdvances = payments.filter((p) => p.type === 'advance').reduce((s, p) => s + Number(p.amount), 0)
+  const totalSalaries = payments.filter((p) => p.type === 'salary').reduce((s, p) => s + Number(p.amount), 0)
+
+  return (
+    <div className="space-y-5">
+      {/* Action buttons */}
+      <div className="flex flex-wrap gap-3 justify-end">
+        <button
+          onClick={() => { resetAdvForm(); setModal('advance') }}
+          className="flex items-center gap-2 bg-amber-600 text-white text-sm font-medium px-4 py-2.5 rounded-xl hover:bg-amber-700 transition-colors"
+        >
+          <Banknote size={15} />
+          Registrar adelanto
+        </button>
+        <button
+          onClick={() => { resetSalForm(); setModal('salary') }}
+          className="flex items-center gap-2 bg-sumak-brown text-white text-sm font-medium px-4 py-2.5 rounded-xl hover:bg-sumak-brown/90 transition-colors"
+        >
+          <Plus size={15} />
+          Pagar sueldo
+        </button>
+      </div>
+
+      {/* Filters */}
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <div>
+            <label className="block text-xs font-semibold text-gray-500 mb-1.5">Empleado</label>
+            <select
+              className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-sumak-brown/30"
+              value={filterEmployee}
+              onChange={(e) => setFilterEmployee(e.target.value)}
+            >
+              <option value="">Todos</option>
+              {employees.map((emp) => (
+                <option key={emp.id} value={emp.id}>{emp.name}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-gray-500 mb-1.5">Tipo</label>
+            <select
+              className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-sumak-brown/30"
+              value={filterType}
+              onChange={(e) => setFilterType(e.target.value)}
+            >
+              <option value="">Todos</option>
+              <option value="advance">Adelantos</option>
+              <option value="salary">Sueldos</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-gray-500 mb-1.5">Desde</label>
+            <input
+              type="date"
+              className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-sumak-brown/30"
+              value={filterFrom}
+              onChange={(e) => setFilterFrom(e.target.value)}
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-gray-500 mb-1.5">Hasta</label>
+            <input
+              type="date"
+              className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-sumak-brown/30"
+              value={filterTo}
+              onChange={(e) => setFilterTo(e.target.value)}
+            />
+          </div>
+        </div>
+      </div>
+
+      {/* Summary cards */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+        <div className="bg-white rounded-2xl border border-amber-100 p-4">
+          <p className="text-xs text-gray-400 mb-1">Adelantos</p>
+          <p className="text-xl font-bold text-amber-600">{formatARS(totalAdvances)}</p>
+          <p className="text-xs text-gray-300 mt-0.5">{payments.filter((p) => p.type === 'advance').length} registros</p>
+        </div>
+        <div className="bg-white rounded-2xl border border-green-100 p-4">
+          <p className="text-xs text-gray-400 mb-1">Sueldos</p>
+          <p className="text-xl font-bold text-green-700">{formatARS(totalSalaries)}</p>
+          <p className="text-xs text-gray-300 mt-0.5">{payments.filter((p) => p.type === 'salary').length} registros</p>
+        </div>
+        <div className="bg-white rounded-2xl border border-sumak-brown/20 p-4 col-span-2 sm:col-span-1">
+          <p className="text-xs text-gray-400 mb-1">Total egresado</p>
+          <p className="text-xl font-bold text-sumak-brown">{formatARS(totalAdvances + totalSalaries)}</p>
+          <p className="text-xs text-gray-300 mt-0.5">{payments.length} movimientos</p>
+        </div>
+      </div>
+
+      {listError && (
+        <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-xl px-4 py-3">{listError}</div>
+      )}
+
+      {/* Payments table */}
+      {listLoading ? (
+        <div className="flex items-center justify-center py-16 text-gray-400"><Loader2 size={24} className="animate-spin" /></div>
+      ) : payments.length === 0 ? (
+        <div className="text-center py-12 text-gray-400 text-sm bg-white rounded-2xl border border-gray-100">
+          Sin pagos en este período
+        </div>
+      ) : (
+        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+          <table className="w-full text-sm">
+            <thead className="bg-gray-50 border-b border-gray-100">
+              <tr>
+                <th className="text-left px-5 py-3.5 font-semibold text-gray-600">Fecha</th>
+                <th className="text-left px-5 py-3.5 font-semibold text-gray-600">Empleado</th>
+                <th className="text-left px-5 py-3.5 font-semibold text-gray-600 hidden sm:table-cell">Tipo</th>
+                <th className="text-right px-5 py-3.5 font-semibold text-gray-600">Monto</th>
+                <th className="text-center px-5 py-3.5 font-semibold text-gray-600">Recibo</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-50">
+              {payments.map((pmt) => {
+                const isExpanded = expandedId === pmt.id
+                const empName = pmt.employees?.name ?? '—'
+                const empRole = pmt.employees?.role ?? ''
+                return (
+                  <>
+                    <tr
+                      key={pmt.id}
+                      className="hover:bg-gray-50/50 transition-colors cursor-pointer"
+                      onClick={() => setExpandedId(isExpanded ? null : pmt.id)}
+                    >
+                      <td className="px-5 py-3.5 text-gray-600 font-medium whitespace-nowrap">
+                        {toArgDateTime(pmt.created_at)}
+                      </td>
+                      <td className="px-5 py-3.5">
+                        <p className="font-medium text-gray-800">{empName}</p>
+                        {empRole && <p className="text-xs text-gray-400">{empRole}</p>}
+                      </td>
+                      <td className="px-5 py-3.5 hidden sm:table-cell">
+                        <span className={cn(
+                          'text-xs font-semibold px-2.5 py-1 rounded-full',
+                          pmt.type === 'advance'
+                            ? 'bg-amber-100 text-amber-700'
+                            : 'bg-green-100 text-green-700'
+                        )}>
+                          {pmt.type === 'advance' ? 'Adelanto' : 'Sueldo'}
+                        </span>
+                      </td>
+                      <td className="px-5 py-3.5 text-right font-bold text-gray-800">
+                        {formatARS(pmt.amount)}
+                      </td>
+                      <td className="px-5 py-3.5 text-center">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            if (pmt.type === 'advance') printAdvanceReceipt(pmt, empName, empRole)
+                            else printSalaryReceipt(pmt, empName, empRole)
+                          }}
+                          className="p-1.5 rounded-lg text-gray-400 hover:text-sumak-brown hover:bg-sumak-brown/10 transition-colors"
+                          title="Imprimir recibo"
+                        >
+                          <Printer size={15} />
+                        </button>
+                        {isExpanded ? <ChevronUp size={13} className="inline ml-1 text-gray-300" /> : <ChevronDown size={13} className="inline ml-1 text-gray-300" />}
+                      </td>
+                    </tr>
+                    {isExpanded && (
+                      <tr key={pmt.id + '-detail'} className="bg-amber-50/30">
+                        <td colSpan={5} className="px-5 py-3 text-xs text-gray-600 space-y-1">
+                          {pmt.type === 'advance' && pmt.description && (
+                            <div>Concepto: {pmt.description}</div>
+                          )}
+                          {pmt.type === 'salary' && (
+                            <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-6 gap-y-1">
+                              <div>Período: {pmt.period_from ? `${formatDate(pmt.period_from)} – ${formatDate(pmt.period_to!)}` : '—'}</div>
+                              <div>Horas: {formatHours(pmt.hours_worked ?? 0)}</div>
+                              <div>Bruto: {formatARS(pmt.gross_amount ?? 0)}</div>
+                              <div>Adelantos deducidos: {formatARS(pmt.advances_deducted ?? 0)}</div>
+                            </div>
+                          )}
+                        </td>
+                      </tr>
+                    )}
+                  </>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* ── Advance Modal ── */}
+      {modal === 'advance' && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6 space-y-5 animate-scale-in">
+            <h2 className="font-serif text-xl font-bold text-sumak-brown flex items-center gap-2">
+              <Banknote size={20} /> Registrar adelanto
+            </h2>
+            <form onSubmit={handleAdvanceSubmit} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-gray-600 mb-1">Empleado *</label>
+                <select
+                  className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-sumak-brown/30"
+                  value={advEmployee}
+                  onChange={(e) => setAdvEmployee(e.target.value)}
+                  required
+                >
+                  <option value="">Seleccionar…</option>
+                  {employees.filter((e) => e.active).map((emp) => (
+                    <option key={emp.id} value={emp.id}>{emp.name} {emp.role ? `(${emp.role})` : ''}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-gray-600 mb-1">Monto (ARS) *</label>
+                <input
+                  type="number"
+                  min="1"
+                  step="0.01"
+                  className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-sumak-brown/30"
+                  value={advAmount}
+                  onChange={(e) => setAdvAmount(e.target.value)}
+                  required
+                  placeholder="0"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-gray-600 mb-1">Descripción</label>
+                <input
+                  className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-sumak-brown/30"
+                  value={advDescription}
+                  onChange={(e) => setAdvDescription(e.target.value)}
+                  placeholder="Opcional"
+                />
+              </div>
+              <p className="text-xs text-amber-700 bg-amber-50 rounded-xl px-3 py-2">
+                Se registrará como egreso en caja y se imprimirá el recibo.
+              </p>
+              {saveError && <div className="bg-red-50 border border-red-200 text-red-700 text-sm p-3 rounded-xl">{saveError}</div>}
+              <div className="flex gap-3 pt-1">
+                <button
+                  type="button"
+                  onClick={() => { setModal('none'); resetAdvForm() }}
+                  className="flex-1 border border-gray-200 text-gray-600 rounded-xl py-2.5 text-sm font-medium hover:bg-gray-50 transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={saving}
+                  className="flex-1 bg-amber-600 text-white rounded-xl py-2.5 text-sm font-medium hover:bg-amber-700 disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
+                >
+                  {saving ? <Loader2 size={15} className="animate-spin" /> : <Printer size={15} />}
+                  {saving ? 'Guardando…' : 'Registrar e imprimir'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ── Salary Modal ── */}
+      {modal === 'salary' && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4 overflow-y-auto">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg p-6 space-y-5 animate-scale-in my-4">
+            <h2 className="font-serif text-xl font-bold text-sumak-brown flex items-center gap-2">
+              <Banknote size={20} /> Pagar sueldo
+            </h2>
+
+            {/* Step 1: select employee and period, then calculate */}
+            <div className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-gray-600 mb-1">Empleado *</label>
+                <select
+                  className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-sumak-brown/30"
+                  value={salEmployee}
+                  onChange={(e) => { setSalEmployee(e.target.value); setCalcResult(null) }}
+                  required
+                >
+                  <option value="">Seleccionar…</option>
+                  {employees.map((emp) => (
+                    <option key={emp.id} value={emp.id}>{emp.name} {emp.role ? `(${emp.role})` : ''}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-gray-600 mb-1">Período desde *</label>
+                  <input
+                    type="date"
+                    className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-sumak-brown/30"
+                    value={salFrom}
+                    onChange={(e) => { setSalFrom(e.target.value); setCalcResult(null) }}
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-gray-600 mb-1">Período hasta *</label>
+                  <input
+                    type="date"
+                    className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-sumak-brown/30"
+                    value={salTo}
+                    onChange={(e) => { setSalTo(e.target.value); setCalcResult(null) }}
+                    required
+                  />
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={handleCalc}
+                disabled={!salEmployee || !salFrom || !salTo || calcLoading}
+                className="w-full border border-sumak-brown text-sumak-brown rounded-xl py-2.5 text-sm font-medium hover:bg-sumak-brown/5 disabled:opacity-40 transition-colors flex items-center justify-center gap-2"
+              >
+                {calcLoading ? <Loader2 size={15} className="animate-spin" /> : null}
+                {calcLoading ? 'Calculando…' : 'Calcular horas y montos'}
+              </button>
+              {calcError && (
+                <div className="bg-red-50 border border-red-200 text-red-700 text-sm p-3 rounded-xl">{calcError}</div>
+              )}
+            </div>
+
+            {/* Step 2: show result and confirm */}
+            {calcResult && (
+              <form onSubmit={handleSalarySubmit} className="space-y-4">
+                <div className="bg-gray-50 rounded-xl p-4 space-y-2 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-gray-500">Horas trabajadas</span>
+                    <span className="font-medium">{formatHours(calcResult.hours_worked)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-500">Tarifa/hora</span>
+                    <span className="font-medium">{formatARS(calcResult.hourly_rate)}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-500">Bruto</span>
+                    <span className="font-medium">{formatARS(calcResult.gross_amount)}</span>
+                  </div>
+                  <div className="flex justify-between text-red-600">
+                    <span>(−) Adelantos en el período</span>
+                    <span className="font-medium">{formatARS(calcResult.advances_total)}</span>
+                  </div>
+                  <div className="flex justify-between font-bold text-base border-t border-gray-200 pt-2">
+                    <span>Neto sugerido</span>
+                    <span className="text-green-700">{formatARS(calcResult.net_amount)}</span>
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-gray-600 mb-1">Monto a pagar (ARS) *</label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-sumak-brown/30"
+                    value={salCustomAmount}
+                    onChange={(e) => setSalCustomAmount(e.target.value)}
+                    required
+                  />
+                  <p className="text-xs text-gray-400 mt-1">Podés ajustar el monto si es necesario.</p>
+                </div>
+                <p className="text-xs text-green-700 bg-green-50 rounded-xl px-3 py-2">
+                  Se registrará como egreso en caja y se imprimirá el recibo de sueldo.
+                </p>
+                {saveError && <div className="bg-red-50 border border-red-200 text-red-700 text-sm p-3 rounded-xl">{saveError}</div>}
+                <div className="flex gap-3 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => { setModal('none'); resetSalForm() }}
+                    className="flex-1 border border-gray-200 text-gray-600 rounded-xl py-2.5 text-sm font-medium hover:bg-gray-50 transition-colors"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={saving}
+                    className="flex-1 bg-sumak-brown text-white rounded-xl py-2.5 text-sm font-medium hover:bg-sumak-brown/90 disabled:opacity-50 transition-colors flex items-center justify-center gap-2"
+                  >
+                    {saving ? <Loader2 size={15} className="animate-spin" /> : <Printer size={15} />}
+                    {saving ? 'Guardando…' : 'Pagar e imprimir recibo'}
+                  </button>
+                </div>
+              </form>
+            )}
+
+            {!calcResult && (
+              <button
+                type="button"
+                onClick={() => { setModal('none'); resetSalForm() }}
+                className="w-full border border-gray-200 text-gray-600 rounded-xl py-2.5 text-sm font-medium hover:bg-gray-50 transition-colors"
+              >
+                Cancelar
+              </button>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function EmpleadosPage() {
@@ -767,6 +1460,7 @@ export default function EmpleadosPage() {
     { key: 'fichaje', label: 'Fichaje', icon: Clock },
     { key: 'empleados', label: 'Empleados', icon: Users },
     { key: 'historial', label: 'Historial', icon: History },
+    { key: 'pagos', label: 'Pagos', icon: Banknote },
   ]
 
   return (
@@ -796,13 +1490,13 @@ export default function EmpleadosPage() {
       {/* Tabs */}
       <div className="bg-white border-b border-gray-100 shadow-sm">
         <div className="max-w-5xl mx-auto px-4 sm:px-6">
-          <div className="flex gap-0">
+          <div className="flex gap-0 overflow-x-auto">
             {TABS.map(({ key, label, icon: Icon }) => (
               <button
                 key={key}
                 onClick={() => setTab(key)}
                 className={cn(
-                  'flex items-center gap-2 px-5 py-4 text-sm font-medium border-b-2 transition-all',
+                  'flex items-center gap-2 px-4 sm:px-5 py-4 text-sm font-medium border-b-2 transition-all whitespace-nowrap flex-shrink-0',
                   tab === key
                     ? 'border-sumak-brown text-sumak-brown'
                     : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-200'
@@ -827,6 +1521,7 @@ export default function EmpleadosPage() {
           />
         )}
         {tab === 'historial' && <TabHistorial employees={employees} />}
+        {tab === 'pagos' && <TabPagos employees={employees} />}
       </div>
     </div>
   )

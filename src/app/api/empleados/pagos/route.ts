@@ -1,0 +1,192 @@
+/*
+ * ============================================================
+ * SQL — ejecutar en Supabase Dashboard → SQL Editor
+ * (NO ejecutar desde la app, solo documentación)
+ * ============================================================
+ *
+ * CREATE TABLE IF NOT EXISTS public.employee_payments (
+ *   id                 uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+ *   employee_id        uuid NOT NULL REFERENCES public.employees(id) ON DELETE CASCADE,
+ *   type               text NOT NULL CHECK (type IN ('advance', 'salary')),
+ *   amount             numeric NOT NULL,
+ *   description        text,
+ *   period_from        date,
+ *   period_to          date,
+ *   hours_worked       numeric,
+ *   gross_amount       numeric,
+ *   advances_deducted  numeric,
+ *   cash_movement_id   uuid REFERENCES public.cash_movements(id),
+ *   created_at         timestamptz NOT NULL DEFAULT now()
+ * );
+ *
+ * ALTER TABLE public.employee_payments ENABLE ROW LEVEL SECURITY;
+ *
+ * CREATE POLICY "service_role_all_employee_payments" ON public.employee_payments
+ *   FOR ALL TO service_role USING (true) WITH CHECK (true);
+ *
+ * ============================================================
+ */
+
+import { NextRequest, NextResponse } from 'next/server'
+import { createClient } from '@supabase/supabase-js'
+import { createServerClient, type CookieOptions } from '@supabase/ssr'
+import { cookies } from 'next/headers'
+
+// Argentina UTC-3
+const ARG_OFFSET_MS = -3 * 60 * 60 * 1000
+
+function nowArgIso(): string {
+  return new Date(Date.now() + ARG_OFFSET_MS).toISOString()
+}
+
+function getServiceClient() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  )
+}
+
+async function requireAuth() {
+  const cookieStore = await cookies()
+  const authClient = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll() { return cookieStore.getAll() },
+        setAll(list: { name: string; value: string; options: CookieOptions }[]) {
+          try { list.forEach(({ name, value, options }) => cookieStore.set(name, value, options)) } catch {}
+        },
+      },
+    }
+  )
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: { user } } = await (authClient as any).auth.getUser()
+  return user
+}
+
+// GET /api/empleados/pagos?employee_id=...&from=...&to=...&type=advance|salary
+export async function GET(req: NextRequest) {
+  const user = await requireAuth()
+  if (!user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
+
+  const { searchParams } = req.nextUrl
+  const employee_id = searchParams.get('employee_id')
+  const from = searchParams.get('from')
+  const to = searchParams.get('to')
+  const type = searchParams.get('type')
+
+  const sb = getServiceClient()
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let query = (sb as any)
+    .from('employee_payments')
+    .select('*, employees(name, role, hourly_rate)')
+    .order('created_at', { ascending: false })
+
+  if (employee_id) query = query.eq('employee_id', employee_id)
+  if (type) query = query.eq('type', type)
+  if (from) query = query.gte('created_at', `${from}T00:00:00.000Z`)
+  if (to) query = query.lte('created_at', `${to}T23:59:59.999Z`)
+
+  const { data, error } = await query
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  return NextResponse.json(data ?? [])
+}
+
+// POST /api/empleados/pagos
+// Body para adelanto: { employee_id, type: 'advance', amount, description }
+// Body para sueldo:   { employee_id, type: 'salary', amount, description?,
+//                       period_from, period_to, hours_worked, gross_amount, advances_deducted }
+export async function POST(req: NextRequest) {
+  const user = await requireAuth()
+  if (!user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
+
+  const body = await req.json()
+  const {
+    employee_id,
+    type,
+    amount,
+    description,
+    period_from,
+    period_to,
+    hours_worked,
+    gross_amount,
+    advances_deducted,
+  } = body
+
+  if (!employee_id) return NextResponse.json({ error: 'employee_id es requerido' }, { status: 400 })
+  if (!type || !['advance', 'salary'].includes(type))
+    return NextResponse.json({ error: 'type debe ser "advance" o "salary"' }, { status: 400 })
+  if (!amount || Number(amount) <= 0)
+    return NextResponse.json({ error: 'amount debe ser mayor que 0' }, { status: 400 })
+
+  if (type === 'salary') {
+    if (!period_from || !period_to) {
+      return NextResponse.json({ error: 'period_from y period_to son requeridos para sueldo' }, { status: 400 })
+    }
+  }
+
+  const sb = getServiceClient()
+
+  // 1. Find current open cash shift
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: openShift } = await (sb as any)
+    .from('cash_shifts')
+    .select('id')
+    .eq('status', 'open')
+    .order('opened_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+
+  // 2. Register cash movement as egreso
+  const movementDescription =
+    type === 'advance'
+      ? `Adelanto empleado${description ? ': ' + description : ''}`
+      : `Sueldo empleado${period_from ? ` (${period_from} al ${period_to})` : ''}`
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: cashMovement, error: cashErr } = await (sb as any)
+    .from('cash_movements')
+    .insert({
+      type: 'egreso',
+      amount: Number(amount),
+      description: movementDescription,
+      shift_id: openShift?.id ?? null,
+      created_at: nowArgIso(),
+    })
+    .select('id')
+    .single()
+
+  if (cashErr) return NextResponse.json({ error: cashErr.message }, { status: 500 })
+
+  // 3. Register employee payment record
+  const paymentRecord: Record<string, unknown> = {
+    employee_id,
+    type,
+    amount: Number(amount),
+    description: description ?? null,
+    cash_movement_id: cashMovement.id,
+    created_at: nowArgIso(),
+  }
+
+  if (type === 'salary') {
+    paymentRecord.period_from = period_from
+    paymentRecord.period_to = period_to
+    paymentRecord.hours_worked = hours_worked != null ? Number(hours_worked) : null
+    paymentRecord.gross_amount = gross_amount != null ? Number(gross_amount) : null
+    paymentRecord.advances_deducted = advances_deducted != null ? Number(advances_deducted) : null
+  }
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: payment, error: payErr } = await (sb as any)
+    .from('employee_payments')
+    .insert(paymentRecord)
+    .select('*, employees(name, role, hourly_rate)')
+    .single()
+
+  if (payErr) return NextResponse.json({ error: payErr.message }, { status: 500 })
+
+  return NextResponse.json(payment, { status: 201 })
+}
