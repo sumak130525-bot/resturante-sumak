@@ -851,6 +851,12 @@ export default function CocinaPage() {
       if (!res.ok) return
       const raw: KdsOrder[] = await res.json()
 
+      // Re-sync dismissedIdsRef from localStorage before filtering to cover
+      // remount / tab-reload scenarios where the ref was reset to empty Set.
+      const freshDismissed = loadDismissed()
+      // Merge: keep anything already in the ref (in-flight dismissals) plus localStorage
+      freshDismissed.forEach((id) => dismissedIdsRef.current.add(id))
+
       const data = raw.filter((o) => !dismissedIdsRef.current.has(o.id))
 
       // Calcular cuántos pedidos de la nueva lista tendrían items visibles en cocina
@@ -918,7 +924,13 @@ export default function CocinaPage() {
         console.log('[cocina] Realtime INSERT detected:', (payload.new as { id?: string })?.id)
         fetchOrders(true)
       })
-      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'orders' }, () => {
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'orders' }, (payload) => {
+        // If the updated order is now delivered/cancelled, it's already handled
+        // locally by handleDeliver (dismissedIdsRef + setOrders). Calling
+        // fetchOrders here would trigger a re-fetch that could race against
+        // the in-flight PATCH and briefly show the dismissed order again.
+        const newStatus = (payload.new as { status?: string })?.status
+        if (newStatus === 'delivered' || newStatus === 'cancelled') return
         fetchOrders()
       })
       .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'orders' }, () => {
