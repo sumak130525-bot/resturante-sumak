@@ -807,6 +807,419 @@ function CashMovementsModal({ onClose, prefillEgreso }: { onClose: () => void; p
   )
 }
 
+// ─── Shift types ──────────────────────────────────────────────────────────────
+
+type Shift = {
+  id: string
+  opened_at: string
+  closed_at?: string | null
+  opening_amount: number
+  closing_amount?: number | null
+  expected_amount?: number | null
+  difference?: number | null
+  total_cash_sales?: number | null
+  total_transfer_sales?: number | null
+  total_mixed_sales?: number | null
+  total_income?: number | null
+  total_expense?: number | null
+  notes?: string | null
+  status: 'open' | 'closed'
+}
+
+type ShiftSummary = {
+  opening_amount: number
+  closing_amount: number
+  expected_amount: number
+  difference: number
+  total_cash_sales: number
+  total_transfer_sales: number
+  total_mixed_sales: number
+  total_income: number
+  total_expense: number
+  total_refunds: number
+  opened_at: string
+  closed_at: string
+}
+
+// ─── Open Shift Modal ─────────────────────────────────────────────────────────
+
+function OpenShiftModal({ onOpen }: { onOpen: (shift: Shift) => void }) {
+  const [amount, setAmount] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const handleOpen = async () => {
+    const parsed = parseFloat(amount.replace(',', '.') || '0')
+    if (parsed < 0) { setError('Monto inválido'); return }
+    setSubmitting(true)
+    setError(null)
+    try {
+      const res = await fetch('/api/pos/shifts/open', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ opening_amount: parsed }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error ?? 'Error al abrir turno')
+      onOpen(data.shift)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Error')
+      setSubmitting(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm mx-4 flex flex-col overflow-hidden">
+        {/* Header */}
+        <div className="px-5 py-4 bg-teal-600">
+          <h3 className="text-white font-black text-xl leading-none">Abrir turno</h3>
+          <p className="text-teal-100 text-xs mt-1">Ingresá el monto inicial en caja</p>
+        </div>
+
+        {/* Body */}
+        <div className="px-5 py-5 flex flex-col gap-4">
+          <div>
+            <p className="text-xs font-bold text-gray-500 mb-1">Monto inicial en caja</p>
+            <input
+              type="number"
+              inputMode="numeric"
+              min={0}
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') handleOpen() }}
+              placeholder="$ 0"
+              autoFocus
+              className="w-full rounded-xl border border-gray-200 px-3 py-3 text-2xl font-bold text-gray-900 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-teal-400 tabular-nums"
+            />
+          </div>
+          {error && <p className="text-red-600 text-sm font-semibold">{error}</p>}
+        </div>
+
+        {/* Footer */}
+        <div className="px-5 pb-5">
+          <button
+            onClick={handleOpen}
+            disabled={submitting}
+            className={`w-full py-4 rounded-xl font-black text-lg transition-all active:scale-95 shadow-md text-white ${
+              submitting ? 'bg-gray-300 cursor-not-allowed' : 'bg-teal-600 hover:bg-teal-700'
+            }`}
+          >
+            {submitting ? 'Abriendo...' : 'Abrir Turno'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── Close Shift Modal ────────────────────────────────────────────────────────
+
+function CloseShiftModal({
+  shift,
+  onClose,
+  onClosed,
+}: {
+  shift: Shift
+  onClose: () => void
+  onClosed: () => void
+}) {
+  const [summary, setSummary] = useState<ShiftSummary | null>(null)
+  const [loadingSummary, setLoadingSummary] = useState(true)
+  const [countedAmount, setCountedAmount] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [notes, setNotes] = useState('')
+
+  // Pre-calculate live summary by fetching movements
+  useEffect(() => {
+    let cancelled = false
+    setLoadingSummary(true)
+
+    async function loadPreview() {
+      try {
+        const res = await fetch('/api/pos/shifts/current')
+        const data = await res.json()
+        if (cancelled) return
+
+        // Get movements for current shift
+        const movRes = await fetch('/api/pos/cash-movements')
+        const movData = await movRes.json()
+
+        if (cancelled) return
+
+        const movements: Array<{ type: string; amount: number }> = movData.movements ?? []
+        const totalIncome = movements
+          .filter((m) => m.type === 'ingreso')
+          .reduce((s, m) => s + Number(m.amount), 0)
+        const totalExpense = movements
+          .filter((m) => m.type === 'egreso')
+          .reduce((s, m) => s + Number(m.amount), 0)
+
+        // Estimated totals from movements
+        const cashMov = movements.filter((m) => m.type === 'venta_efectivo')
+        const transferMov = movements.filter((m) => m.type === 'venta_transferencia')
+        const totalCash = cashMov.reduce((s, m) => s + Number(m.amount), 0)
+        const totalTransfer = transferMov.reduce((s, m) => s + Number(m.amount), 0)
+
+        const opening = Number(shift.opening_amount ?? 0)
+        const expectedAmount = opening + totalCash + totalIncome - totalExpense
+
+        setSummary({
+          opening_amount: opening,
+          closing_amount: 0,
+          expected_amount: expectedAmount,
+          difference: 0,
+          total_cash_sales: totalCash,
+          total_transfer_sales: totalTransfer,
+          total_mixed_sales: 0,
+          total_income: totalIncome,
+          total_expense: totalExpense,
+          total_refunds: 0,
+          opened_at: shift.opened_at,
+          closed_at: new Date().toISOString(),
+        })
+      } catch (e) { void e }
+      if (!cancelled) setLoadingSummary(false)
+    }
+
+    loadPreview()
+    return () => { cancelled = true }
+  }, [shift])
+
+  const counted = parseFloat(countedAmount.replace(',', '.') || '0')
+  const expected = summary?.expected_amount ?? 0
+  const difference = counted - expected
+  const hasAmount = countedAmount.trim() !== ''
+
+  const handleCloseAndPrint = async () => {
+    if (!hasAmount) { setError('Ingresá el monto contado'); return }
+    if (counted < 0) { setError('Monto inválido'); return }
+    setSubmitting(true)
+    setError(null)
+    try {
+      const res = await fetch('/api/pos/shifts/close', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ closing_amount: counted, notes: notes.trim() || null }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error ?? 'Error al cerrar turno')
+
+      // Navigate to print page
+      triggerShiftPrint(data.summary)
+      onClosed()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Error')
+      setSubmitting(false)
+    }
+  }
+
+  const openedTime = new Date(shift.opened_at).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false })
+  const openedDate = new Date(shift.opened_at).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' })
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60"
+      onClick={(e) => { if (e.target === e.currentTarget) onClose() }}
+    >
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm mx-4 flex flex-col overflow-hidden max-h-[95vh]">
+        {/* Header */}
+        <div className="px-5 py-4 bg-orange-500 flex items-center justify-between shrink-0">
+          <div>
+            <h3 className="text-white font-black text-lg leading-none">Cerrar Turno</h3>
+            <p className="text-orange-100 text-xs mt-0.5">Turno desde {openedDate} {openedTime}</p>
+          </div>
+          <button onClick={onClose} className="text-white/70 hover:text-white text-xl leading-none">✕</button>
+        </div>
+
+        {/* Body */}
+        <div className="flex-1 overflow-y-auto px-5 py-4 flex flex-col gap-4" style={{ minHeight: 0 }}>
+          {loadingSummary ? (
+            <div className="space-y-2">
+              {[1, 2, 3, 4].map((i) => <div key={i} className="h-10 bg-gray-100 rounded-xl animate-pulse" />)}
+            </div>
+          ) : summary && (
+            <>
+              {/* Sales summary */}
+              <div className="rounded-xl bg-gray-50 border border-gray-100 p-3 flex flex-col gap-2">
+                <p className="text-xs font-black text-gray-500 uppercase tracking-wide">Resumen de ventas</p>
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-600">Efectivo</span>
+                  <span className="font-bold text-gray-900 tabular-nums">{formatCashARS(summary.total_cash_sales)}</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-600">Transferencia</span>
+                  <span className="font-bold text-gray-900 tabular-nums">{formatCashARS(summary.total_transfer_sales)}</span>
+                </div>
+                {summary.total_mixed_sales > 0 && (
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-600">Mixto</span>
+                    <span className="font-bold text-gray-900 tabular-nums">{formatCashARS(summary.total_mixed_sales)}</span>
+                  </div>
+                )}
+                <div className="flex justify-between text-sm border-t border-gray-200 pt-2 mt-1">
+                  <span className="font-semibold text-gray-700">Total ventas</span>
+                  <span className="font-black text-teal-700 tabular-nums">{formatCashARS(summary.total_cash_sales + summary.total_transfer_sales + summary.total_mixed_sales)}</span>
+                </div>
+              </div>
+
+              {/* Movements summary */}
+              <div className="grid grid-cols-2 gap-2">
+                <div className="rounded-xl bg-green-50 border border-green-100 p-3">
+                  <p className="text-xs font-bold text-green-700 mb-1">Ingresos</p>
+                  <p className="font-black text-green-700 tabular-nums text-sm">{formatCashARS(summary.total_income)}</p>
+                </div>
+                <div className="rounded-xl bg-red-50 border border-red-100 p-3">
+                  <p className="text-xs font-bold text-red-700 mb-1">Egresos</p>
+                  <p className="font-black text-red-700 tabular-nums text-sm">{formatCashARS(summary.total_expense)}</p>
+                </div>
+              </div>
+
+              {/* Expected amount */}
+              <div className="rounded-xl bg-blue-50 border border-blue-100 p-3">
+                <div className="flex justify-between items-center">
+                  <p className="text-xs font-bold text-blue-700">Apertura</p>
+                  <p className="font-bold text-blue-800 tabular-nums text-sm">{formatCashARS(summary.opening_amount)}</p>
+                </div>
+                <div className="flex justify-between items-center mt-1">
+                  <p className="text-xs font-bold text-blue-700">Monto esperado en caja</p>
+                  <p className="font-black text-blue-800 tabular-nums">{formatCashARS(expected)}</p>
+                </div>
+              </div>
+            </>
+          )}
+
+          {/* Counted amount */}
+          <div>
+            <p className="text-xs font-bold text-gray-500 mb-1">Monto contado en caja</p>
+            <input
+              type="number"
+              inputMode="numeric"
+              min={0}
+              value={countedAmount}
+              onChange={(e) => setCountedAmount(e.target.value)}
+              placeholder="$ 0"
+              autoFocus
+              className="w-full rounded-xl border border-gray-200 px-3 py-3 text-2xl font-bold text-gray-900 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-orange-400 tabular-nums"
+            />
+          </div>
+
+          {/* Difference indicator */}
+          {hasAmount && (
+            <div className={`rounded-xl p-3 flex items-center justify-between ${
+              Math.abs(difference) < 1
+                ? 'bg-green-50 border border-green-200'
+                : difference > 0
+                  ? 'bg-green-50 border border-green-300'
+                  : 'bg-red-50 border border-red-200'
+            }`}>
+              <span className={`text-sm font-bold ${Math.abs(difference) < 1 ? 'text-green-700' : difference > 0 ? 'text-green-700' : 'text-red-700'}`}>
+                {Math.abs(difference) < 1 ? 'Sin diferencia' : difference > 0 ? 'Sobrante' : 'Faltante'}
+              </span>
+              <span className={`font-black text-lg tabular-nums ${Math.abs(difference) < 1 ? 'text-green-700' : difference > 0 ? 'text-green-700' : 'text-red-700'}`}>
+                {Math.abs(difference) < 1 ? '✓' : `${difference > 0 ? '+' : ''}${formatCashARS(difference)}`}
+              </span>
+            </div>
+          )}
+
+          {/* Notes */}
+          <div>
+            <p className="text-xs font-bold text-gray-500 mb-1">Notas (opcional)</p>
+            <input
+              type="text"
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              placeholder="Observaciones del turno..."
+              className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm font-medium text-gray-900 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-orange-400"
+            />
+          </div>
+
+          {error && <p className="text-red-600 text-sm font-semibold">{error}</p>}
+        </div>
+
+        {/* Footer */}
+        <div className="px-5 pb-5 pt-3 border-t border-gray-100 flex gap-2 shrink-0">
+          <button
+            onClick={onClose}
+            disabled={submitting}
+            className="flex-1 py-3 rounded-xl font-bold text-sm bg-gray-100 text-gray-700 hover:bg-gray-200 active:scale-95 transition-all"
+          >
+            Cancelar
+          </button>
+          <button
+            onClick={handleCloseAndPrint}
+            disabled={submitting || !hasAmount}
+            className={`flex-1 py-3 rounded-xl font-bold text-sm transition-all active:scale-95 shadow-md ${
+              submitting || !hasAmount
+                ? 'bg-gray-300 text-gray-400 cursor-not-allowed'
+                : 'bg-orange-500 hover:bg-orange-600 text-white cursor-pointer'
+            }`}
+          >
+            {submitting ? 'Cerrando...' : 'Cerrar e Imprimir'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── Shift print helpers ──────────────────────────────────────────────────────
+
+function buildShiftCloseTicket(summary: ShiftSummary): string {
+  const SEP = '---SEP---'
+  const now = new Date(summary.closed_at)
+  const dateStr = now.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' })
+  const openedTime = new Date(summary.opened_at).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false })
+  const closedTime = now.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false })
+
+  const fmtNum = (n: number) => '$' + new Intl.NumberFormat('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(n)
+
+  const totalVentas = summary.total_cash_sales + summary.total_transfer_sales + summary.total_mixed_sales
+  const diff = summary.difference
+  const diffLabel = Math.abs(diff) < 1 ? 'SIN DIFERENCIA' : diff > 0 ? `SOBRANTE: ${fmtNum(diff)}` : `FALTANTE: ${fmtNum(Math.abs(diff))}`
+
+  return [
+    'CIERRE DE CAJA',
+    SEP,
+    dateStr,
+    `Turno: ${openedTime} - ${closedTime}`,
+    SEP,
+    'VENTAS',
+    `Efectivo:     ${fmtNum(summary.total_cash_sales)}`,
+    `Transfer:     ${fmtNum(summary.total_transfer_sales)}`,
+    summary.total_mixed_sales > 0 ? `Mixto:        ${fmtNum(summary.total_mixed_sales)}` : '',
+    `Total ventas: ${fmtNum(totalVentas)}`,
+    SEP,
+    `Ingresos:     ${fmtNum(summary.total_income)}`,
+    `Egresos:      ${fmtNum(summary.total_expense)}`,
+    SEP,
+    `Apertura:     ${fmtNum(summary.opening_amount)}`,
+    `Esperado:     ${fmtNum(summary.expected_amount)}`,
+    `En caja:      ${fmtNum(summary.closing_amount)}`,
+    SEP,
+    diffLabel,
+    '',
+  ].filter((l) => l !== null && l !== undefined).join('\n')
+}
+
+function triggerShiftPrint(summary: ShiftSummary): void {
+  const text = buildShiftCloseTicket(summary)
+  sessionStorage.setItem('pos_ticket', text)
+  sessionStorage.removeItem('pos_ticket_logo')
+  sessionStorage.setItem('pos_ticket_fontsize', '12px')
+  sessionStorage.setItem('pos_ticket_fontfamily', 'monospace')
+  sessionStorage.setItem('pos_ticket_linespacing', '4')
+  sessionStorage.setItem('pos_ticket_headerbold', 'true')
+  sessionStorage.setItem('pos_ticket_margintop', '4')
+  sessionStorage.setItem('pos_ticket_marginbottom', '4')
+  sessionStorage.setItem('pos_ticket_marginleft', '0')
+  sessionStorage.setItem('pos_ticket_marginright', '0')
+  sessionStorage.setItem('pos_ticket_separator', '-')
+  sessionStorage.setItem('pos_ticket_separatordouble', 'false')
+  window.location.href = '/pos/ticket'
+}
+
 // ─── Clock ─────────────────────────────────────────────────────────────────────
 function POSClock() {
   const [time, setTime] = useState('')
@@ -1805,6 +2218,22 @@ export default function POSPage() {
   const [showCashModal, setShowCashModal] = useState(false)
   const [cashModalPrefill, setCashModalPrefill] = useState<PrefillEgreso | undefined>(undefined)
 
+  // ─── Shift state ──────────────────────────────────────────────────────────────
+  const [currentShift, setCurrentShift] = useState<Shift | null | undefined>(undefined) // undefined = loading
+  const [showOpenShiftModal, setShowOpenShiftModal] = useState(false)
+  const [showCloseShiftModal, setShowCloseShiftModal] = useState(false)
+
+  // Fetch current shift on mount
+  useEffect(() => {
+    fetch('/api/pos/shifts/current')
+      .then((r) => r.ok ? r.json() : { shift: null })
+      .then((data) => {
+        setCurrentShift(data.shift ?? null)
+        if (!data.shift) setShowOpenShiftModal(true)
+      })
+      .catch(() => setCurrentShift(null))
+  }, [])
+
   // Sent orders panel (Feature 2)
   const [sentOrders, setSentOrders] = useState<SentOrder[]>([])
   const [loadingSentOrders, setLoadingSentOrders] = useState(false)
@@ -2150,6 +2579,26 @@ export default function POSPage() {
         )}
         {/* Clock */}
         <POSClock />
+        {/* Shift indicator + close button */}
+        {currentShift ? (
+          <button
+            onClick={() => setShowCloseShiftModal(true)}
+            title="Cerrar turno"
+            className="flex items-center gap-1 px-2 py-1 rounded-lg bg-sumak-brown-mid text-sumak-gold hover:bg-red-900/60 active:scale-95 transition-all shrink-0 text-xs font-bold"
+          >
+            <span className="text-green-400">●</span>
+            {new Date(currentShift.opened_at).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false })}
+          </button>
+        ) : currentShift === null ? (
+          <button
+            onClick={() => setShowOpenShiftModal(true)}
+            title="Abrir turno"
+            className="flex items-center gap-1 px-2 py-1 rounded-lg bg-teal-700 text-white hover:bg-teal-600 active:scale-95 transition-all shrink-0 text-xs font-bold"
+          >
+            <span className="text-yellow-300">○</span>
+            Turno
+          </button>
+        ) : null}
         {/* Cash movements button */}
         <button
           onClick={() => setShowCashModal(true)}
@@ -2589,6 +3038,29 @@ export default function POSPage() {
           <span className="text-xl">🧾</span>
           <span>Ver Ticket ({ticketCount})</span>
         </button>
+      )}
+
+      {/* ── Open Shift Modal ── */}
+      {showOpenShiftModal && (
+        <OpenShiftModal
+          onOpen={(shift) => {
+            setCurrentShift(shift)
+            setShowOpenShiftModal(false)
+          }}
+        />
+      )}
+
+      {/* ── Close Shift Modal ── */}
+      {showCloseShiftModal && currentShift && (
+        <CloseShiftModal
+          shift={currentShift}
+          onClose={() => setShowCloseShiftModal(false)}
+          onClosed={() => {
+            setShowCloseShiftModal(false)
+            setCurrentShift(null)
+            setShowOpenShiftModal(true)
+          }}
+        />
       )}
 
     </div>

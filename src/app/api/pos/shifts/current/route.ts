@@ -1,0 +1,58 @@
+import { NextResponse } from 'next/server'
+import { createClient } from '@supabase/supabase-js'
+
+export const dynamic = 'force-dynamic'
+
+function getAdminClient() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!
+  )
+}
+
+// GET /api/pos/shifts/current — returns the current open shift or null
+export async function GET() {
+  try {
+    const supabase = getAdminClient()
+
+    // Ensure shifts table exists
+    await supabase.rpc('exec_sql', {
+      query: `
+        CREATE TABLE IF NOT EXISTS shifts (
+          id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
+          opened_at timestamptz DEFAULT now() NOT NULL,
+          closed_at timestamptz,
+          opening_amount numeric NOT NULL DEFAULT 0,
+          closing_amount numeric,
+          expected_amount numeric,
+          difference numeric,
+          total_cash_sales numeric DEFAULT 0,
+          total_transfer_sales numeric DEFAULT 0,
+          total_mixed_sales numeric DEFAULT 0,
+          total_income numeric DEFAULT 0,
+          total_expense numeric DEFAULT 0,
+          notes text,
+          status text NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'closed'))
+        );
+      `
+    }).then(() => {}, () => {})
+
+    const { data: shift, error } = await supabase
+      .from('shifts')
+      .select('*')
+      .eq('status', 'open')
+      .order('opened_at', { ascending: false })
+      .limit(1)
+      .single()
+
+    if (error && error.code !== 'PGRST116') {
+      // PGRST116 = no rows found, that's OK
+      return NextResponse.json({ shift: null })
+    }
+
+    return NextResponse.json({ shift: shift ?? null })
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Error interno'
+    return NextResponse.json({ error: message }, { status: 500 })
+  }
+}
