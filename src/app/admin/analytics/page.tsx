@@ -52,6 +52,7 @@ const CHART_COLORS = ['#6366f1', '#f59e0b', '#10b981', '#ef4444', '#8b5cf6', '#0
 const PIE_COLORS_PAYMENT = ['#6366f1', '#f59e0b', '#10b981']
 const PIE_COLORS_DINING = ['#10b981', '#f59e0b']
 const PIE_COLORS_SOURCE = ['#6366f1', '#ef4444', '#10b981']
+const PIE_COLORS_CATEGORY = ['#6366f1', '#f59e0b', '#10b981', '#ef4444', '#8b5cf6', '#06b6d4', '#f43f5e', '#84cc16']
 
 function SkeletonCard() {
   return (
@@ -82,6 +83,21 @@ function CustomTooltip({ active, payload, label }: any) {
             {formatPrice(p.value)}
           </p>
         ))}
+      </div>
+    )
+  }
+  return null
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function CategoryPieTooltip({ active, payload }: any) {
+  if (active && payload && payload.length) {
+    const item = payload[0]
+    return (
+      <div className="bg-gray-900 text-white text-xs rounded-xl px-3 py-2 shadow-xl">
+        <p className="font-semibold mb-1" style={{ color: item.payload.fill }}>{item.name}</p>
+        <p>{formatPrice(item.value)}</p>
+        <p className="text-gray-400">{item.payload.percentage}%</p>
       </div>
     )
   }
@@ -149,6 +165,22 @@ export default function AnalyticsPage() {
     : []
 
   const totalProductRevenue = data?.topProducts.reduce((s, p) => s + p.revenue, 0) ?? 0
+
+  const salesByCategory = (() => {
+    if (!data?.topProducts.length) return []
+    const map: Record<string, number> = {}
+    for (const p of data.topProducts) {
+      map[p.category] = (map[p.category] ?? 0) + p.revenue
+    }
+    const total = Object.values(map).reduce((s, v) => s + v, 0)
+    return Object.entries(map)
+      .map(([name, value]) => ({
+        name,
+        value,
+        percentage: total > 0 ? ((value / total) * 100).toFixed(1) : '0.0',
+      }))
+      .sort((a, b) => b.value - a.value)
+  })()
 
   const filteredProducts = data?.topProducts.filter(
     (p) => selectedCategory === 'all' || p.category === selectedCategory
@@ -373,6 +405,80 @@ export default function AnalyticsPage() {
           )}
         </div>
 
+        {/* Category donut chart + Top products table */}
+        <div className="grid grid-cols-1 xl:grid-cols-[340px_1fr] gap-6 mb-6">
+          {/* Ventas por categoría */}
+          {loading ? (
+            <SkeletonChart />
+          ) : (
+            <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+              <h2 className="font-semibold text-gray-800 mb-1">Ventas por categoría</h2>
+              {salesByCategory.length > 0 ? (
+                <>
+                  <ResponsiveContainer width="100%" height={240}>
+                    <PieChart>
+                      <Pie
+                        data={salesByCategory}
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={68}
+                        outerRadius={100}
+                        dataKey="value"
+                        paddingAngle={3}
+                      >
+                        {salesByCategory.map((_, i) => (
+                          <Cell
+                            key={i}
+                            fill={PIE_COLORS_CATEGORY[i % PIE_COLORS_CATEGORY.length]}
+                          />
+                        ))}
+                      </Pie>
+                      <Tooltip content={<CategoryPieTooltip />} />
+                      <text
+                        x="50%"
+                        y="46%"
+                        textAnchor="middle"
+                        dominantBaseline="middle"
+                        className="fill-gray-400"
+                        style={{ fontSize: 11, fill: '#9ca3af' }}
+                      >
+                        Total
+                      </text>
+                      <text
+                        x="50%"
+                        y="57%"
+                        textAnchor="middle"
+                        dominantBaseline="middle"
+                        style={{ fontSize: 14, fontWeight: 700, fill: '#1f2937' }}
+                      >
+                        {formatPrice(totalProductRevenue)}
+                      </text>
+                    </PieChart>
+                  </ResponsiveContainer>
+                  <div className="mt-2 space-y-1.5">
+                    {salesByCategory.map((cat, i) => (
+                      <div key={cat.name} className="flex items-center justify-between text-xs">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span
+                            className="inline-block w-2.5 h-2.5 rounded-full flex-shrink-0"
+                            style={{ backgroundColor: PIE_COLORS_CATEGORY[i % PIE_COLORS_CATEGORY.length] }}
+                          />
+                          <span className="text-gray-700 truncate">{cat.name}</span>
+                        </div>
+                        <div className="flex items-center gap-2 flex-shrink-0 ml-2">
+                          <span className="text-gray-500">{cat.percentage}%</span>
+                          <span className="font-semibold text-gray-800">{formatPrice(cat.value)}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              ) : (
+                <div className="flex items-center justify-center h-[240px] text-gray-400 text-sm">Sin datos para este período</div>
+              )}
+            </div>
+          )}
+
         {/* Top products table */}
         {loading ? (
           <SkeletonChart />
@@ -444,6 +550,7 @@ export default function AnalyticsPage() {
             )}
           </div>
         )}
+        </div>
       </div>
     </AdminLayoutClient>
   )
