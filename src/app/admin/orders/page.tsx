@@ -389,6 +389,19 @@ export default function AdminOrdersPage() {
     advancedFilters.channels.length + advancedFilters.payments.length +
     (advancedFilters.timeFrom ? 1 : 0) + (advancedFilters.timeTo ? 1 : 0)
 
+  // Total de pedidos filtrados (según tab activo)
+  const filteredTotal = useMemo(() => {
+    const list = activeFilter === 'all'
+      ? filteredOrders
+      : filteredOrders.filter((o) => o.status === activeFilter)
+    return list.reduce((sum, o) => sum + (Number(o.total) || 0), 0)
+  }, [filteredOrders, activeFilter])
+
+  const formattedTotal = filteredTotal.toLocaleString('es-AR', {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  })
+
   function handleExportCSV() {
     const list = activeFilter === 'all'
       ? filteredOrders
@@ -466,6 +479,12 @@ export default function AdminOrdersPage() {
 
           {/* Right side controls */}
           <div className="flex items-center gap-2 flex-shrink-0 ml-auto">
+            {/* Total indicator */}
+            <div className="flex items-center gap-1 bg-green-50 border border-green-200 rounded-lg px-3 py-2">
+              <span className="text-xs text-green-600 font-medium">Total</span>
+              <span className="text-sm font-bold text-green-700">${formattedTotal}</span>
+            </div>
+
             {/* Date picker */}
             <div className="relative flex items-center gap-1.5 border border-gray-200 rounded-lg px-3 py-2 bg-white text-sm text-gray-600 hover:bg-gray-50 transition-colors">
               <Calendar size={14} className="text-gray-400" />
