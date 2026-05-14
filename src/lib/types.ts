@@ -38,7 +38,10 @@ export type Order = {
   total: number
   notes: string | null
   created_at: string
-  channel?: 'web' | 'whatsapp'
+  channel?: 'web' | 'whatsapp' | 'pos'
+  payment_method?: string | null
+  table_number?: string | null
+  mesa?: string | null
   order_items?: OrderItem[]
 }
 
@@ -94,6 +97,9 @@ type OrderRow = {
   notes: string | null
   created_at: string
   channel: string | null
+  payment_method: string | null
+  table_number: string | null
+  mesa: string | null
 }
 
 type OrderItemRow = {
