@@ -34,7 +34,8 @@ interface AnalyticsData {
   ordersPerHour: number
   salesByDay: { date: string; total: number }[]
   salesByHour: { hour: string; total: number }[]
-  topProducts: { name: string; quantity: number; revenue: number; percentage: number }[]
+  topProducts: { name: string; category: string; quantity: number; revenue: number; percentage: number }[]
+  availableCategories: string[]
   paymentMethods: { name: string; value: number }[]
   diningOptions: { name: string; value: number }[]
   salesBySource: { name: string; value: number }[]
@@ -91,6 +92,7 @@ export default function AnalyticsPage() {
   const [period, setPeriod] = useState<Period>('today')
   const [data, setData] = useState<AnalyticsData | null>(null)
   const [loading, setLoading] = useState(true)
+  const [selectedCategory, setSelectedCategory] = useState<string>('all')
 
   const fetchData = useCallback(async (p: Period) => {
     setLoading(true)
@@ -147,6 +149,10 @@ export default function AnalyticsPage() {
     : []
 
   const totalProductRevenue = data?.topProducts.reduce((s, p) => s + p.revenue, 0) ?? 0
+
+  const filteredProducts = data?.topProducts.filter(
+    (p) => selectedCategory === 'all' || p.category === selectedCategory
+  ) ?? []
 
   return (
     <AdminLayoutClient active="analytics">
@@ -372,24 +378,47 @@ export default function AnalyticsPage() {
           <SkeletonChart />
         ) : (
           <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
-            <h2 className="font-semibold text-gray-800 mb-4">Top 10 productos</h2>
-            {data && data.topProducts.length > 0 ? (
-              <div className="overflow-x-auto">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
+              <h2 className="font-semibold text-gray-800">
+                Ranking de productos
+                {filteredProducts.length > 0 && (
+                  <span className="ml-2 text-xs font-normal text-gray-400">
+                    ({filteredProducts.length} producto{filteredProducts.length !== 1 ? 's' : ''})
+                  </span>
+                )}
+              </h2>
+              {data && data.availableCategories.length > 0 && (
+                <select
+                  value={selectedCategory}
+                  onChange={(e) => setSelectedCategory(e.target.value)}
+                  className="text-sm border border-gray-200 rounded-lg px-3 py-1.5 text-gray-700 bg-white focus:outline-none focus:ring-2 focus:ring-indigo-300 cursor-pointer"
+                >
+                  <option value="all">Todas las categorías</option>
+                  {data.availableCategories.map((cat) => (
+                    <option key={cat} value={cat}>{cat}</option>
+                  ))}
+                </select>
+              )}
+            </div>
+            {filteredProducts.length > 0 ? (
+              <div className="overflow-x-auto overflow-y-auto max-h-[480px]">
                 <table className="w-full text-sm">
-                  <thead>
+                  <thead className="sticky top-0 bg-white">
                     <tr className="border-b border-gray-100">
                       <th className="text-left py-3 pr-4 text-gray-400 font-medium text-xs uppercase tracking-wide w-8">#</th>
                       <th className="text-left py-3 pr-4 text-gray-400 font-medium text-xs uppercase tracking-wide">Producto</th>
+                      <th className="text-left py-3 pr-4 text-gray-400 font-medium text-xs uppercase tracking-wide hidden sm:table-cell">Categoría</th>
                       <th className="text-right py-3 pr-4 text-gray-400 font-medium text-xs uppercase tracking-wide">Cantidad</th>
                       <th className="text-right py-3 pr-4 text-gray-400 font-medium text-xs uppercase tracking-wide">Revenue</th>
                       <th className="text-right py-3 text-gray-400 font-medium text-xs uppercase tracking-wide">% Revenue</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {data.topProducts.map((p, i) => (
+                    {filteredProducts.map((p, i) => (
                       <tr key={p.name} className="border-b border-gray-50 hover:bg-gray-50 transition-colors">
                         <td className="py-3 pr-4 text-gray-400 font-mono text-xs">{i + 1}</td>
                         <td className="py-3 pr-4 font-medium text-gray-800">{p.name}</td>
+                        <td className="py-3 pr-4 text-gray-500 text-xs hidden sm:table-cell">{p.category}</td>
                         <td className="py-3 pr-4 text-right text-gray-600">{p.quantity}</td>
                         <td className="py-3 pr-4 text-right font-semibold text-gray-800">{formatPrice(p.revenue)}</td>
                         <td className="py-3 text-right">

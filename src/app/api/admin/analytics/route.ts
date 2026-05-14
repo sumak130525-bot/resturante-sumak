@@ -105,12 +105,12 @@ export async function GET(req: NextRequest) {
 
   const orderIds = orderList.map((o) => o.id)
 
-  // Fetch order items for top products
-  let itemRows: { menu_item_id: string; quantity: number; unit_price: number; menu_items: { name: string } | null }[] = []
+  // Fetch order items for top products (including category via menu_items → categories)
+  let itemRows: { menu_item_id: string; quantity: number; unit_price: number; menu_items: { name: string; categories: { name: string } | null } | null }[] = []
   if (orderIds.length > 0) {
     const { data: items } = await sb
       .from('order_items')
-      .select('menu_item_id, quantity, unit_price, menu_items(name)')
+      .select('menu_item_id, quantity, unit_price, menu_items(name, categories(name))')
       .in('order_id', orderIds)
     itemRows = items ?? []
   }
@@ -150,25 +150,28 @@ export async function GET(req: NextRequest) {
   }))
 
   // --- Top products ---
-  const productMap = new Map<string, { name: string; quantity: number; revenue: number }>()
+  const productMap = new Map<string, { name: string; category: string; quantity: number; revenue: number }>()
+  const categorySet = new Set<string>()
   for (const item of itemRows) {
     const name = item.menu_items?.name ?? item.menu_item_id
+    const category = item.menu_items?.categories?.name ?? 'Sin categoría'
+    categorySet.add(category)
     const existing = productMap.get(name)
     if (existing) {
       existing.quantity += item.quantity
       existing.revenue += item.quantity * item.unit_price
     } else {
-      productMap.set(name, { name, quantity: item.quantity, revenue: item.quantity * item.unit_price })
+      productMap.set(name, { name, category, quantity: item.quantity, revenue: item.quantity * item.unit_price })
     }
   }
   const totalItemRevenue = Array.from(productMap.values()).reduce((s, p) => s + p.revenue, 0)
   const topProducts = Array.from(productMap.values())
     .sort((a, b) => b.quantity - a.quantity)
-    .slice(0, 10)
     .map((p) => ({
       ...p,
       percentage: totalItemRevenue > 0 ? (p.revenue / totalItemRevenue) * 100 : 0,
     }))
+  const availableCategories = Array.from(categorySet).sort()
 
   // --- Payment methods ---
   const paymentMap = new Map<string, number>()
@@ -206,6 +209,7 @@ export async function GET(req: NextRequest) {
     salesByDay,
     salesByHour,
     topProducts,
+    availableCategories,
     paymentMethods,
     diningOptions,
     salesBySource,
