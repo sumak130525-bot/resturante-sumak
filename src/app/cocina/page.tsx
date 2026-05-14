@@ -955,12 +955,12 @@ export default function CocinaPage() {
 
     if (source === 'WEB' || source === 'POS') {
       try {
-        const res = await fetch('/api/admin/orders', {
-          method: 'PUT',
+        const res = await fetch('/api/cocina/orders/deliver', {
+          method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ id, status: 'delivered' }),
+          body: JSON.stringify({ id }),
         })
-        if (!res.ok) throw new Error('PUT failed')
+        if (!res.ok) throw new Error('POST failed')
       } catch {
         dismissedIdsRef.current.delete(id)
         removeDismissed(id)
