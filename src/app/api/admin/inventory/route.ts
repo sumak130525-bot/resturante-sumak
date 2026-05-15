@@ -59,7 +59,7 @@ export async function GET() {
   // Traer todos los ingredientes
   const { data: ingredients, error: ingError } = await db
     .from('ingredients')
-    .select('id, name, unit')
+    .select('id, name, unit, category_id, ingredient_categories(id, name)')
     .order('name')
 
   if (ingError) return NextResponse.json({ error: ingError.message }, { status: 500 })
@@ -87,7 +87,7 @@ export async function GET() {
     }
   }
 
-  const result = (ingredients ?? []).map((ing: { id: string; name: string; unit: string }) => {
+  const result = (ingredients ?? []).map((ing: { id: string; name: string; unit: string; category_id?: string; ingredient_categories?: { id: string; name: string } }) => {
     const inv = inventoryMap.get(ing.id)
     const stock = inv ? Number(inv.stock) : 0
     const min_stock = inv ? Number(inv.min_stock) : 5
@@ -101,6 +101,8 @@ export async function GET() {
       ingredient_id: ing.id,
       name: ing.name,
       unit: ing.unit,
+      category_id: ing.category_id ?? null,
+      category: ing.ingredient_categories?.name ?? null,
       stock,
       min_stock,
       status,
