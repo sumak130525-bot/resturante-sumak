@@ -1236,7 +1236,8 @@ function triggerShiftPrint(summary: ShiftSummary): void {
   sessionStorage.setItem('pos_ticket_marginright', '0')
   sessionStorage.setItem('pos_ticket_separator', '-')
   sessionStorage.setItem('pos_ticket_separatordouble', 'false')
-  window.location.href = '/pos/ticket'
+  // Open print page in a new tab so the POS page is NOT reloaded and state is preserved
+  window.open('/pos/ticket', '_blank')
 }
 
 // ─── Clock ─────────────────────────────────────────────────────────────────────
@@ -2377,6 +2378,26 @@ export default function POSPage() {
         if (!data.shift) setShowOpenShiftModal(true)
       })
       .catch(() => setCurrentShift(null))
+  }, [])
+
+  // Polling: re-verify shift every 30s to detect external closes (e.g. from admin)
+  useEffect(() => {
+    const id = setInterval(() => {
+      fetch('/api/pos/shifts/current')
+        .then((r) => r.ok ? r.json() : { shift: null })
+        .then((data) => {
+          const hasShift = !!data.shift
+          setCurrentShift((prev) => {
+            // If the shift just disappeared externally, show the open modal
+            if (prev !== undefined && prev !== null && !hasShift) {
+              setShowOpenShiftModal(true)
+            }
+            return data.shift ?? null
+          })
+        })
+        .catch(() => {})
+    }, 30000)
+    return () => clearInterval(id)
   }, [])
 
   // Sent orders panel (Feature 2)
