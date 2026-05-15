@@ -287,6 +287,8 @@ type KdsItem = {
   note?: string | null
   person_number?: number | null
   subcategory?: string | null
+  is_bonus?: boolean
+  bonus_reason?: string | null
 }
 
 type KdsOrder = {
@@ -526,9 +528,15 @@ function OrderCard({
                               {item.quantity}×
                             </span>
                             <div className="flex flex-col min-w-0">
-                              <span className={`text-xl font-semibold leading-tight ${struck ? 'line-through text-gray-400' : 'text-gray-900'}`}>
+                              <span className={`text-xl font-semibold leading-tight ${struck ? 'line-through text-gray-400' : item.is_bonus ? 'text-yellow-600' : 'text-gray-900'}`}>
+                                {item.is_bonus && <span className="mr-1">★</span>}
                                 {item.name}
                               </span>
+                              {item.is_bonus && item.bonus_reason && (
+                                <span className={`text-sm font-semibold leading-snug mt-0.5 ${struck ? 'line-through text-gray-400' : 'text-yellow-600'}`}>
+                                  ★ {item.bonus_reason}
+                                </span>
+                              )}
                               {item.modifiers && item.modifiers.length > 0 && (
                                 <span className={`text-base leading-snug mt-0.5 ${struck ? 'line-through text-gray-400' : 'text-gray-700'}`}>
                                   {item.modifiers.join(' · ')}
@@ -565,9 +573,15 @@ function OrderCard({
                     {item.quantity}×
                   </span>
                   <div className="flex flex-col min-w-0">
-                    <span className={`text-xl font-semibold leading-tight ${struck ? 'line-through text-gray-400' : 'text-gray-900'}`}>
+                    <span className={`text-xl font-semibold leading-tight ${struck ? 'line-through text-gray-400' : item.is_bonus ? 'text-yellow-600' : 'text-gray-900'}`}>
+                      {item.is_bonus && <span className="mr-1">★</span>}
                       {item.name}
                     </span>
+                    {item.is_bonus && item.bonus_reason && (
+                      <span className={`text-sm font-semibold leading-snug mt-0.5 ${struck ? 'line-through text-gray-400' : 'text-yellow-600'}`}>
+                        ★ {item.bonus_reason}
+                      </span>
+                    )}
                     {item.modifiers && item.modifiers.length > 0 && (
                       <span className={`text-base leading-snug mt-0.5 ${struck ? 'line-through text-gray-400' : 'text-gray-700'}`}>
                         {item.modifiers.join(' · ')}

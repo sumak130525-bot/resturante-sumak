@@ -10,6 +10,9 @@ type PosOrderItem = {
   menu_item_id: string
   line_note?: string | null
   person_number?: number | null
+  is_bonus?: boolean
+  bonus_reason?: string | null
+  original_price?: number | null
 }
 
 function getAdminClient() {
@@ -59,6 +62,11 @@ export async function POST(request: NextRequest) {
       query: "ALTER TABLE order_items ADD COLUMN IF NOT EXISTS person_number integer;"
     }).then(() => {}, () => {})
 
+    // Ensure bonus columns exist on order_items
+    await supabase.rpc('exec_sql', {
+      query: "ALTER TABLE order_items ADD COLUMN IF NOT EXISTS is_bonus boolean DEFAULT false; ALTER TABLE order_items ADD COLUMN IF NOT EXISTS bonus_reason text; ALTER TABLE order_items ADD COLUMN IF NOT EXISTS original_price numeric;"
+    }).then(() => {}, () => {})
+
     // Ensure cash_amount and transfer_amount columns exist on orders
     await supabase.rpc('exec_sql', {
       query: "ALTER TABLE orders ADD COLUMN IF NOT EXISTS cash_amount numeric; ALTER TABLE orders ADD COLUMN IF NOT EXISTS transfer_amount numeric;"
@@ -94,9 +102,12 @@ export async function POST(request: NextRequest) {
       order_id: order.id,
       menu_item_id: item.menu_item_id,
       quantity: item.quantity,
-      unit_price: Math.round(item.price),
+      unit_price: item.is_bonus ? 0 : Math.round(item.price),
       line_note: item.line_note || null,
       person_number: item.person_number ?? null,
+      is_bonus: item.is_bonus ?? false,
+      bonus_reason: item.bonus_reason ?? null,
+      original_price: item.original_price ?? null,
     }))
 
     const { error: itemsError } = await supabase
@@ -104,9 +115,9 @@ export async function POST(request: NextRequest) {
       .insert(orderItems)
 
     if (itemsError) {
-      // If line_note or person_number column doesn't exist, retry without them
-      if (itemsError.message.includes('line_note') || itemsError.message.includes('person_number') || itemsError.message.includes('column')) {
-        const fallbackItems = orderItems.map(({ line_note, person_number, ...rest }) => rest)
+      // If columns don't exist yet, retry without optional columns
+      if (itemsError.message.includes('line_note') || itemsError.message.includes('person_number') || itemsError.message.includes('is_bonus') || itemsError.message.includes('bonus_reason') || itemsError.message.includes('original_price') || itemsError.message.includes('column')) {
+        const fallbackItems = orderItems.map(({ line_note, person_number, is_bonus, bonus_reason, original_price, ...rest }) => rest)
         const { error: fallbackError } = await supabase
           .from('order_items')
           .insert(fallbackItems)

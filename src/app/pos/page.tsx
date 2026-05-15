@@ -90,20 +90,27 @@ function buildTicketText(data: PrintData, cfg: TicketConfig = DEFAULT_TICKET_CON
   // Build item lines — flat list (person grouping handled in sectionized output below)
   const buildItemLines = (items: typeof data.items) => items.flatMap((item, idx) => {
     const qty = String(item.quantity)
-    const sub = formatTicketMoney(item.price * item.quantity)
+    const isBonus = (item as TicketItem).is_bonus
+    const displayPrice = isBonus ? 0 : item.price
+    const sub = isBonus ? 'GRATIS' : formatTicketMoney(displayPrice * item.quantity)
     const prefix = qty + 'x '
     const contentW = Math.max(1, W - marginLeft - marginRight)
     const maxNameLen = contentW - prefix.length
-    const name = item.name.length > maxNameLen
-      ? item.name.substring(0, maxNameLen)
-      : item.name
+    const bonusMark = isBonus ? '★ ' : ''
+    const fullName = bonusMark + item.name
+    const name = fullName.length > maxNameLen
+      ? fullName.substring(0, maxNameLen)
+      : fullName
     const line1 = addMargin(prefix + name)
     const line2 = addMargin(pad(sub, contentW, true))
 
     const modLines = (item.modifiers ?? []).map(
       (m) => addMargin(`  > ${m.optionName}${m.price > 0 ? ' (+)' : ''}`)
     )
-    const lines = [line1, line2, ...modLines]
+    const bonusReasonLine = isBonus && (item as TicketItem).bonus_reason
+      ? [addMargin(`  (${(item as TicketItem).bonus_reason})`)]
+      : []
+    const lines = [line1, line2, ...modLines, ...bonusReasonLine]
     if (itemGap && idx < items.length - 1) lines.push(itemGap)
     return lines
   })
@@ -261,6 +268,17 @@ type TicketItem = {
   modifiers?: SelectedModifier[]
   person_number?: number | null  // null / undefined = single-person mode
   customNote?: string            // free-text note per item (e.g. "sin chuño")
+  is_bonus?: boolean             // bonificado = gratis
+  bonus_reason?: string | null   // motivo de bonificación
+  original_price?: number        // precio original antes de bonificar
+}
+
+// ─── Bonus Reason type ────────────────────────────────────────────────────────
+
+type BonusReason = {
+  id: string
+  name: string
+  active: boolean
 }
 
 type DiningOption = 'Comer dentro' | 'Para llevar'
@@ -1869,6 +1887,68 @@ function CancelOrderModal({
   )
 }
 
+// ─── Bonus Reason Modal ───────────────────────────────────────────────────────
+
+function BonusModal({
+  itemName,
+  reasons,
+  onSelect,
+  onCancel,
+}: {
+  itemName: string
+  reasons: BonusReason[]
+  onSelect: (reason: BonusReason) => void
+  onCancel: () => void
+}) {
+  const activeReasons = reasons.filter((r) => r.active)
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+      onClick={(e) => { if (e.target === e.currentTarget) onCancel() }}
+    >
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-xs mx-4 flex flex-col overflow-hidden max-h-[80vh]">
+        {/* Header */}
+        <div className="px-5 py-4 bg-yellow-500">
+          <h3 className="text-white font-black text-base leading-none">★ Bonificar item</h3>
+          <p className="text-yellow-100 text-xs mt-0.5 truncate">{itemName}</p>
+        </div>
+
+        {/* Body */}
+        <div className="flex-1 overflow-y-auto px-4 py-3">
+          {activeReasons.length === 0 ? (
+            <p className="text-center text-gray-400 text-sm py-4">
+              Sin motivos configurados. Agregá motivos desde Admin → Bonificaciones.
+            </p>
+          ) : (
+            <div className="flex flex-col gap-1.5">
+              {activeReasons.map((r) => (
+                <button
+                  key={r.id}
+                  onClick={() => onSelect(r)}
+                  className="w-full text-left px-4 py-3 rounded-xl border border-gray-200 hover:border-yellow-400 hover:bg-yellow-50 font-semibold text-sm text-gray-900 transition-all active:scale-[0.98]"
+                >
+                  {r.name}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Footer */}
+        <div className="px-4 pb-4 pt-1 shrink-0">
+          <button
+            onClick={onCancel}
+            className="w-full rounded-xl py-3 font-bold text-sm bg-gray-100 text-gray-700 hover:bg-gray-200 active:scale-95 transition-all"
+          >
+            Cancelar
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ─── Ticket Item Row ──────────────────────────────────────────────────────────
 
 function TicketItemRow({
@@ -1876,20 +1956,28 @@ function TicketItemRow({
   onUpdateQty,
   onRemove,
   onUpdateNote,
+  onBonusClick,
+  onUnbonus,
 }: {
   item: TicketItem
   onUpdateQty: (uid: string, delta: number) => void
   onRemove: (uid: string) => void
   onUpdateNote: (uid: string, note: string) => void
+  onBonusClick?: (uid: string) => void
+  onUnbonus?: (uid: string) => void
 }) {
   const [noteOpen, setNoteOpen] = useState(false)
   const modExtra = (item.modifiers ?? []).reduce((ms, m) => ms + m.price, 0)
-  const unitTotal = item.price + modExtra
+  const unitTotal = item.price + modExtra   // always the actual price (0 if bonus)
+  const displayUnitTotal = item.is_bonus ? 0 : unitTotal
   return (
-    <li className="flex flex-col bg-gray-50 rounded-xl px-2.5 py-1.5 border border-gray-100 gap-1">
+    <li className={`flex flex-col rounded-xl px-2.5 py-1.5 border gap-1 ${item.is_bonus ? 'bg-yellow-50 border-yellow-300' : 'bg-gray-50 border-gray-100'}`}>
       <div className="flex items-start gap-1.5">
         <div className="flex-1 min-w-0">
-          <p className="font-semibold text-gray-900 text-sm leading-tight truncate">{item.name}</p>
+          <p className="font-semibold text-gray-900 text-sm leading-tight truncate">
+            {item.is_bonus && <span className="text-yellow-500 mr-1">★</span>}
+            {item.name}
+          </p>
           {(item.modifiers ?? []).length > 0 && (
             <div className="mt-0.5">
               {item.modifiers!.map((m, idx) => (
@@ -1902,14 +1990,45 @@ function TicketItemRow({
               ))}
             </div>
           )}
+          {item.is_bonus && item.bonus_reason && (
+            <p className="text-yellow-700 text-xs leading-tight pl-2 mt-0.5 italic">★ {item.bonus_reason}</p>
+          )}
           {item.customNote && !noteOpen && (
             <p className="text-orange-600 text-xs leading-tight pl-2 mt-0.5 italic">✎ {item.customNote}</p>
           )}
-          <p className="text-teal-600 font-bold text-xs tabular-nums mt-0.5">
-            {formatARS(unitTotal)} × {item.quantity} = {formatARS(unitTotal * item.quantity)}
+          <p className="font-bold text-xs tabular-nums mt-0.5">
+            {item.is_bonus ? (
+              <span className="text-yellow-600">
+                <span className="line-through text-gray-400 mr-1">{formatARS(unitTotal)}</span>GRATIS
+              </span>
+            ) : (
+              <span className="text-teal-600">
+                {formatARS(displayUnitTotal)} × {item.quantity} = {formatARS(displayUnitTotal * item.quantity)}
+              </span>
+            )}
           </p>
         </div>
         <div className="flex items-center gap-0.5 shrink-0 mt-0.5">
+          {/* Bonus toggle button */}
+          {item.is_bonus ? (
+            <button
+              onClick={() => onUnbonus && onUnbonus(item.uid)}
+              className="w-6 h-6 rounded-md bg-yellow-400 hover:bg-yellow-500 active:scale-90 flex items-center justify-center text-white font-black text-xs transition-all"
+              aria-label="Quitar bonificación"
+              title="Quitar bonificación"
+            >
+              ★
+            </button>
+          ) : (
+            <button
+              onClick={() => onBonusClick && onBonusClick(item.uid)}
+              className="w-6 h-6 rounded-md bg-gray-200 hover:bg-yellow-300 active:scale-90 flex items-center justify-center text-gray-500 hover:text-yellow-700 font-black text-xs transition-all"
+              aria-label="Bonificar item"
+              title="Bonificar item (gratis)"
+            >
+              ★
+            </button>
+          )}
           <button
             onClick={() => setNoteOpen((o) => !o)}
             className={`w-6 h-6 rounded-md flex items-center justify-center text-xs transition-all active:scale-90 ${
@@ -1983,6 +2102,8 @@ function TicketPanel({
   onPersonsChange,
   onActivePersonChange,
   onOpenConfirm,
+  onBonusClick,
+  onUnbonus,
 }: {
   items: TicketItem[]
   diningOption: DiningOption
@@ -1995,11 +2116,15 @@ function TicketPanel({
   onPersonsChange: (v: number) => void
   onActivePersonChange: (v: number) => void
   onOpenConfirm: () => void
+  onBonusClick?: (uid: string) => void
+  onUnbonus?: (uid: string) => void
 }) {
   const total = items.reduce((s, i) => {
+    if (i.is_bonus) return s   // bonificados no suman
     const modExtra = (i.modifiers ?? []).reduce((ms, m) => ms + m.price, 0)
     return s + (i.price + modExtra) * i.quantity
   }, 0)
+  const bonusCount = items.filter((i) => i.is_bonus).length
   const isEmpty = items.length === 0
   const itemCount = items.reduce((s, i) => s + i.quantity, 0)
 
@@ -2011,7 +2136,9 @@ function TicketPanel({
       <div className="px-4 py-3 bg-teal-600 shrink-0">
         <h2 className="text-white font-black text-lg leading-none">Ticket</h2>
         {!isEmpty && (
-          <p className="text-teal-100 text-xs mt-0.5">{itemCount} items</p>
+          <p className="text-teal-100 text-xs mt-0.5">
+            {itemCount} items{bonusCount > 0 && ` · ${bonusCount} bonificado${bonusCount !== 1 ? 's' : ''}`}
+          </p>
         )}
       </div>
 
@@ -2091,6 +2218,7 @@ function TicketPanel({
               const personItems = items.filter((it) => it.person_number === p)
               if (personItems.length === 0) return null
               const personTotal = personItems.reduce((s, it) => {
+                if (it.is_bonus) return s
                 const modExtra = (it.modifiers ?? []).reduce((ms, m) => ms + m.price, 0)
                 return s + (it.price + modExtra) * it.quantity
               }, 0)
@@ -2102,7 +2230,15 @@ function TicketPanel({
                   </div>
                   <ul className="flex flex-col gap-1">
                     {personItems.map((item) => (
-                      <TicketItemRow key={item.uid} item={item} onUpdateQty={onUpdateQty} onRemove={onRemove} onUpdateNote={onUpdateNote} />
+                      <TicketItemRow
+                        key={item.uid}
+                        item={item}
+                        onUpdateQty={onUpdateQty}
+                        onRemove={onRemove}
+                        onUpdateNote={onUpdateNote}
+                        onBonusClick={onBonusClick}
+                        onUnbonus={onUnbonus}
+                      />
                     ))}
                   </ul>
                 </div>
@@ -2113,7 +2249,15 @@ function TicketPanel({
           // Single-person view: flat list (unchanged)
           <ul className="flex flex-col gap-1">
             {items.map((item) => (
-              <TicketItemRow key={item.uid} item={item} onUpdateQty={onUpdateQty} onRemove={onRemove} onUpdateNote={onUpdateNote} />
+              <TicketItemRow
+                key={item.uid}
+                item={item}
+                onUpdateQty={onUpdateQty}
+                onRemove={onRemove}
+                onUpdateNote={onUpdateNote}
+                onBonusClick={onBonusClick}
+                onUnbonus={onUnbonus}
+              />
             ))}
           </ul>
         )}
@@ -2424,11 +2568,57 @@ export default function POSPage() {
     setTicketItems((prev) => prev.map((i) => i.uid === uid ? { ...i, customNote: note } : i))
   }, [])
 
+  // ─── Bonus state ──────────────────────────────────────────────────────────────
+  const [bonusReasons, setBonusReasons] = useState<BonusReason[]>([])
+  const [bonusModalUid, setBonusModalUid] = useState<string | null>(null)
+
+  useEffect(() => {
+    fetch('/api/admin/bonus-reasons')
+      .then((r) => r.ok ? r.json() : [])
+      .then((data) => setBonusReasons(Array.isArray(data) ? data : []))
+      .catch(() => {})
+  }, [])
+
+  const handleBonusClick = useCallback((uid: string) => {
+    setBonusModalUid(uid)
+  }, [])
+
+  const handleBonusSelect = useCallback((reason: BonusReason) => {
+    setTicketItems((prev) => prev.map((item) => {
+      if (item.uid !== bonusModalUid) return item
+      const modExtra = (item.modifiers ?? []).reduce((ms, m) => ms + m.price, 0)
+      return {
+        ...item,
+        is_bonus: true,
+        bonus_reason: reason.name,
+        original_price: item.price + modExtra,
+        price: 0,
+      }
+    }))
+    setBonusModalUid(null)
+  }, [bonusModalUid])
+
+  const handleUnbonus = useCallback((uid: string) => {
+    setTicketItems((prev) => prev.map((item) => {
+      if (item.uid !== uid || !item.is_bonus) return item
+      // Restore original price
+      const restoredPrice = item.original_price ?? item.price
+      return {
+        ...item,
+        is_bonus: false,
+        bonus_reason: null,
+        price: restoredPrice,
+        original_price: undefined,
+      }
+    }))
+  }, [])
+
   const handleSubmit = useCallback(async () => {
     if (ticketItems.length === 0) return
     setSubmitting(true)
     try {
       const total = ticketItems.reduce((s, i) => {
+        if (i.is_bonus) return s
         const modExtra = (i.modifiers ?? []).reduce((ms, m) => ms + m.price, 0)
         return s + (i.price + modExtra) * i.quantity
       }, 0)
@@ -2440,13 +2630,19 @@ export default function POSPage() {
         const line_note = modNote && customNote
           ? `${modNote} · ${customNote}`
           : modNote ?? customNote
+        const modExtra = (item.modifiers ?? []).reduce((s, m) => s + m.price, 0)
         return {
           menu_item_id: item.menu_item_id,
           name: item.name,
           quantity: item.quantity,
-          price: item.price + (item.modifiers ?? []).reduce((s, m) => s + m.price, 0),
+          price: item.is_bonus ? 0 : item.price + modExtra,
           line_note,
           ...(persons > 1 && item.person_number ? { person_number: item.person_number } : {}),
+          ...(item.is_bonus ? {
+            is_bonus: true,
+            bonus_reason: item.bonus_reason ?? null,
+            original_price: item.original_price ?? (item.price + modExtra),
+          } : {}),
         }
       })
 
@@ -2804,10 +3000,22 @@ export default function POSPage() {
               onPersonsChange={setPersons}
               onActivePersonChange={setActivePerson}
               onOpenConfirm={() => setShowConfirmModal(true)}
+              onBonusClick={handleBonusClick}
+              onUnbonus={handleUnbonus}
             />
           )}
         </aside>
       </div>
+
+      {/* ── Bonus Modal ── */}
+      {bonusModalUid && (
+        <BonusModal
+          itemName={ticketItems.find((i) => i.uid === bonusModalUid)?.name ?? ''}
+          reasons={bonusReasons}
+          onSelect={handleBonusSelect}
+          onCancel={() => setBonusModalUid(null)}
+        />
+      )}
 
       {/* ── Modifier Modal ── */}
       {pendingItem && (
