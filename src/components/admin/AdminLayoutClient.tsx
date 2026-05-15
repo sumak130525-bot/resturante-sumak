@@ -71,7 +71,7 @@ function Sidebar({ active, user, onLogout, collapsed, onToggle }: SidebarProps) 
       </div>
 
       {/* Nav */}
-      <nav className={cn('flex-1 space-y-1', collapsed ? 'p-2' : 'p-4')}>
+      <nav className={cn('flex-1 space-y-1 overflow-y-auto', collapsed ? 'p-2' : 'p-4')}>
         {NAV_ITEMS.map(({ href, label, icon: Icon, key }) => (
           <a
             key={key}
