@@ -48,6 +48,11 @@ interface MenuItem {
   category?: string | null
 }
 
+interface IngredientCategory {
+  id: string
+  name: string
+}
+
 // ──────────────────────────────────────────────
 // Helpers
 // ──────────────────────────────────────────────
@@ -118,6 +123,11 @@ export default function InvoiceScanPage() {
   // Map: row index → selected menu_item_id ('' = no link)
   const [menuLinks, setMenuLinks] = useState<Record<number, string>>({})
 
+  // Ingredient categories for the category dropdown
+  const [ingredientCategories, setIngredientCategories] = useState<IngredientCategory[]>([])
+  // Map: row index → selected category_id ('' = no category)
+  const [categoryLinks, setCategoryLinks] = useState<Record<number, string>>({})
+
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   // Fetch menu_items once on mount
@@ -135,6 +145,16 @@ export default function InvoiceScanPage() {
       .catch(() => {/* non-critical, silently ignore */})
   }, [])
 
+  // Fetch ingredient categories once on mount
+  useEffect(() => {
+    fetch('/api/admin/ingredient-categories')
+      .then((r) => r.json())
+      .then((data: unknown) => {
+        if (Array.isArray(data)) setIngredientCategories(data as IngredientCategory[])
+      })
+      .catch(() => {/* non-critical */})
+  }, [])
+
   const handleFile = useCallback((file: File) => {
     if (!file.type.startsWith('image/')) {
       setScanError('Solo se aceptan imágenes (JPG, PNG, WEBP, etc.)')
@@ -147,6 +167,7 @@ export default function InvoiceScanPage() {
     setScanError(null)
     setSaveError(null)
     setMenuLinks({})
+    setCategoryLinks({})
   }, [])
 
   const handleDrop = useCallback((e: React.DragEvent) => {
@@ -164,6 +185,7 @@ export default function InvoiceScanPage() {
     setSaveResults(null)
     setSaveError(null)
     setMenuLinks({})
+    setCategoryLinks({})
 
     try {
       const base64 = await fileToBase64(imageFile)
@@ -216,6 +238,15 @@ export default function InvoiceScanPage() {
       })
       return next
     })
+    setCategoryLinks((prev) => {
+      const next: Record<number, string> = {}
+      Object.entries(prev).forEach(([k, v]) => {
+        const ki = Number(k)
+        if (ki < idx) next[ki] = v
+        else if (ki > idx) next[ki - 1] = v
+      })
+      return next
+    })
   }
 
   const addItem = () => {
@@ -247,6 +278,7 @@ export default function InvoiceScanPage() {
         const nameLower = item.name.trim().toLowerCase()
         const unitPrice = item.unit_price ?? (item.total && item.quantity ? item.total / item.quantity : null)
         const selectedMenuItemId = menuLinks[idx] || null
+        const selectedCategoryId = categoryLinks[idx] || null
 
         // Match by exact name only (no fuzzy)
         const existing = existingIngredients.find((ing) => ing.name.toLowerCase() === nameLower)
@@ -257,6 +289,7 @@ export default function InvoiceScanPage() {
           const putBody: Record<string, unknown> = { id: existing.id }
           if (unitPrice !== null) putBody.price_per_unit = unitPrice
           if (selectedMenuItemId) putBody.menu_item_id = selectedMenuItemId
+          if (selectedCategoryId) putBody.category_id = selectedCategoryId
 
           const putRes = await fetch('/api/admin/ingredients', {
             method: 'PUT',
@@ -282,6 +315,7 @@ export default function InvoiceScanPage() {
             price_per_unit: unitPrice ?? 0,
           }
           if (selectedMenuItemId) createBody.menu_item_id = selectedMenuItemId
+          if (selectedCategoryId) createBody.category_id = selectedCategoryId
 
           const createRes = await fetch('/api/admin/ingredients', {
             method: 'POST',
@@ -334,6 +368,7 @@ export default function InvoiceScanPage() {
     setScanError(null)
     setSaveError(null)
     setMenuLinks({})
+    setCategoryLinks({})
   }
 
   const created = saveResults?.filter((r) => r.action === 'created').length ?? 0
@@ -555,6 +590,7 @@ export default function InvoiceScanPage() {
                         <th className="text-left p-3 text-xs font-semibold text-gray-500 uppercase tracking-wide w-24">P. Unit.</th>
                         <th className="text-left p-3 text-xs font-semibold text-gray-500 uppercase tracking-wide w-24">Total</th>
                         <th className="text-left p-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Producto del menú</th>
+                        <th className="text-left p-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Categoría</th>
                         <th className="p-3 w-10" />
                       </tr>
                     </thead>
@@ -621,6 +657,20 @@ export default function InvoiceScanPage() {
                               </span>
                             )}
                           </td>
+                          {ingredientCategories.length > 0 && (
+                            <td className="p-3 min-w-[150px]">
+                              <select
+                                className="w-full text-sm bg-white border border-gray-200 hover:border-indigo-300 focus:border-indigo-500 focus:outline-none rounded-lg px-2 py-1 transition-colors"
+                                value={categoryLinks[idx] ?? ''}
+                                onChange={(e) => setCategoryLinks((prev) => ({ ...prev, [idx]: e.target.value }))}
+                              >
+                                <option value="">— Sin categoría —</option>
+                                {ingredientCategories.map((cat) => (
+                                  <option key={cat.id} value={cat.id}>{cat.name}</option>
+                                ))}
+                              </select>
+                            </td>
+                          )}
                           <td className="p-3">
                             <button
                               onClick={() => removeItem(idx)}

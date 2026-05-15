@@ -58,14 +58,14 @@ async function linkIngredientToMenuItem(
   }
 }
 
-// GET: list all ingredients
+// GET: list all ingredients with their category (left join ingredient_categories)
 export async function GET() {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const db = await getUntypedClient(true) as any
 
   const { data, error } = await db
     .from('ingredients')
-    .select('*')
+    .select('*, ingredient_categories(id, name)')
     .order('name')
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })

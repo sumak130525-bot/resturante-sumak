@@ -12,11 +12,21 @@ import {
   SlidersHorizontal,
   History,
   ArrowLeft,
+  Tag,
+  Pencil,
+  Trash2,
+  Plus,
 } from 'lucide-react'
 
 // ──────────────────────────────────────────────
 // Types
 // ──────────────────────────────────────────────
+interface IngredientCategory {
+  id: string
+  name: string
+  created_at: string
+}
+
 interface InventoryItem {
   ingredient_id: string
   name: string
@@ -35,6 +45,8 @@ interface InventoryItem {
     created_at: string
   } | null
   inventory_id: string | null
+  category_id?: string | null
+  ingredient_categories?: { id: string; name: string } | null
 }
 
 interface Movement {
@@ -343,15 +355,223 @@ function HistoryPanel({
 }
 
 // ──────────────────────────────────────────────
+// Manage Categories Modal
+// ──────────────────────────────────────────────
+function ManageCategoriesModal({
+  categories,
+  onClose,
+  onChanged,
+}: {
+  categories: IngredientCategory[]
+  onClose: () => void
+  onChanged: () => void
+}) {
+  const [list, setList] = useState<IngredientCategory[]>(categories)
+  const [newName, setNewName] = useState('')
+  const [editId, setEditId] = useState<string | null>(null)
+  const [editName, setEditName] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const handleCreate = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!newName.trim()) return
+    setSaving(true)
+    setError(null)
+    try {
+      const res = await fetch('/api/admin/ingredient-categories', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: newName.trim() }),
+      })
+      if (!res.ok) {
+        const d = await res.json()
+        setError(d.error ?? 'Error al crear')
+        return
+      }
+      const created = await res.json()
+      setList((prev) => [...prev, created].sort((a, b) => a.name.localeCompare(b.name, 'es')))
+      setNewName('')
+      onChanged()
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleEdit = async (id: string) => {
+    if (!editName.trim()) return
+    setSaving(true)
+    setError(null)
+    try {
+      const res = await fetch('/api/admin/ingredient-categories', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, name: editName.trim() }),
+      })
+      if (!res.ok) {
+        const d = await res.json()
+        setError(d.error ?? 'Error al actualizar')
+        return
+      }
+      const updated = await res.json()
+      setList((prev) => prev.map((c) => c.id === id ? updated : c).sort((a, b) => a.name.localeCompare(b.name, 'es')))
+      setEditId(null)
+      setEditName('')
+      onChanged()
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleDelete = async (id: string, name: string) => {
+    if (!confirm(`¿Eliminar la categoría "${name}"? Los ingredientes quedarán sin categoría.`)) return
+    setSaving(true)
+    setError(null)
+    try {
+      const res = await fetch('/api/admin/ingredient-categories', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id }),
+      })
+      if (!res.ok) {
+        const d = await res.json()
+        setError(d.error ?? 'Error al eliminar')
+        return
+      }
+      setList((prev) => prev.filter((c) => c.id !== id))
+      onChanged()
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[80vh] flex flex-col">
+        <div className="flex items-center justify-between p-5 border-b border-gray-100 flex-shrink-0">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 bg-indigo-100 rounded-lg flex items-center justify-center">
+              <Tag size={15} className="text-indigo-600" />
+            </div>
+            <h2 className="font-semibold text-gray-900">Categorías de Ingredientes</h2>
+          </div>
+          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
+            <X size={16} />
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-5 space-y-3">
+          {error && (
+            <div className="bg-red-50 text-red-700 text-sm px-3 py-2 rounded-lg border border-red-100">
+              {error}
+            </div>
+          )}
+
+          {/* Create new */}
+          <form onSubmit={handleCreate} className="flex gap-2">
+            <input
+              className="flex-1 border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
+              placeholder="Nueva categoría..."
+              value={newName}
+              onChange={(e) => setNewName(e.target.value)}
+            />
+            <button
+              type="submit"
+              disabled={saving || !newName.trim()}
+              className="px-3 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-medium transition-colors flex items-center gap-1.5 disabled:opacity-50"
+            >
+              <Plus size={14} />
+              Crear
+            </button>
+          </form>
+
+          {/* List */}
+          {list.length === 0 ? (
+            <p className="text-sm text-gray-400 text-center py-6">Sin categorías aún</p>
+          ) : (
+            <div className="divide-y divide-gray-50 border border-gray-100 rounded-xl overflow-hidden">
+              {list.map((cat) => (
+                <div key={cat.id} className="flex items-center gap-2 p-3 hover:bg-gray-50 transition-colors">
+                  {editId === cat.id ? (
+                    <>
+                      <input
+                        className="flex-1 border border-indigo-300 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                        value={editName}
+                        onChange={(e) => setEditName(e.target.value)}
+                        autoFocus
+                        onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleEdit(cat.id) } if (e.key === 'Escape') { setEditId(null) } }}
+                      />
+                      <button
+                        onClick={() => handleEdit(cat.id)}
+                        disabled={saving}
+                        className="p-1.5 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
+                      >
+                        <Save size={13} />
+                      </button>
+                      <button
+                        onClick={() => setEditId(null)}
+                        className="p-1.5 text-gray-400 hover:bg-gray-100 rounded-lg transition-colors"
+                      >
+                        <X size={13} />
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <span className="flex-1 text-sm text-gray-800">{cat.name}</span>
+                      <button
+                        onClick={() => { setEditId(cat.id); setEditName(cat.name) }}
+                        className="p-1.5 text-gray-400 hover:bg-indigo-50 hover:text-indigo-600 rounded-lg transition-colors"
+                      >
+                        <Pencil size={13} />
+                      </button>
+                      <button
+                        onClick={() => handleDelete(cat.id, cat.name)}
+                        disabled={saving}
+                        className="p-1.5 text-gray-400 hover:bg-red-50 hover:text-red-600 rounded-lg transition-colors"
+                      >
+                        <Trash2 size={13} />
+                      </button>
+                    </>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div className="p-4 border-t border-gray-100 flex-shrink-0">
+          <button
+            onClick={onClose}
+            className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors"
+          >
+            Cerrar
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ──────────────────────────────────────────────
 // Main Page
 // ──────────────────────────────────────────────
 export default function InventoryPage() {
   const [items, setItems] = useState<InventoryItem[]>([])
   const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState<FilterType>('all')
+  const [categoryFilter, setCategoryFilter] = useState<string>('all')
   const [modal, setModal] = useState<'purchase' | 'adjustment' | null>(null)
   const [modalSelectedId, setModalSelectedId] = useState<string | undefined>()
   const [historyItem, setHistoryItem] = useState<InventoryItem | null>(null)
+  const [showManageCategories, setShowManageCategories] = useState(false)
+
+  // Ingredient categories
+  const [categories, setCategories] = useState<IngredientCategory[]>([])
+
+  const fetchCategories = useCallback(async () => {
+    const res = await fetch('/api/admin/ingredient-categories')
+    if (res.ok) setCategories(await res.json())
+  }, [])
 
   const fetchInventory = useCallback(async () => {
     setLoading(true)
@@ -363,17 +583,37 @@ export default function InventoryPage() {
     }
   }, [])
 
-  useEffect(() => { fetchInventory() }, [fetchInventory])
+  useEffect(() => {
+    fetchInventory()
+    fetchCategories()
+  }, [fetchInventory, fetchCategories])
 
   const criticalItems = items.filter((i) => i.status === 'critical')
   const lowItems = items.filter((i) => i.status === 'low')
 
   const filtered = items.filter((i) => {
-    if (filter === 'all') return true
-    if (filter === 'low') return i.status === 'low'
-    if (filter === 'critical') return i.status === 'critical'
-    return true
+    const statusOk =
+      filter === 'all' ? true :
+      filter === 'low' ? i.status === 'low' :
+      filter === 'critical' ? i.status === 'critical' :
+      true
+
+    const catOk =
+      categoryFilter === 'all' ? true :
+      categoryFilter === 'none' ? !i.category_id :
+      i.category_id === categoryFilter
+
+    return statusOk && catOk
   })
+
+  const getCategoryName = (item: InventoryItem) => {
+    if (item.ingredient_categories?.name) return item.ingredient_categories.name
+    if (item.category_id) {
+      const cat = categories.find((c) => c.id === item.category_id)
+      return cat?.name ?? 'Sin categoría'
+    }
+    return 'Sin categoría'
+  }
 
   return (
     <AdminLayoutClient active="inventory">
@@ -386,6 +626,13 @@ export default function InventoryPage() {
             <p className="text-gray-500 text-sm mt-1">Control de stock de ingredientes en tiempo real</p>
           </div>
           <div className="flex items-center gap-2 flex-wrap">
+            <button
+              onClick={() => setShowManageCategories(true)}
+              className="flex items-center gap-2 px-4 py-2.5 bg-white border border-gray-200 hover:bg-gray-50 text-gray-700 rounded-xl text-sm font-medium transition-colors shadow-sm"
+            >
+              <Tag size={15} />
+              Categorías
+            </button>
             <button
               onClick={() => { setModalSelectedId(undefined); setModal('purchase') }}
               className="flex items-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-medium transition-colors shadow-sm"
@@ -439,25 +686,46 @@ export default function InventoryPage() {
           </div>
         )}
 
-        {/* Filters */}
-        <div className="flex items-center gap-1 bg-gray-100 p-1 rounded-xl w-fit mb-6">
-          {([
-            { key: 'all', label: `Todos (${items.length})` },
-            { key: 'low', label: `Bajo (${lowItems.length})` },
-            { key: 'critical', label: `Critico (${criticalItems.length})` },
-          ] as { key: FilterType; label: string }[]).map(({ key, label }) => (
-            <button
-              key={key}
-              onClick={() => setFilter(key)}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                filter === key
-                  ? 'bg-white text-gray-900 shadow-sm'
-                  : 'text-gray-500 hover:text-gray-700'
-              }`}
-            >
-              {label}
-            </button>
-          ))}
+        {/* Filters row */}
+        <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 mb-6">
+          {/* Status filter */}
+          <div className="flex items-center gap-1 bg-gray-100 p-1 rounded-xl w-fit">
+            {([
+              { key: 'all', label: `Todos (${items.length})` },
+              { key: 'low', label: `Bajo (${lowItems.length})` },
+              { key: 'critical', label: `Critico (${criticalItems.length})` },
+            ] as { key: FilterType; label: string }[]).map(({ key, label }) => (
+              <button
+                key={key}
+                onClick={() => setFilter(key)}
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                  filter === key
+                    ? 'bg-white text-gray-900 shadow-sm'
+                    : 'text-gray-500 hover:text-gray-700'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+
+          {/* Category filter */}
+          {categories.length > 0 && (
+            <div className="flex items-center gap-2">
+              <Tag size={14} className="text-gray-400 flex-shrink-0" />
+              <select
+                className="border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400 bg-white"
+                value={categoryFilter}
+                onChange={(e) => setCategoryFilter(e.target.value)}
+              >
+                <option value="all">Todas las categorías</option>
+                <option value="none">Sin categoría</option>
+                {categories.map((cat) => (
+                  <option key={cat.id} value={cat.id}>{cat.name}</option>
+                ))}
+              </select>
+            </div>
+          )}
         </div>
 
         {/* Table */}
@@ -480,6 +748,7 @@ export default function InventoryPage() {
                 <thead>
                   <tr className="bg-gray-50 border-b border-gray-100">
                     <th className="text-left p-4 text-xs font-semibold text-gray-500 uppercase tracking-wide">Ingrediente</th>
+                    <th className="text-left p-4 text-xs font-semibold text-gray-500 uppercase tracking-wide">Categoría</th>
                     <th className="text-left p-4 text-xs font-semibold text-gray-500 uppercase tracking-wide">Stock</th>
                     <th className="text-left p-4 text-xs font-semibold text-gray-500 uppercase tracking-wide w-48">Nivel</th>
                     <th className="text-left p-4 text-xs font-semibold text-gray-500 uppercase tracking-wide">Min.</th>
@@ -500,6 +769,11 @@ export default function InventoryPage() {
                         <td className="p-4">
                           <p className="font-semibold text-gray-800">{item.name}</p>
                           <p className="text-xs text-gray-400">{item.unit}</p>
+                        </td>
+                        <td className="p-4">
+                          <span className="text-xs px-2 py-1 rounded-lg bg-indigo-50 text-indigo-700 font-medium">
+                            {getCategoryName(item)}
+                          </span>
                         </td>
                         <td className="p-4">
                           <span className={`font-bold text-base ${
@@ -584,6 +858,9 @@ export default function InventoryPage() {
                       <div>
                         <p className="font-semibold text-gray-800">{item.name}</p>
                         <p className="text-xs text-gray-400">{item.unit}</p>
+                        <span className="inline-block mt-1 text-xs px-2 py-0.5 rounded-lg bg-indigo-50 text-indigo-700 font-medium">
+                          {getCategoryName(item)}
+                        </span>
                       </div>
                       <span className={`text-xs px-2.5 py-1 rounded-full font-semibold ${statusBadge(item.status)}`}>
                         {statusLabel(item.status)}
@@ -646,6 +923,15 @@ export default function InventoryPage() {
         <HistoryPanel
           item={historyItem}
           onClose={() => setHistoryItem(null)}
+        />
+      )}
+
+      {/* Manage categories modal */}
+      {showManageCategories && (
+        <ManageCategoriesModal
+          categories={categories}
+          onClose={() => setShowManageCategories(false)}
+          onChanged={fetchCategories}
         />
       )}
     </AdminLayoutClient>
