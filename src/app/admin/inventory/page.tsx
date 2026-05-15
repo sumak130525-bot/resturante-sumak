@@ -16,6 +16,7 @@ import {
   Pencil,
   Trash2,
   Plus,
+  Check,
 } from 'lucide-react'
 
 // ──────────────────────────────────────────────
@@ -568,6 +569,10 @@ export default function InventoryPage() {
   // Ingredient categories
   const [categories, setCategories] = useState<IngredientCategory[]>([])
 
+  // Category inline edit state
+  const [savingCategoryId, setSavingCategoryId] = useState<string | null>(null)
+  const [savedCategoryId, setSavedCategoryId] = useState<string | null>(null)
+
   const fetchCategories = useCallback(async () => {
     const res = await fetch('/api/admin/ingredient-categories')
     if (res.ok) setCategories(await res.json())
@@ -613,6 +618,62 @@ export default function InventoryPage() {
       return cat?.name ?? 'Sin categoría'
     }
     return 'Sin categoría'
+  }
+
+  const handleCategoryChange = async (item: InventoryItem, newCategoryId: string) => {
+    const prevCategoryId = item.category_id ?? null
+    const prevCategoryName = item.ingredient_categories ?? null
+
+    // Optimistically update local state
+    setItems((prev) =>
+      prev.map((i) =>
+        i.ingredient_id === item.ingredient_id
+          ? {
+              ...i,
+              category_id: newCategoryId || null,
+              ingredient_categories: newCategoryId
+                ? (categories.find((c) => c.id === newCategoryId) ?? null)
+                : null,
+            }
+          : i
+      )
+    )
+
+    setSavingCategoryId(item.ingredient_id)
+    try {
+      const res = await fetch('/api/admin/ingredients', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: item.ingredient_id,
+          category_id: newCategoryId || null,
+        }),
+      })
+      if (!res.ok) {
+        // Revert on failure
+        setItems((prev) =>
+          prev.map((i) =>
+            i.ingredient_id === item.ingredient_id
+              ? { ...i, category_id: prevCategoryId, ingredient_categories: prevCategoryName }
+              : i
+          )
+        )
+      } else {
+        setSavedCategoryId(item.ingredient_id)
+        setTimeout(() => setSavedCategoryId(null), 1500)
+      }
+    } catch {
+      // Revert on error
+      setItems((prev) =>
+        prev.map((i) =>
+          i.ingredient_id === item.ingredient_id
+            ? { ...i, category_id: prevCategoryId, ingredient_categories: prevCategoryName }
+            : i
+        )
+      )
+    } finally {
+      setSavingCategoryId(null)
+    }
   }
 
   return (
@@ -770,10 +831,23 @@ export default function InventoryPage() {
                           <p className="font-semibold text-gray-800">{item.name}</p>
                           <p className="text-xs text-gray-400">{item.unit}</p>
                         </td>
-                        <td className="p-4">
-                          <span className="text-xs px-2 py-1 rounded-lg bg-indigo-50 text-indigo-700 font-medium">
-                            {getCategoryName(item)}
-                          </span>
+                        <td className="p-4" onClick={(e) => e.stopPropagation()}>
+                          <div className="flex items-center gap-1.5">
+                            <select
+                              className="text-xs px-2 py-1 rounded-lg bg-indigo-50 text-indigo-700 font-medium border border-indigo-100 focus:outline-none focus:ring-2 focus:ring-indigo-400 cursor-pointer disabled:opacity-60"
+                              value={item.category_id ?? ''}
+                              disabled={savingCategoryId === item.ingredient_id}
+                              onChange={(e) => handleCategoryChange(item, e.target.value)}
+                            >
+                              <option value="">Sin categoría</option>
+                              {categories.map((cat) => (
+                                <option key={cat.id} value={cat.id}>{cat.name}</option>
+                              ))}
+                            </select>
+                            {savedCategoryId === item.ingredient_id && (
+                              <Check size={13} className="text-emerald-500 flex-shrink-0" />
+                            )}
+                          </div>
                         </td>
                         <td className="p-4">
                           <span className={`font-bold text-base ${
@@ -858,9 +932,22 @@ export default function InventoryPage() {
                       <div>
                         <p className="font-semibold text-gray-800">{item.name}</p>
                         <p className="text-xs text-gray-400">{item.unit}</p>
-                        <span className="inline-block mt-1 text-xs px-2 py-0.5 rounded-lg bg-indigo-50 text-indigo-700 font-medium">
-                          {getCategoryName(item)}
-                        </span>
+                        <div className="flex items-center gap-1 mt-1" onClick={(e) => e.stopPropagation()}>
+                          <select
+                            className="text-xs px-2 py-0.5 rounded-lg bg-indigo-50 text-indigo-700 font-medium border border-indigo-100 focus:outline-none focus:ring-2 focus:ring-indigo-400 cursor-pointer disabled:opacity-60"
+                            value={item.category_id ?? ''}
+                            disabled={savingCategoryId === item.ingredient_id}
+                            onChange={(e) => handleCategoryChange(item, e.target.value)}
+                          >
+                            <option value="">Sin categoría</option>
+                            {categories.map((cat) => (
+                              <option key={cat.id} value={cat.id}>{cat.name}</option>
+                            ))}
+                          </select>
+                          {savedCategoryId === item.ingredient_id && (
+                            <Check size={12} className="text-emerald-500 flex-shrink-0" />
+                          )}
+                        </div>
                       </div>
                       <span className={`text-xs px-2.5 py-1 rounded-full font-semibold ${statusBadge(item.status)}`}>
                         {statusLabel(item.status)}
