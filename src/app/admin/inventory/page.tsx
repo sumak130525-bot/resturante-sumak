@@ -101,6 +101,343 @@ function progressColor(status: InventoryItem['status']) {
 }
 
 // ──────────────────────────────────────────────
+// Manual Purchase Modal (no invoice)
+// ──────────────────────────────────────────────
+function ManualPurchaseModal({
+  items,
+  categories,
+  onClose,
+  onSaved,
+}: {
+  items: InventoryItem[]
+  categories: IngredientCategory[]
+  onClose: () => void
+  onSaved: () => void
+}) {
+  const [mode, setMode] = useState<'existing' | 'new'>('existing')
+  // existing
+  const [ingredientId, setIngredientId] = useState('')
+  // new ingredient fields
+  const [newName, setNewName] = useState('')
+  const [newUnit, setNewUnit] = useState('')
+  // common fields
+  const [quantity, setQuantity] = useState('')
+  const [unitPrice, setUnitPrice] = useState('')
+  const [supplier, setSupplier] = useState('')
+  const [categoryId, setCategoryId] = useState('')
+  const [notes, setNotes] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [success, setSuccess] = useState(false)
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (mode === 'existing' && !ingredientId) { setError('Selecciona un ingrediente'); return }
+    if (mode === 'new' && !newName.trim()) { setError('Ingresa el nombre del ingrediente'); return }
+    if (mode === 'new' && !newUnit.trim()) { setError('Ingresa la unidad (ej: kg, L, u)'); return }
+    if (!quantity || Number(quantity) <= 0) { setError('Ingresa una cantidad válida'); return }
+
+    setSaving(true)
+    setError(null)
+
+    try {
+      let finalIngredientId = ingredientId
+
+      // 1. Create ingredient if new
+      if (mode === 'new') {
+        const createBody: Record<string, unknown> = {
+          name: newName.trim(),
+          unit: newUnit.trim(),
+        }
+        if (unitPrice) createBody.price_per_unit = Number(unitPrice)
+        if (supplier) createBody.supplier = supplier.trim()
+        if (categoryId) createBody.category_id = categoryId
+
+        const createRes = await fetch('/api/admin/ingredients', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(createBody),
+        })
+        if (!createRes.ok) {
+          const d = await createRes.json()
+          setError(d.error ?? 'Error al crear el ingrediente')
+          return
+        }
+        const created = await createRes.json()
+        finalIngredientId = created.id
+      } else {
+        // 2. Update price_per_unit on existing ingredient if provided
+        const updateBody: Record<string, unknown> = { id: finalIngredientId }
+        if (unitPrice) updateBody.price_per_unit = Number(unitPrice)
+        if (supplier) updateBody.supplier = supplier.trim()
+        if (categoryId) updateBody.category_id = categoryId
+
+        if (unitPrice || supplier || categoryId) {
+          const updateRes = await fetch('/api/admin/ingredients', {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(updateBody),
+          })
+          if (!updateRes.ok) {
+            const d = await updateRes.json()
+            setError(d.error ?? 'Error al actualizar el ingrediente')
+            return
+          }
+        }
+      }
+
+      // 3. Create inventory movement (purchase) — also updates stock
+      const movRes = await fetch('/api/admin/inventory', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ingredient_id: finalIngredientId,
+          type: 'purchase',
+          quantity: Number(quantity),
+          price: unitPrice ? Number(unitPrice) * Number(quantity) : undefined,
+          notes: notes.trim() || undefined,
+        }),
+      })
+      if (!movRes.ok) {
+        const d = await movRes.json()
+        setError(d.error ?? 'Error al registrar el movimiento')
+        return
+      }
+
+      setSuccess(true)
+      onSaved()
+      setTimeout(() => {
+        setSuccess(false)
+        // Reset form
+        setMode('existing')
+        setIngredientId('')
+        setNewName('')
+        setNewUnit('')
+        setQuantity('')
+        setUnitPrice('')
+        setSupplier('')
+        setCategoryId('')
+        setNotes('')
+      }, 1200)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] flex flex-col">
+        {/* Header */}
+        <div className="flex items-center justify-between p-6 border-b border-gray-100 flex-shrink-0">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 bg-emerald-100 rounded-lg flex items-center justify-center">
+              <Plus size={16} className="text-emerald-600" />
+            </div>
+            <div>
+              <h2 className="font-semibold text-gray-900">Agregar compra</h2>
+              <p className="text-xs text-gray-400">Ingreso manual sin factura</p>
+            </div>
+          </div>
+          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
+            <X size={16} />
+          </button>
+        </div>
+
+        {/* Form */}
+        <div className="flex-1 overflow-y-auto">
+          <form id="manual-purchase-form" onSubmit={handleSubmit} className="p-6 space-y-4">
+            {error && (
+              <div className="bg-red-50 text-red-700 text-sm px-3 py-2 rounded-lg border border-red-100">
+                {error}
+              </div>
+            )}
+            {success && (
+              <div className="bg-emerald-50 text-emerald-700 text-sm px-3 py-2 rounded-lg border border-emerald-100 flex items-center gap-2">
+                <Check size={14} />
+                Compra registrada exitosamente
+              </div>
+            )}
+
+            {/* Ingredient toggle */}
+            <div>
+              <label className="block text-xs font-medium text-gray-500 mb-2">Ingrediente *</label>
+              <div className="flex gap-1 bg-gray-100 p-1 rounded-xl mb-3 w-fit">
+                <button
+                  type="button"
+                  onClick={() => setMode('existing')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${mode === 'existing' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                >
+                  Existente
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setMode('new')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${mode === 'new' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
+                >
+                  Nuevo ingrediente
+                </button>
+              </div>
+
+              {mode === 'existing' ? (
+                <select
+                  className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400"
+                  value={ingredientId}
+                  onChange={(e) => setIngredientId(e.target.value)}
+                  required
+                >
+                  <option value="">Seleccionar ingrediente...</option>
+                  {items.map((i) => (
+                    <option key={i.ingredient_id} value={i.ingredient_id}>
+                      {i.name} ({i.unit}) — Stock: {i.stock}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="col-span-2">
+                    <input
+                      className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400"
+                      placeholder="Nombre del ingrediente *"
+                      value={newName}
+                      onChange={(e) => setNewName(e.target.value)}
+                      required={mode === 'new'}
+                    />
+                  </div>
+                  <div>
+                    <input
+                      className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400"
+                      placeholder="Unidad (kg, L, u...) *"
+                      value={newUnit}
+                      onChange={(e) => setNewUnit(e.target.value)}
+                      required={mode === 'new'}
+                    />
+                  </div>
+                  <div>
+                    <select
+                      className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400"
+                      value={categoryId}
+                      onChange={(e) => setCategoryId(e.target.value)}
+                    >
+                      <option value="">Sin categoría</option>
+                      {categories.map((cat) => (
+                        <option key={cat.id} value={cat.id}>{cat.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Quantity + Unit price */}
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1">Cantidad comprada *</label>
+                <input
+                  type="number"
+                  min="0.001"
+                  step="0.001"
+                  className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400"
+                  placeholder="0"
+                  value={quantity}
+                  onChange={(e) => setQuantity(e.target.value)}
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1">Precio unitario (opcional)</label>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400"
+                  placeholder="0.00"
+                  value={unitPrice}
+                  onChange={(e) => setUnitPrice(e.target.value)}
+                />
+              </div>
+            </div>
+
+            {/* Supplier */}
+            <div>
+              <label className="block text-xs font-medium text-gray-500 mb-1">Proveedor (opcional)</label>
+              <input
+                className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400"
+                placeholder="Ej: verdulero del barrio, mercado central..."
+                value={supplier}
+                onChange={(e) => setSupplier(e.target.value)}
+              />
+            </div>
+
+            {/* Category for existing ingredient */}
+            {mode === 'existing' && (
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1">Categoría (opcional — actualiza el ingrediente)</label>
+                <select
+                  className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400"
+                  value={categoryId}
+                  onChange={(e) => setCategoryId(e.target.value)}
+                >
+                  <option value="">Sin cambios</option>
+                  {categories.map((cat) => (
+                    <option key={cat.id} value={cat.id}>{cat.name}</option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {/* Notes */}
+            <div>
+              <label className="block text-xs font-medium text-gray-500 mb-1">Nota (opcional)</label>
+              <input
+                className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400"
+                placeholder="Ej: compra en efectivo al verdulero"
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+              />
+            </div>
+
+            {/* Total preview */}
+            {quantity && unitPrice && (
+              <div className="bg-emerald-50 border border-emerald-100 rounded-xl px-4 py-3 text-sm text-emerald-700 flex items-center justify-between">
+                <span>Total estimado</span>
+                <span className="font-bold">
+                  ${(Number(quantity) * Number(unitPrice)).toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                </span>
+              </div>
+            )}
+          </form>
+        </div>
+
+        {/* Footer */}
+        <div className="p-6 border-t border-gray-100 flex gap-3 flex-shrink-0">
+          <button
+            type="button"
+            onClick={onClose}
+            className="flex-1 px-4 py-2.5 border border-gray-200 rounded-xl text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors"
+          >
+            Cancelar
+          </button>
+          <button
+            type="submit"
+            form="manual-purchase-form"
+            disabled={saving || success}
+            className="flex-1 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-sm font-medium transition-colors flex items-center justify-center gap-2 disabled:opacity-60"
+          >
+            {saving ? (
+              <span>Guardando...</span>
+            ) : success ? (
+              <><Check size={14} /> Guardado</>
+            ) : (
+              <><Save size={14} /> Guardar compra</>
+            )}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ──────────────────────────────────────────────
 // Purchase / Adjustment Modal
 // ──────────────────────────────────────────────
 function StockModal({
@@ -565,6 +902,7 @@ export default function InventoryPage() {
   const [modalSelectedId, setModalSelectedId] = useState<string | undefined>()
   const [historyItem, setHistoryItem] = useState<InventoryItem | null>(null)
   const [showManageCategories, setShowManageCategories] = useState(false)
+  const [showManualPurchase, setShowManualPurchase] = useState(false)
 
   // Ingredient categories
   const [categories, setCategories] = useState<IngredientCategory[]>([])
@@ -693,6 +1031,13 @@ export default function InventoryPage() {
             >
               <Tag size={15} />
               Categorías
+            </button>
+            <button
+              onClick={() => setShowManualPurchase(true)}
+              className="flex items-center gap-2 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-sm font-medium transition-colors shadow-sm"
+            >
+              <Plus size={15} />
+              Agregar compra
             </button>
             <button
               onClick={() => { setModalSelectedId(undefined); setModal('purchase') }}
@@ -993,6 +1338,16 @@ export default function InventoryPage() {
           </div>
         )}
       </div>
+
+      {/* Manual Purchase Modal */}
+      {showManualPurchase && (
+        <ManualPurchaseModal
+          items={items}
+          categories={categories}
+          onClose={() => setShowManualPurchase(false)}
+          onSaved={fetchInventory}
+        />
+      )}
 
       {/* Purchase / Adjustment Modal */}
       {modal && (
