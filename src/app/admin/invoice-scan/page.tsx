@@ -581,14 +581,14 @@ export default function InvoiceScanPage() {
 
                 {/* Items table */}
                 <div className="overflow-x-auto">
-                  <table className="w-full min-w-[800px] text-sm">
+                  <table className="w-full min-w-[1200px] text-sm">
                     <thead>
                       <tr className="border-b border-gray-100">
                         <th className="text-left p-3 text-xs font-semibold text-gray-500 uppercase tracking-wide min-w-[200px]">Producto</th>
                         <th className="text-left p-3 text-xs font-semibold text-gray-500 uppercase tracking-wide w-24">Cant.</th>
                         <th className="text-left p-3 text-xs font-semibold text-gray-500 uppercase tracking-wide w-24">Unidad</th>
-                        <th className="text-left p-3 text-xs font-semibold text-gray-500 uppercase tracking-wide w-32">P. Unit.</th>
-                        <th className="text-left p-3 text-xs font-semibold text-gray-500 uppercase tracking-wide w-32">Total</th>
+                        <th className="text-right p-3 text-xs font-semibold text-gray-500 uppercase tracking-wide w-36">P. Unit.</th>
+                        <th className="text-right p-3 text-xs font-semibold text-gray-500 uppercase tracking-wide w-36">Total</th>
                         <th className="text-left p-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Producto del menú</th>
                         <th className="text-left p-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Categoría</th>
                         <th className="p-3 w-10" />
