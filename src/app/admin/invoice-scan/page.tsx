@@ -288,9 +288,9 @@ export default function InvoiceScanPage() {
     const results: SaveResult[] = []
 
     try {
-      // 1. Fetch existing ingredients
+      // 1. Fetch existing ingredients (now includes linked_menu_item_id via recipe_items)
       const ingRes = await fetch('/api/admin/ingredients')
-      const existingIngredients: { id: string; name: string; unit: string; price_per_unit?: number }[] =
+      const existingIngredients: { id: string; name: string; unit: string; price_per_unit?: number; linked_menu_item_id?: string | null }[] =
         ingRes.ok ? await ingRes.json() : []
 
       for (let idx = 0; idx < invoiceData.items.length; idx++) {
@@ -302,8 +302,12 @@ export default function InvoiceScanPage() {
         const selectedMenuItemId = menuLinks[idx] || null
         const selectedCategoryId = categoryLinks[idx] || null
 
-        // Match by exact name only (no fuzzy)
-        const existing = existingIngredients.find((ing) => ing.name.toLowerCase() === nameLower)
+        // Match priority: 1) by linked menu_item_id (user dropdown), 2) by exact name
+        const existing =
+          (selectedMenuItemId
+            ? existingIngredients.find((ing) => ing.linked_menu_item_id === selectedMenuItemId)
+            : undefined) ??
+          existingIngredients.find((ing) => ing.name.toLowerCase() === nameLower)
 
         let ingredientId: string
 

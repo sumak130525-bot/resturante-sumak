@@ -58,18 +58,30 @@ async function linkIngredientToMenuItem(
   }
 }
 
-// GET: list all ingredients with their category (left join ingredient_categories)
+// GET: list all ingredients with their category and linked menu_item_id (via recipe_items)
 export async function GET() {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const db = await getUntypedClient(true) as any
 
   const { data, error } = await db
     .from('ingredients')
-    .select('*, ingredient_categories(id, name)')
+    .select('*, ingredient_categories(id, name), recipe_items(menu_item_id)')
     .order('name')
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json(data)
+
+  // Flatten: expose the first linked menu_item_id directly on the ingredient object
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const normalized = (data ?? []).map((ing: any) => {
+    const firstLink = Array.isArray(ing.recipe_items) && ing.recipe_items.length > 0
+      ? ing.recipe_items[0].menu_item_id
+      : null
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { recipe_items, ...rest } = ing
+    return { ...rest, linked_menu_item_id: firstLink }
+  })
+
+  return NextResponse.json(normalized)
 }
 
 // POST: create ingredient (optionally link to menu_item if menu_item_id provided)
