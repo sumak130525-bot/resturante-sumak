@@ -51,7 +51,13 @@ export async function POST(request: NextRequest) {
       .update({ status: 'closed', closed_at: new Date().toISOString() })
       .eq('status', 'open')
 
-    // Create new shift
+    // Also close any open cash_shift to stay in sync
+    await supabase
+      .from('cash_shifts')
+      .update({ status: 'closed', closed_at: new Date().toISOString() })
+      .eq('status', 'open')
+
+    // Create new shift in 'shifts'
     const { data: shift, error } = await supabase
       .from('shifts')
       .insert({ opening_amount, status: 'open' })
@@ -59,6 +65,15 @@ export async function POST(request: NextRequest) {
       .single()
 
     if (error) throw new Error(error.message)
+
+    // Sync: create matching cash_shift with the same opening_amount
+    await supabase
+      .from('cash_shifts')
+      .insert({
+        opening_amount,
+        status: 'open',
+        opened_at: shift.opened_at,
+      })
 
     return NextResponse.json({ shift }, { status: 201 })
   } catch (err) {

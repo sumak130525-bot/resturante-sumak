@@ -138,6 +138,18 @@ export async function POST(request: NextRequest) {
 
     if (closeErr) throw new Error(closeErr.message)
 
+    // Sync: close the open cash_shift (admin/caja uses this table)
+    await supabase
+      .from('cash_shifts')
+      .update({
+        status: 'closed',
+        closed_at: closedAt,
+        closing_amount,
+        expected_amount: expectedAmount,
+        notes: notes ?? null,
+      })
+      .eq('status', 'open')
+
     return NextResponse.json({
       shift: closedShift,
       summary: {

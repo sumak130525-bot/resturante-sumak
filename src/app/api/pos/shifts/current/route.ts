@@ -50,6 +50,32 @@ export async function GET() {
       return NextResponse.json({ shift: null })
     }
 
+    if (shift) {
+      // Sync: if there is an open shift in 'shifts' but no open cash_shift, create one
+      const { data: openCashShift } = await supabase
+        .from('cash_shifts')
+        .select('id')
+        .eq('status', 'open')
+        .limit(1)
+        .single()
+
+      if (!openCashShift) {
+        // Close any stale cash_shifts first, then create a new one synced to this shift
+        await supabase
+          .from('cash_shifts')
+          .update({ status: 'closed', closed_at: new Date().toISOString() })
+          .eq('status', 'open')
+
+        await supabase
+          .from('cash_shifts')
+          .insert({
+            opening_amount: Number(shift.opening_amount),
+            status: 'open',
+            opened_at: shift.opened_at,
+          })
+      }
+    }
+
     return NextResponse.json({ shift: shift ?? null })
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Error interno'
