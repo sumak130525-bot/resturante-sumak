@@ -581,14 +581,14 @@ export default function InvoiceScanPage() {
 
                 {/* Items table */}
                 <div className="overflow-x-auto">
-                  <table className="w-full text-sm">
+                  <table className="w-full min-w-[800px] text-sm">
                     <thead>
                       <tr className="border-b border-gray-100">
-                        <th className="text-left p-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Producto</th>
-                        <th className="text-left p-3 text-xs font-semibold text-gray-500 uppercase tracking-wide w-20">Cant.</th>
-                        <th className="text-left p-3 text-xs font-semibold text-gray-500 uppercase tracking-wide w-20">Unidad</th>
-                        <th className="text-left p-3 text-xs font-semibold text-gray-500 uppercase tracking-wide w-24">P. Unit.</th>
-                        <th className="text-left p-3 text-xs font-semibold text-gray-500 uppercase tracking-wide w-24">Total</th>
+                        <th className="text-left p-3 text-xs font-semibold text-gray-500 uppercase tracking-wide min-w-[200px]">Producto</th>
+                        <th className="text-left p-3 text-xs font-semibold text-gray-500 uppercase tracking-wide w-24">Cant.</th>
+                        <th className="text-left p-3 text-xs font-semibold text-gray-500 uppercase tracking-wide w-24">Unidad</th>
+                        <th className="text-left p-3 text-xs font-semibold text-gray-500 uppercase tracking-wide w-32">P. Unit.</th>
+                        <th className="text-left p-3 text-xs font-semibold text-gray-500 uppercase tracking-wide w-32">Total</th>
                         <th className="text-left p-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Producto del menú</th>
                         <th className="text-left p-3 text-xs font-semibold text-gray-500 uppercase tracking-wide">Categoría</th>
                         <th className="p-3 w-10" />
@@ -624,7 +624,7 @@ export default function InvoiceScanPage() {
                               ))}
                             </select>
                           </td>
-                          <td className="p-3">
+                          <td className="p-3 text-right whitespace-nowrap">
                             <EditCell
                               value={item.unit_price}
                               onChange={(v) => updateItem(idx, 'unit_price', v)}
@@ -632,7 +632,7 @@ export default function InvoiceScanPage() {
                               placeholder="0.00"
                             />
                           </td>
-                          <td className="p-3">
+                          <td className="p-3 text-right whitespace-nowrap">
                             <EditCell
                               value={item.total}
                               onChange={(v) => updateItem(idx, 'total', v)}
@@ -708,7 +708,7 @@ export default function InvoiceScanPage() {
                       type="number"
                       min="0"
                       step="0.01"
-                      className="w-28 text-right font-bold text-gray-900 text-sm bg-transparent border-b border-gray-200 focus:border-indigo-500 focus:outline-none py-1"
+                      className="w-36 text-right font-bold text-gray-900 text-sm bg-transparent border-b border-gray-200 focus:border-indigo-500 focus:outline-none py-1"
                       value={invoiceData.total ?? ''}
                       onChange={(e) => setInvoiceData({ ...invoiceData, total: e.target.value === '' ? null : Number(e.target.value) })}
                       placeholder="0.00"
