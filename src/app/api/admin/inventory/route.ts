@@ -26,6 +26,9 @@ export const dynamic = 'force-dynamic'
     notes text,
     created_at timestamptz DEFAULT now()
   );
+
+  -- Agregar columna total_cost (ejecutar una sola vez si la tabla ya existe):
+  ALTER TABLE inventory_movements ADD COLUMN IF NOT EXISTS total_cost numeric DEFAULT 0;
 */
 
 async function getClient(useServiceRole = false) {
@@ -175,6 +178,7 @@ export async function POST(request: NextRequest) {
   }
 
   // Registrar movimiento
+  // total_cost = precio total de la factura/compra (no quantity * precio unitario)
   await admin
     .from('inventory_movements')
     .insert({
@@ -182,6 +186,7 @@ export async function POST(request: NextRequest) {
       type,
       quantity: Number(quantity),
       notes: notes ?? null,
+      total_cost: type === 'purchase' ? (Number(price) || 0) : 0,
     })
 
   return NextResponse.json({ success: true, stock: newStock }, { status: 201 })
