@@ -148,19 +148,19 @@ export async function GET(request: NextRequest) {
   }
 
   // 3. Costo mercadería: inventory_movements tipo 'purchase' en el período
+  // join con ingredients para obtener last_purchase_price (unit_cost no existe en inventory_movements)
   const { data: movements, error: movError } = await admin
     .from('inventory_movements')
-    .select('quantity, unit_cost')
+    .select('quantity, ingredients(last_purchase_price)')
     .eq('type', 'purchase')
     .gte('created_at', from)
     .lte('created_at', to)
 
   if (movError) return NextResponse.json({ error: movError.message }, { status: 500 })
 
-  // Some movements may store total cost in unit_cost or may have it as price
   const totalMercaderia = (movements ?? []).reduce(
-    (sum: number, m: { quantity: number; unit_cost: number }) =>
-      sum + (Number(m.unit_cost ?? 0) * Number(m.quantity ?? 0)), 0
+    (sum: number, m: { quantity: number; ingredients: { last_purchase_price: number } | null }) =>
+      sum + (Number(m.ingredients?.last_purchase_price ?? 0) * Number(m.quantity ?? 0)), 0
   )
 
   // 4. Sueldos: employee_payments en el período
@@ -214,7 +214,7 @@ export async function GET(request: NextRequest) {
         .gte('date', bucket.fromDate.slice(0, 10))
         .lte('date', bucket.toDate.slice(0, 10)),
       admin.from('inventory_movements')
-        .select('quantity, unit_cost')
+        .select('quantity, ingredients(last_purchase_price)')
         .eq('type', 'purchase')
         .gte('created_at', bucket.fromDate)
         .lte('created_at', bucket.toDate),
@@ -231,8 +231,8 @@ export async function GET(request: NextRequest) {
       (s: number, e: { amount: number }) => s + Number(e.amount), 0
     )
     const mMercaderia = (mMovements.data ?? []).reduce(
-      (s: number, m: { quantity: number; unit_cost: number }) =>
-        s + Number(m.unit_cost ?? 0) * Number(m.quantity ?? 0), 0
+      (s: number, m: { quantity: number; ingredients: { last_purchase_price: number } | null }) =>
+        s + Number(m.ingredients?.last_purchase_price ?? 0) * Number(m.quantity ?? 0), 0
     )
     const mSueldos = mPayments.error ? 0 : (mPayments.data ?? []).reduce(
       (s: number, p: { amount: number }) => s + Number(p.amount), 0
