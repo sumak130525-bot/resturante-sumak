@@ -82,17 +82,47 @@ export async function POST(request: NextRequest) {
   }
 
   const groqData = await groqRes.json()
-  const rawText: string = groqData?.choices?.[0]?.message?.content ?? ''
+
+  // Check for empty model response before accessing content
+  if (!groqData?.choices?.[0]?.message?.content) {
+    return NextResponse.json({ error: 'Respuesta vacía del modelo' }, { status: 422 })
+  }
+
+  const rawText: string = groqData.choices[0].message.content
+
+  // Always log rawText for debugging (first 500 chars)
+  console.log('OCR rawText (first 500):', rawText.slice(0, 500))
+
+  if (!rawText.trim()) {
+    return NextResponse.json({ error: 'El modelo no devolvió texto' }, { status: 422 })
+  }
 
   // Strip markdown code fences if present
   const cleaned = rawText.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim()
+
+  // Available Groq vision models (as of 2025):
+  //   - meta-llama/llama-4-scout-17b-16e-instruct  (current, multimodal)
+  //   - meta-llama/llama-4-maverick-17b-128e-instruct (larger, may be more reliable)
+  // If this model is deprecated or unavailable, check https://console.groq.com/docs/models
 
   let parsed: unknown
   try {
     parsed = JSON.parse(cleaned)
   } catch {
-    console.error('JSON parse error. Raw text:', rawText)
-    return NextResponse.json({ error: 'No se pudo parsear la respuesta de Gemini', raw: rawText }, { status: 422 })
+    // Try extracting JSON substring between first { and last }
+    const firstBrace = cleaned.indexOf('{')
+    const lastBrace = cleaned.lastIndexOf('}')
+    if (firstBrace !== -1 && lastBrace > firstBrace) {
+      try {
+        parsed = JSON.parse(cleaned.slice(firstBrace, lastBrace + 1))
+      } catch {
+        console.error('JSON parse error (fallback). Raw text:', rawText)
+        return NextResponse.json({ error: 'No se pudo parsear la respuesta del OCR', raw: rawText }, { status: 422 })
+      }
+    } else {
+      console.error('JSON parse error. Raw text:', rawText)
+      return NextResponse.json({ error: 'No se pudo parsear la respuesta del OCR', raw: rawText }, { status: 422 })
+    }
   }
 
   return NextResponse.json(parsed)
