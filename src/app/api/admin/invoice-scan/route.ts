@@ -51,7 +51,7 @@ export async function POST(request: NextRequest) {
 
   if (!base64Image) return NextResponse.json({ error: 'Imagen vacía' }, { status: 400 })
 
-  const prompt = `Analiza esta factura/ticket de compra. Extrae los datos en formato JSON exacto: {"supplier": string, "date": string, "items": [{"name": string, "quantity": number, "unit": string, "unit_price": number, "total": number}], "total": number}. Las unidades válidas son: kg, lt, unidad, g, ml, docena, caja, bolsa, paquete. Si no puedes leer algún campo pon null. Solo responde con el JSON, sin texto adicional, sin markdown, sin bloques de código.`
+  const prompt = `Analiza esta factura/ticket de compra. Extrae los datos en formato JSON exacto: {"supplier": string, "date": string, "items": [{"name": string, "quantity": number, "unit": string, "unit_price": number, "total": number}], "total": number}. Las unidades válidas son: kg, lt, unidad, g, ml, docena, caja, bolsa, paquete. IMPORTANTE: todos los valores numéricos deben ser NÚMEROS PUROS (ej: 28413.05), NUNCA expresiones matemáticas (ej: NO escribir 142065.24 / 5). Si necesitas calcular un precio unitario, calcula el resultado y pon solo el número final. Si no puedes leer algún campo pon null. Solo responde con el JSON, sin texto adicional, sin markdown, sin bloques de código.`
 
   const groqRes = await fetch(
     'https://api.groq.com/openai/v1/chat/completions',
@@ -100,6 +100,24 @@ export async function POST(request: NextRequest) {
   // Strip markdown code fences if present
   const cleaned = rawText.replace(/```json\s*/gi, '').replace(/```\s*/g, '').trim()
 
+  // Sanitize: resolve inline math expressions like "142065.24 / 5" → "28413.048"
+  // Matches number op number patterns that are NOT inside quotes
+  const sanitized = cleaned.replace(
+    /:\s*([\d.]+)\s*([*/+-])\s*([\d.]+)\s*([,}\]])/g,
+    (_, a, op, b, trail) => {
+      let result: number
+      const na = Number(a), nb = Number(b)
+      switch (op) {
+        case '/': result = nb !== 0 ? na / nb : 0; break
+        case '*': result = na * nb; break
+        case '+': result = na + nb; break
+        case '-': result = na - nb; break
+        default: result = na
+      }
+      return `: ${Math.round(result * 100) / 100}${trail}`
+    }
+  )
+
   // Available Groq vision models (as of 2025):
   //   - meta-llama/llama-4-scout-17b-16e-instruct  (current, multimodal)
   //   - meta-llama/llama-4-maverick-17b-128e-instruct (larger, may be more reliable)
@@ -107,14 +125,14 @@ export async function POST(request: NextRequest) {
 
   let parsed: unknown
   try {
-    parsed = JSON.parse(cleaned)
+    parsed = JSON.parse(sanitized)
   } catch {
     // Try extracting JSON substring between first { and last }
-    const firstBrace = cleaned.indexOf('{')
-    const lastBrace = cleaned.lastIndexOf('}')
+    const firstBrace = sanitized.indexOf('{')
+    const lastBrace = sanitized.lastIndexOf('}')
     if (firstBrace !== -1 && lastBrace > firstBrace) {
       try {
-        parsed = JSON.parse(cleaned.slice(firstBrace, lastBrace + 1))
+        parsed = JSON.parse(sanitized.slice(firstBrace, lastBrace + 1))
       } catch {
         console.error('JSON parse error (fallback). Raw text:', rawText)
         return NextResponse.json({ error: 'No se pudo parsear la respuesta del OCR', raw: rawText }, { status: 422 })
