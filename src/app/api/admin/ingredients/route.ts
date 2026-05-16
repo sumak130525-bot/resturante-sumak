@@ -154,9 +154,10 @@ export async function PUT(request: NextRequest) {
   return NextResponse.json({ ...data, linked_menu_item_id: linked ? menu_item_id : null })
 }
 
-// DELETE: remove ingredient (cascades recipe_items and inventory_movements)
+// DELETE: remove ingredient (cascades recipe_items, inventory_movements, inventory)
 export async function DELETE(request: NextRequest) {
-  const { id } = await request.json()
+  const { searchParams } = new URL(request.url)
+  const id = searchParams.get('id')
   if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 })
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -176,7 +177,14 @@ export async function DELETE(request: NextRequest) {
     .eq('ingredient_id', id)
   if (imErr) return NextResponse.json({ error: `inventory_movements: ${imErr.message}` }, { status: 500 })
 
-  // 3. Delete the ingredient itself
+  // 3. Delete inventory rows referencing this ingredient
+  const { error: invErr } = await admin
+    .from('inventory')
+    .delete()
+    .eq('ingredient_id', id)
+  if (invErr) return NextResponse.json({ error: `inventory: ${invErr.message}` }, { status: 500 })
+
+  // 4. Delete the ingredient itself
   const { error } = await admin
     .from('ingredients')
     .delete()

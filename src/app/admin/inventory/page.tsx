@@ -1014,6 +1014,17 @@ export default function InventoryPage() {
     }
   }
 
+  const handleDeleteIngredient = async (item: InventoryItem) => {
+    if (!confirm(`¿Borrar ${item.name}? Se eliminará el ingrediente y todo su historial de movimientos.`)) return
+    const res = await fetch(`/api/admin/ingredients?id=${item.ingredient_id}`, { method: 'DELETE' })
+    if (!res.ok) {
+      const d = await res.json()
+      alert(d.error ?? 'Error al borrar el ingrediente')
+      return
+    }
+    fetchInventory()
+  }
+
   return (
     <AdminLayoutClient active="inventory">
       <div className="max-w-screen-xl mx-auto">
@@ -1254,6 +1265,13 @@ export default function InventoryPage() {
                             >
                               <ChevronRight size={15} />
                             </button>
+                            <button
+                              title="Borrar ingrediente"
+                              onClick={(e) => { e.stopPropagation(); handleDeleteIngredient(item) }}
+                              className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                            >
+                              <Trash2 size={14} />
+                            </button>
                           </div>
                         </td>
                       </tr>
@@ -1329,6 +1347,12 @@ export default function InventoryPage() {
                         className="flex items-center justify-center gap-1.5 px-3 py-2 bg-gray-100 text-gray-600 rounded-lg text-xs font-medium hover:bg-gray-200 transition-colors"
                       >
                         <History size={13} />
+                      </button>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); handleDeleteIngredient(item) }}
+                        className="flex items-center justify-center gap-1.5 px-3 py-2 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg text-xs font-medium transition-colors"
+                      >
+                        <Trash2 size={13} />
                       </button>
                     </div>
                   </div>
