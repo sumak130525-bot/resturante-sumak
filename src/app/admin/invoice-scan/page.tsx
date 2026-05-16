@@ -26,6 +26,7 @@ interface InvoiceItem {
   unit: string | null
   unit_price: number | null
   total: number | null
+  units_per_box?: number
 }
 
 interface InvoiceData {
@@ -128,6 +129,9 @@ export default function InvoiceScanPage() {
   // Map: row index → selected category_id ('' = no category)
   const [categoryLinks, setCategoryLinks] = useState<Record<number, string>>({})
 
+  // Map: row index → units per box (default 1)
+  const [unitsPerBox, setUnitsPerBox] = useState<Record<number, number>>({})
+
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   // Fetch menu_items once on mount
@@ -168,6 +172,7 @@ export default function InvoiceScanPage() {
     setSaveError(null)
     setMenuLinks({})
     setCategoryLinks({})
+    setUnitsPerBox({})
   }, [])
 
   const handleDrop = useCallback((e: React.DragEvent) => {
@@ -186,6 +191,7 @@ export default function InvoiceScanPage() {
     setSaveError(null)
     setMenuLinks({})
     setCategoryLinks({})
+    setUnitsPerBox({})
 
     try {
       const base64 = await fileToBase64(imageFile)
@@ -205,6 +211,12 @@ export default function InvoiceScanPage() {
 
       // Ensure items is always an array
       if (!Array.isArray(data.items)) data.items = []
+      // Populate unitsPerBox from OCR if the field was detected
+      const initialUpb: Record<number, number> = {}
+      ;(data.items as InvoiceItem[]).forEach((item, i) => {
+        if (item.units_per_box && item.units_per_box > 1) initialUpb[i] = item.units_per_box
+      })
+      setUnitsPerBox(initialUpb)
       setInvoiceData(data)
     } catch {
       setScanError('Error de red al conectar con el servidor')
@@ -241,6 +253,15 @@ export default function InvoiceScanPage() {
     })
     setCategoryLinks((prev) => {
       const next: Record<number, string> = {}
+      Object.entries(prev).forEach(([k, v]) => {
+        const ki = Number(k)
+        if (ki < idx) next[ki] = v
+        else if (ki > idx) next[ki - 1] = v
+      })
+      return next
+    })
+    setUnitsPerBox((prev) => {
+      const next: Record<number, number> = {}
       Object.entries(prev).forEach(([k, v]) => {
         const ki = Number(k)
         if (ki < idx) next[ki] = v
@@ -338,14 +359,16 @@ export default function InvoiceScanPage() {
 
         // 2. Register purchase in inventory
         if (item.quantity !== null && item.quantity > 0) {
+          const upb = unitsPerBox[idx] ?? 1
+          const stockQty = item.quantity * upb
           await fetch('/api/admin/inventory', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               ingredient_id: ingredientId,
               type: 'purchase',
-              quantity: item.quantity,
-              price: unitPrice !== null ? unitPrice * item.quantity : (item.total ?? undefined),
+              quantity: stockQty,
+              price: item.total ?? (unitPrice !== null ? unitPrice * item.quantity : undefined),
               notes: invoiceData.supplier ? `Factura: ${invoiceData.supplier}` : 'Factura escaneada',
               date: invoiceData.date ? new Date(invoiceData.date).toISOString() : undefined,
             }),
@@ -370,6 +393,7 @@ export default function InvoiceScanPage() {
     setSaveError(null)
     setMenuLinks({})
     setCategoryLinks({})
+    setUnitsPerBox({})
   }
 
   const created = saveResults?.filter((r) => r.action === 'created').length ?? 0
@@ -582,11 +606,13 @@ export default function InvoiceScanPage() {
 
                 {/* Items table */}
                 <div className="overflow-x-auto">
-                  <table className="w-full min-w-[1200px] text-sm">
+                  <table className="w-full min-w-[1400px] text-sm">
                     <thead>
                       <tr className="border-b border-gray-100">
                         <th className="text-left p-3 text-xs font-semibold text-gray-500 uppercase tracking-wide min-w-[200px]">Producto</th>
                         <th className="text-left p-3 text-xs font-semibold text-gray-500 uppercase tracking-wide w-24">Cant.</th>
+                        <th className="text-center p-3 text-xs font-semibold text-gray-500 uppercase tracking-wide w-24">Unid/caja</th>
+                        <th className="text-center p-3 text-xs font-semibold text-gray-500 uppercase tracking-wide w-24">→ Stock</th>
                         <th className="text-left p-3 text-xs font-semibold text-gray-500 uppercase tracking-wide w-24">Unidad</th>
                         <th className="text-right p-3 text-xs font-semibold text-gray-500 uppercase tracking-wide w-36">P. Unit.</th>
                         <th className="text-right p-3 text-xs font-semibold text-gray-500 uppercase tracking-wide w-36">Total</th>
@@ -613,6 +639,30 @@ export default function InvoiceScanPage() {
                               type="number"
                               placeholder="0"
                             />
+                          </td>
+                          <td className="p-3 text-center">
+                            <input
+                              type="number"
+                              min="1"
+                              step="1"
+                              className="w-full text-center bg-transparent border-b border-transparent hover:border-indigo-300 focus:border-indigo-500 focus:outline-none text-sm py-1 transition-colors"
+                              value={unitsPerBox[idx] ?? 1}
+                              onChange={(e) => {
+                                const v = Math.max(1, parseInt(e.target.value) || 1)
+                                setUnitsPerBox((prev) => ({ ...prev, [idx]: v }))
+                              }}
+                            />
+                          </td>
+                          <td className="p-3 text-center">
+                            {(() => {
+                              const upb = unitsPerBox[idx] ?? 1
+                              const stock = item.quantity !== null ? item.quantity * upb : null
+                              return stock !== null ? (
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-700">
+                                  {stock % 1 === 0 ? stock : stock.toFixed(2)}
+                                </span>
+                              ) : <span className="text-gray-300">—</span>
+                            })()}
                           </td>
                           <td className="p-3">
                             <select
