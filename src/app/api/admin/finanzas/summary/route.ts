@@ -148,19 +148,32 @@ export async function GET(request: NextRequest) {
   }
 
   // 3. Costo mercadería: inventory_movements tipo 'purchase' en el período
-  // join con ingredients para obtener last_purchase_price (unit_cost no existe en inventory_movements)
+  // last_purchase_price está en la tabla 'inventory' (no en 'ingredients'), cruzar por ingredient_id
   const { data: movements, error: movError } = await admin
     .from('inventory_movements')
-    .select('quantity, ingredients(last_purchase_price)')
+    .select('quantity, ingredient_id')
     .eq('type', 'purchase')
     .gte('created_at', from)
     .lte('created_at', to)
 
   if (movError) return NextResponse.json({ error: movError.message }, { status: 500 })
 
+  // Obtener precios de la tabla inventory
+  const movIngredientIds = Array.from(new Set((movements ?? []).map((m: { ingredient_id: string }) => m.ingredient_id).filter(Boolean)))
+  let inventoryPriceMap: Record<string, number> = {}
+  if (movIngredientIds.length > 0) {
+    const { data: invPrices } = await admin
+      .from('inventory')
+      .select('ingredient_id, last_purchase_price')
+      .in('ingredient_id', movIngredientIds)
+    for (const row of (invPrices ?? [])) {
+      inventoryPriceMap[row.ingredient_id] = Number(row.last_purchase_price ?? 0)
+    }
+  }
+
   const totalMercaderia = (movements ?? []).reduce(
-    (sum: number, m: { quantity: number; ingredients: { last_purchase_price: number } | null }) =>
-      sum + (Number(m.ingredients?.last_purchase_price ?? 0) * Number(m.quantity ?? 0)), 0
+    (sum: number, m: { quantity: number; ingredient_id: string }) =>
+      sum + (inventoryPriceMap[m.ingredient_id] ?? 0) * Number(m.quantity ?? 0), 0
   )
 
   // 4. Sueldos: employee_payments en el período
@@ -214,7 +227,7 @@ export async function GET(request: NextRequest) {
         .gte('date', bucket.fromDate.slice(0, 10))
         .lte('date', bucket.toDate.slice(0, 10)),
       admin.from('inventory_movements')
-        .select('quantity, ingredients(last_purchase_price)')
+        .select('quantity, ingredient_id')
         .eq('type', 'purchase')
         .gte('created_at', bucket.fromDate)
         .lte('created_at', bucket.toDate),
@@ -230,9 +243,21 @@ export async function GET(request: NextRequest) {
     const mGastosManuales = (mExpenses.data ?? []).reduce(
       (s: number, e: { amount: number }) => s + Number(e.amount), 0
     )
+    // Obtener precios desde inventory para los movimientos del bucket
+    const mMovIngIds = Array.from(new Set((mMovements.data ?? []).map((m: { ingredient_id: string }) => m.ingredient_id).filter(Boolean)))
+    let mPriceMap: Record<string, number> = {}
+    if (mMovIngIds.length > 0) {
+      const { data: mInvPrices } = await admin
+        .from('inventory')
+        .select('ingredient_id, last_purchase_price')
+        .in('ingredient_id', mMovIngIds)
+      for (const row of (mInvPrices ?? [])) {
+        mPriceMap[row.ingredient_id] = Number(row.last_purchase_price ?? 0)
+      }
+    }
     const mMercaderia = (mMovements.data ?? []).reduce(
-      (s: number, m: { quantity: number; ingredients: { last_purchase_price: number } | null }) =>
-        s + Number(m.ingredients?.last_purchase_price ?? 0) * Number(m.quantity ?? 0), 0
+      (s: number, m: { quantity: number; ingredient_id: string }) =>
+        s + (mPriceMap[m.ingredient_id] ?? 0) * Number(m.quantity ?? 0), 0
     )
     const mSueldos = mPayments.error ? 0 : (mPayments.data ?? []).reduce(
       (s: number, p: { amount: number }) => s + Number(p.amount), 0
