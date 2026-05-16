@@ -28,6 +28,11 @@ interface IngredientCategory {
   created_at: string
 }
 
+interface MenuItem {
+  id: string
+  name: string
+}
+
 interface InventoryItem {
   ingredient_id: string
   name: string
@@ -106,11 +111,13 @@ function progressColor(status: InventoryItem['status']) {
 function ManualPurchaseModal({
   items,
   categories,
+  menuItems,
   onClose,
   onSaved,
 }: {
   items: InventoryItem[]
   categories: IngredientCategory[]
+  menuItems: MenuItem[]
   onClose: () => void
   onSaved: () => void
 }) {
@@ -125,6 +132,7 @@ function ManualPurchaseModal({
   const [unitPrice, setUnitPrice] = useState('')
   const [supplier, setSupplier] = useState('')
   const [categoryId, setCategoryId] = useState('')
+  const [menuItemId, setMenuItemId] = useState('')
   const [notes, setNotes] = useState('')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -152,6 +160,7 @@ function ManualPurchaseModal({
         if (unitPrice) createBody.price_per_unit = Number(unitPrice)
         if (supplier) createBody.supplier = supplier.trim()
         if (categoryId) createBody.category_id = categoryId
+        if (menuItemId) createBody.menu_item_id = menuItemId
 
         const createRes = await fetch('/api/admin/ingredients', {
           method: 'POST',
@@ -171,8 +180,9 @@ function ManualPurchaseModal({
         if (unitPrice) updateBody.price_per_unit = Number(unitPrice)
         if (supplier) updateBody.supplier = supplier.trim()
         if (categoryId) updateBody.category_id = categoryId
+        if (menuItemId) updateBody.menu_item_id = menuItemId
 
-        if (unitPrice || supplier || categoryId) {
+        if (unitPrice || supplier || categoryId || menuItemId) {
           const updateRes = await fetch('/api/admin/ingredients', {
             method: 'PUT',
             headers: { 'Content-Type': 'application/json' },
@@ -217,6 +227,7 @@ function ManualPurchaseModal({
         setUnitPrice('')
         setSupplier('')
         setCategoryId('')
+        setMenuItemId('')
         setNotes('')
       }, 1200)
     } finally {
@@ -327,6 +338,23 @@ function ManualPurchaseModal({
                 </div>
               )}
             </div>
+
+            {/* Vincular a producto del menú */}
+            {menuItems.length > 0 && (
+              <div>
+                <label className="block text-xs font-medium text-gray-500 mb-1">Vincular a producto del menú (opcional)</label>
+                <select
+                  className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400"
+                  value={menuItemId}
+                  onChange={(e) => setMenuItemId(e.target.value)}
+                >
+                  <option value="">— Sin vincular —</option>
+                  {menuItems.map((mi) => (
+                    <option key={mi.id} value={mi.id}>{mi.name}</option>
+                  ))}
+                </select>
+              </div>
+            )}
 
             {/* Quantity + Unit price */}
             <div className="grid grid-cols-2 gap-3">
@@ -907,6 +935,9 @@ export default function InventoryPage() {
   // Ingredient categories
   const [categories, setCategories] = useState<IngredientCategory[]>([])
 
+  // Menu items for manual purchase modal
+  const [menuItems, setMenuItems] = useState<MenuItem[]>([])
+
   // Category inline edit state
   const [savingCategoryId, setSavingCategoryId] = useState<string | null>(null)
   const [savedCategoryId, setSavedCategoryId] = useState<string | null>(null)
@@ -914,6 +945,21 @@ export default function InventoryPage() {
   const fetchCategories = useCallback(async () => {
     const res = await fetch('/api/admin/ingredient-categories')
     if (res.ok) setCategories(await res.json())
+  }, [])
+
+  const fetchMenuItems = useCallback(async () => {
+    try {
+      const res = await fetch('/api/admin/menu')
+      if (res.ok) {
+        const data = await res.json()
+        if (Array.isArray(data)) {
+          const sorted = (data as (MenuItem & { active?: boolean })[])
+            .filter((m) => m && m.id && m.name && m.active !== false)
+            .sort((a, b) => a.name.localeCompare(b.name, 'es'))
+          setMenuItems(sorted)
+        }
+      }
+    } catch {/* non-critical */}
   }, [])
 
   const fetchInventory = useCallback(async () => {
@@ -929,7 +975,8 @@ export default function InventoryPage() {
   useEffect(() => {
     fetchInventory()
     fetchCategories()
-  }, [fetchInventory, fetchCategories])
+    fetchMenuItems()
+  }, [fetchInventory, fetchCategories, fetchMenuItems])
 
   const criticalItems = items.filter((i) => i.status === 'critical')
   const lowItems = items.filter((i) => i.status === 'low')
@@ -1368,6 +1415,7 @@ export default function InventoryPage() {
         <ManualPurchaseModal
           items={items}
           categories={categories}
+          menuItems={menuItems}
           onClose={() => setShowManualPurchase(false)}
           onSaved={fetchInventory}
         />
