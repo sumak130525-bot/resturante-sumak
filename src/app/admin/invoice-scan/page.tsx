@@ -610,13 +610,14 @@ export default function InvoiceScanPage() {
 
                 {/* Items table */}
                 <div className="overflow-x-auto">
-                  <table className="w-full min-w-[1400px] text-sm">
+                  <table className="w-full min-w-[1600px] text-sm">
                     <thead>
                       <tr className="border-b border-gray-100">
                         <th className="text-left p-3 text-xs font-semibold text-gray-500 uppercase tracking-wide min-w-[200px]">Producto</th>
                         <th className="text-left p-3 text-xs font-semibold text-gray-500 uppercase tracking-wide w-24">Cant.</th>
                         <th className="text-center p-3 text-xs font-semibold text-gray-500 uppercase tracking-wide w-24">Unid/caja</th>
                         <th className="text-center p-3 text-xs font-semibold text-gray-500 uppercase tracking-wide w-24">→ Stock</th>
+                        <th className="text-right p-3 text-xs font-semibold text-gray-500 uppercase tracking-wide w-28">Precio/u</th>
                         <th className="text-left p-3 text-xs font-semibold text-gray-500 uppercase tracking-wide w-24">Unidad</th>
                         <th className="text-right p-3 text-xs font-semibold text-gray-500 uppercase tracking-wide w-36">P. Unit.</th>
                         <th className="text-right p-3 text-xs font-semibold text-gray-500 uppercase tracking-wide w-36">Total</th>
@@ -666,6 +667,16 @@ export default function InvoiceScanPage() {
                                   {stock % 1 === 0 ? stock : stock.toFixed(2)}
                                 </span>
                               ) : <span className="text-gray-300">—</span>
+                            })()}
+                          </td>
+                          <td className="p-3 text-right whitespace-nowrap">
+                            {(() => {
+                              const upb = unitsPerBox[idx] ?? 1
+                              const stock = item.quantity !== null ? item.quantity * upb : null
+                              const total = item.total
+                              if (!stock || !total) return <span className="text-gray-300">—</span>
+                              const pricePerUnit = total / stock
+                              return <span className="text-sm text-gray-600 font-mono">${pricePerUnit.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
                             })()}
                           </td>
                           <td className="p-3">
