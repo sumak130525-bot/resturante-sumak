@@ -198,7 +198,8 @@ export default function InvoiceScanPage() {
       const data = await res.json()
 
       if (!res.ok) {
-        setScanError(data.error ?? 'Error al escanear la factura')
+        const rawPreview = data.raw ? `\n\nRespuesta del modelo: ${String(data.raw).slice(0, 300)}` : ''
+        setScanError((data.error ?? 'Error al escanear la factura') + rawPreview)
         return
       }
 
