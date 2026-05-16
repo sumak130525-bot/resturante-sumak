@@ -59,10 +59,10 @@ export async function GET() {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const db = supabase as any
 
-  // Traer todos los ingredientes
+  // Traer todos los ingredientes (con categoría y primer menu_item vinculado)
   const { data: ingredients, error: ingError } = await db
     .from('ingredients')
-    .select('id, name, unit, category_id, ingredient_categories(id, name)')
+    .select('id, name, unit, category_id, ingredient_categories(id, name), recipe_items(menu_item_id)')
     .order('name')
 
   if (ingError) return NextResponse.json({ error: ingError.message }, { status: 500 })
@@ -90,11 +90,14 @@ export async function GET() {
     }
   }
 
-  const result = (ingredients ?? []).map((ing: { id: string; name: string; unit: string; category_id?: string; ingredient_categories?: { id: string; name: string } }) => {
+  const result = (ingredients ?? []).map((ing: { id: string; name: string; unit: string; category_id?: string; ingredient_categories?: { id: string; name: string }; recipe_items?: { menu_item_id: string }[] }) => {
     const inv = inventoryMap.get(ing.id)
     const stock = inv ? Number(inv.stock) : 0
     const min_stock = inv ? Number(inv.min_stock) : 5
     const lastMov = lastMovementMap.get(ing.id) ?? null
+    const linked_menu_item_id = ing.recipe_items && ing.recipe_items.length > 0
+      ? ing.recipe_items[0].menu_item_id
+      : null
 
     let status: 'ok' | 'low' | 'critical' = 'ok'
     if (stock === 0) status = 'critical'
@@ -106,6 +109,7 @@ export async function GET() {
       unit: ing.unit,
       category_id: ing.category_id ?? null,
       category: ing.ingredient_categories?.name ?? null,
+      linked_menu_item_id,
       stock,
       min_stock,
       status,

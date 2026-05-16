@@ -53,6 +53,7 @@ interface InventoryItem {
   inventory_id: string | null
   category_id?: string | null
   ingredient_categories?: { id: string; name: string } | null
+  linked_menu_item_id?: string | null
 }
 
 interface Movement {
@@ -942,6 +943,10 @@ export default function InventoryPage() {
   const [savingCategoryId, setSavingCategoryId] = useState<string | null>(null)
   const [savedCategoryId, setSavedCategoryId] = useState<string | null>(null)
 
+  // Menu item inline link state
+  const [savingMenuItemId, setSavingMenuItemId] = useState<string | null>(null)
+  const [savedMenuItemId, setSavedMenuItemId] = useState<string | null>(null)
+
   const fetchCategories = useCallback(async () => {
     const res = await fetch('/api/admin/ingredient-categories')
     if (res.ok) setCategories(await res.json())
@@ -1058,6 +1063,55 @@ export default function InventoryPage() {
       )
     } finally {
       setSavingCategoryId(null)
+    }
+  }
+
+  const handleMenuItemChange = async (item: InventoryItem, newMenuItemId: string) => {
+    const prevLinked = item.linked_menu_item_id ?? null
+
+    // Optimistically update local state
+    setItems((prev) =>
+      prev.map((i) =>
+        i.ingredient_id === item.ingredient_id
+          ? { ...i, linked_menu_item_id: newMenuItemId || null }
+          : i
+      )
+    )
+
+    setSavingMenuItemId(item.ingredient_id)
+    try {
+      const res = await fetch('/api/admin/ingredients', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: item.ingredient_id,
+          menu_item_id: newMenuItemId || null,
+        }),
+      })
+      if (!res.ok) {
+        // Revert on failure
+        setItems((prev) =>
+          prev.map((i) =>
+            i.ingredient_id === item.ingredient_id
+              ? { ...i, linked_menu_item_id: prevLinked }
+              : i
+          )
+        )
+      } else {
+        setSavedMenuItemId(item.ingredient_id)
+        setTimeout(() => setSavedMenuItemId(null), 1500)
+      }
+    } catch {
+      // Revert on error
+      setItems((prev) =>
+        prev.map((i) =>
+          i.ingredient_id === item.ingredient_id
+            ? { ...i, linked_menu_item_id: prevLinked }
+            : i
+        )
+      )
+    } finally {
+      setSavingMenuItemId(null)
     }
   }
 
@@ -1213,6 +1267,7 @@ export default function InventoryPage() {
                   <tr className="bg-gray-50 border-b border-gray-100">
                     <th className="text-left p-4 text-xs font-semibold text-gray-500 uppercase tracking-wide">Ingrediente</th>
                     <th className="text-left p-4 text-xs font-semibold text-gray-500 uppercase tracking-wide">Categoría</th>
+                    <th className="text-left p-4 text-xs font-semibold text-gray-500 uppercase tracking-wide">Vinculado a</th>
                     <th className="text-left p-4 text-xs font-semibold text-gray-500 uppercase tracking-wide">Stock</th>
                     <th className="text-left p-4 text-xs font-semibold text-gray-500 uppercase tracking-wide w-48">Nivel</th>
                     <th className="text-left p-4 text-xs font-semibold text-gray-500 uppercase tracking-wide">Min.</th>
@@ -1248,6 +1303,24 @@ export default function InventoryPage() {
                               ))}
                             </select>
                             {savedCategoryId === item.ingredient_id && (
+                              <Check size={13} className="text-emerald-500 flex-shrink-0" />
+                            )}
+                          </div>
+                        </td>
+                        <td className="p-4" onClick={(e) => e.stopPropagation()}>
+                          <div className="flex items-center gap-1.5">
+                            <select
+                              className="text-xs px-2 py-1 rounded-lg bg-emerald-50 text-emerald-700 font-medium border border-emerald-100 focus:outline-none focus:ring-2 focus:ring-emerald-400 cursor-pointer disabled:opacity-60"
+                              value={item.linked_menu_item_id ?? ''}
+                              disabled={savingMenuItemId === item.ingredient_id}
+                              onChange={(e) => handleMenuItemChange(item, e.target.value)}
+                            >
+                              <option value="">— Sin vincular —</option>
+                              {menuItems.map((mi) => (
+                                <option key={mi.id} value={mi.id}>{mi.name}</option>
+                              ))}
+                            </select>
+                            {savedMenuItemId === item.ingredient_id && (
                               <Check size={13} className="text-emerald-500 flex-shrink-0" />
                             )}
                           </div>
@@ -1355,6 +1428,22 @@ export default function InventoryPage() {
                             ))}
                           </select>
                           {savedCategoryId === item.ingredient_id && (
+                            <Check size={12} className="text-emerald-500 flex-shrink-0" />
+                          )}
+                        </div>
+                        <div className="flex items-center gap-1 mt-1" onClick={(e) => e.stopPropagation()}>
+                          <select
+                            className="text-xs px-2 py-0.5 rounded-lg bg-emerald-50 text-emerald-700 font-medium border border-emerald-100 focus:outline-none focus:ring-2 focus:ring-emerald-400 cursor-pointer disabled:opacity-60"
+                            value={item.linked_menu_item_id ?? ''}
+                            disabled={savingMenuItemId === item.ingredient_id}
+                            onChange={(e) => handleMenuItemChange(item, e.target.value)}
+                          >
+                            <option value="">— Sin vincular —</option>
+                            {menuItems.map((mi) => (
+                              <option key={mi.id} value={mi.id}>{mi.name}</option>
+                            ))}
+                          </select>
+                          {savedMenuItemId === item.ingredient_id && (
                             <Check size={12} className="text-emerald-500 flex-shrink-0" />
                           )}
                         </div>
