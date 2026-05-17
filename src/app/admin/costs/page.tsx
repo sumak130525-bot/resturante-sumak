@@ -422,6 +422,12 @@ export default function CostsPage() {
   const [ingredientsLoading, setIngredientsLoading] = useState(true)
   const [editIngredient, setEditIngredient] = useState<Partial<Ingredient> | null | undefined>(undefined) // undefined = closed
 
+  // Inline price edit state
+  const [editingPriceId, setEditingPriceId] = useState<string | null>(null)
+  const [editingPriceValue, setEditingPriceValue] = useState<string>('')
+  const [savingPriceId, setSavingPriceId] = useState<string | null>(null)
+  const [savedPriceId, setSavedPriceId] = useState<string | null>(null)
+
   // Costs state
   const [costs, setCosts] = useState<CostRow[]>([])
   const [costsLoading, setCostsLoading] = useState(true)
@@ -474,6 +480,39 @@ export default function CostsPage() {
       body: JSON.stringify({ id }),
     })
     await fetchIngredients()
+  }
+
+  // Inline price save
+  const savePriceInline = async (ing: Ingredient, rawValue: string) => {
+    const newPrice = parseFloat(rawValue)
+    if (isNaN(newPrice) || newPrice === ing.price_per_unit) {
+      setEditingPriceId(null)
+      return
+    }
+    setSavingPriceId(ing.id)
+    setEditingPriceId(null)
+    try {
+      const res = await fetch('/api/admin/ingredients', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: ing.id, price_per_unit: newPrice }),
+      })
+      if (!res.ok) {
+        const err = await res.json()
+        alert(err.error)
+        return
+      }
+      // Optimistic update
+      setIngredients((prev) =>
+        prev.map((i) => (i.id === ing.id ? { ...i, price_per_unit: newPrice } : i))
+      )
+      setSavedPriceId(ing.id)
+      setTimeout(() => setSavedPriceId(null), 1500)
+      // Refresh costs tab since price affects dish margins
+      fetchCosts()
+    } finally {
+      setSavingPriceId(null)
+    }
   }
 
   // Open plate cost modal: fetch current recipe
@@ -601,7 +640,38 @@ export default function CostsPage() {
                             <td className="p-4 text-gray-500">
                               <span className="bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full text-xs font-medium">{ing.unit}</span>
                             </td>
-                            <td className="p-4 text-right font-semibold text-indigo-600">{formatPrice(ing.price_per_unit)}</td>
+                            <td className="p-4 text-right">
+                              {editingPriceId === ing.id ? (
+                                <input
+                                  type="number"
+                                  min="0"
+                                  step="0.01"
+                                  autoFocus
+                                  className="border border-indigo-400 rounded-lg px-2 py-0.5 text-sm text-right w-24 focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                                  value={editingPriceValue}
+                                  onChange={(e) => setEditingPriceValue(e.target.value)}
+                                  onBlur={() => savePriceInline(ing, editingPriceValue)}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter') e.currentTarget.blur()
+                                    if (e.key === 'Escape') { setEditingPriceId(null) }
+                                  }}
+                                />
+                              ) : (
+                                <button
+                                  onClick={() => { setEditingPriceId(ing.id); setEditingPriceValue(String(ing.price_per_unit)) }}
+                                  className={`font-semibold transition-colors ${
+                                    savedPriceId === ing.id
+                                      ? 'text-emerald-600'
+                                      : savingPriceId === ing.id
+                                        ? 'text-gray-400'
+                                        : 'text-indigo-600 hover:text-indigo-800'
+                                  }`}
+                                  title="Click para editar precio"
+                                >
+                                  {savingPriceId === ing.id ? '...' : formatPrice(ing.price_per_unit)}
+                                </button>
+                              )}
+                            </td>
                             <td className="p-4 text-gray-400 text-sm hidden md:table-cell">{ing.supplier ?? '—'}</td>
                             <td className="p-4">
                               <div className="flex items-center justify-end gap-2">
