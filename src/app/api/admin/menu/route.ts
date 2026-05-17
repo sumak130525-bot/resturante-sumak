@@ -60,6 +60,39 @@ export async function POST(request: NextRequest) {
     .single()
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+  // Auto-vincula el nuevo producto al inventario: crea un ingrediente, su registro de stock
+  // y un recipe_item que conecta el menu_item con el ingrediente (quantity=1 unidad).
+  try {
+    const { data: ingredient, error: ingError } = await admin
+      .from('ingredients')
+      .insert({ name: data.name, unit: 'unidad' })
+      .select()
+      .single()
+
+    if (ingError) {
+      console.error('[menu POST] Error al crear ingrediente automático:', ingError.message)
+    } else {
+      const { error: invError } = await admin
+        .from('inventory')
+        .insert({ ingredient_id: ingredient.id, current_stock: 0, min_stock: 0, last_purchase_price: 0 })
+
+      if (invError) {
+        console.error('[menu POST] Error al crear registro de inventario automático:', invError.message)
+      }
+
+      const { error: recipeError } = await admin
+        .from('recipe_items')
+        .insert({ menu_item_id: data.id, ingredient_id: ingredient.id, quantity_needed: 1 })
+
+      if (recipeError) {
+        console.error('[menu POST] Error al crear recipe_item automático:', recipeError.message)
+      }
+    }
+  } catch (autoLinkError) {
+    console.error('[menu POST] Error inesperado en auto-vinculación de inventario:', autoLinkError)
+  }
+
   return NextResponse.json(data, { status: 201 })
 }
 
