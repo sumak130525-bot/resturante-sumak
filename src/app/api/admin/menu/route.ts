@@ -118,6 +118,33 @@ export async function PUT(request: NextRequest) {
     .single()
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+  // Si el nombre cambió, sincronizar el ingrediente vinculado en inventario
+  if (updates.name) {
+    try {
+      const { data: recipeItem, error: riError } = await admin
+        .from('recipe_items')
+        .select('ingredient_id')
+        .eq('menu_item_id', id)
+        .single()
+
+      if (riError) {
+        console.error('[menu PUT] Error al buscar recipe_item para sincronizar nombre:', riError.message)
+      } else if (recipeItem?.ingredient_id) {
+        const { error: ingUpdateError } = await admin
+          .from('ingredients')
+          .update({ name: updates.name })
+          .eq('id', recipeItem.ingredient_id)
+
+        if (ingUpdateError) {
+          console.error('[menu PUT] Error al sincronizar nombre del ingrediente:', ingUpdateError.message)
+        }
+      }
+    } catch (syncError) {
+      console.error('[menu PUT] Error inesperado al sincronizar nombre del ingrediente:', syncError)
+    }
+  }
+
   return NextResponse.json(data)
 }
 
