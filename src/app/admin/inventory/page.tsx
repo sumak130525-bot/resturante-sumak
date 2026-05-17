@@ -947,6 +947,12 @@ export default function InventoryPage() {
   const [savingMenuItemId, setSavingMenuItemId] = useState<string | null>(null)
   const [savedMenuItemId, setSavedMenuItemId] = useState<string | null>(null)
 
+  // Stock inline edit state
+  const [editingStockId, setEditingStockId] = useState<string | null>(null)
+  const [editingStockValue, setEditingStockValue] = useState<string>('')
+  const [savingStockId, setSavingStockId] = useState<string | null>(null)
+  const [savedStockId, setSavedStockId] = useState<string | null>(null)
+
   const fetchCategories = useCallback(async () => {
     const res = await fetch('/api/admin/ingredient-categories')
     if (res.ok) setCategories(await res.json())
@@ -1112,6 +1118,39 @@ export default function InventoryPage() {
       )
     } finally {
       setSavingMenuItemId(null)
+    }
+  }
+
+  const handleStockSave = async (item: InventoryItem, rawValue: string) => {
+    const newStock = parseFloat(rawValue)
+    if (isNaN(newStock) || newStock < 0) {
+      setEditingStockId(null)
+      return
+    }
+    if (newStock === item.stock) {
+      setEditingStockId(null)
+      return
+    }
+    setEditingStockId(null)
+    setSavingStockId(item.ingredient_id)
+    try {
+      const res = await fetch('/api/admin/inventory', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ingredient_id: item.ingredient_id,
+          type: 'adjustment',
+          quantity: newStock,
+          notes: 'Ajuste manual de stock',
+        }),
+      })
+      if (res.ok) {
+        setSavedStockId(item.ingredient_id)
+        setTimeout(() => setSavedStockId(null), 1500)
+        await fetchInventory()
+      }
+    } finally {
+      setSavingStockId(null)
     }
   }
 
@@ -1325,14 +1364,39 @@ export default function InventoryPage() {
                             )}
                           </div>
                         </td>
-                        <td className="p-4">
-                          <span className={`font-bold text-base ${
-                            item.status === 'critical' ? 'text-red-600' :
-                            item.status === 'low' ? 'text-amber-600' :
-                            'text-gray-900'
-                          }`}>
-                            {item.stock}
-                          </span>
+                        <td className="p-4" onClick={(e) => e.stopPropagation()}>
+                          {editingStockId === item.ingredient_id ? (
+                            <input
+                              type="number"
+                              min="0"
+                              step="0.001"
+                              autoFocus
+                              className={`w-20 text-center font-bold text-base border rounded-lg px-1 py-0.5 focus:outline-none focus:border-emerald-400 bg-transparent ${
+                                item.status === 'critical' ? 'text-red-600' :
+                                item.status === 'low' ? 'text-amber-600' :
+                                'text-gray-900'
+                              }`}
+                              value={editingStockValue}
+                              onChange={(e) => setEditingStockValue(e.target.value)}
+                              onBlur={() => handleStockSave(item, editingStockValue)}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') { e.preventDefault(); handleStockSave(item, editingStockValue) }
+                                if (e.key === 'Escape') { setEditingStockId(null) }
+                              }}
+                            />
+                          ) : (
+                            <button
+                              className={`font-bold text-base text-left border border-transparent rounded-lg px-1 py-0.5 hover:border-emerald-300 transition-colors ${
+                                item.status === 'critical' ? 'text-red-600' :
+                                item.status === 'low' ? 'text-amber-600' :
+                                'text-gray-900'
+                              } ${savingStockId === item.ingredient_id ? 'opacity-50' : ''} ${savedStockId === item.ingredient_id ? 'bg-emerald-50' : ''}`}
+                              title="Click para editar stock"
+                              onClick={() => { setEditingStockId(item.ingredient_id); setEditingStockValue(String(item.stock)) }}
+                            >
+                              {item.stock}
+                            </button>
+                          )}
                           <span className="text-gray-400 text-xs ml-1">{item.unit}</span>
                         </td>
                         <td className="p-4">
@@ -1452,11 +1516,37 @@ export default function InventoryPage() {
                         {statusLabel(item.status)}
                       </span>
                     </div>
-                    <div className="flex items-center gap-3 mb-2">
-                      <span className={`font-bold text-lg ${
-                        item.status === 'critical' ? 'text-red-600' :
-                        item.status === 'low' ? 'text-amber-600' : 'text-gray-900'
-                      }`}>{item.stock}</span>
+                    <div className="flex items-center gap-3 mb-2" onClick={(e) => e.stopPropagation()}>
+                      {editingStockId === item.ingredient_id ? (
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.001"
+                          autoFocus
+                          className={`w-20 text-center font-bold text-lg border rounded-lg px-1 py-0.5 focus:outline-none focus:border-emerald-400 bg-transparent ${
+                            item.status === 'critical' ? 'text-red-600' :
+                            item.status === 'low' ? 'text-amber-600' : 'text-gray-900'
+                          }`}
+                          value={editingStockValue}
+                          onChange={(e) => setEditingStockValue(e.target.value)}
+                          onBlur={() => handleStockSave(item, editingStockValue)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') { e.preventDefault(); handleStockSave(item, editingStockValue) }
+                            if (e.key === 'Escape') { setEditingStockId(null) }
+                          }}
+                        />
+                      ) : (
+                        <button
+                          className={`font-bold text-lg border border-transparent rounded-lg px-1 py-0.5 hover:border-emerald-300 transition-colors ${
+                            item.status === 'critical' ? 'text-red-600' :
+                            item.status === 'low' ? 'text-amber-600' : 'text-gray-900'
+                          } ${savingStockId === item.ingredient_id ? 'opacity-50' : ''} ${savedStockId === item.ingredient_id ? 'bg-emerald-50' : ''}`}
+                          title="Click para editar stock"
+                          onClick={() => { setEditingStockId(item.ingredient_id); setEditingStockValue(String(item.stock)) }}
+                        >
+                          {item.stock}
+                        </button>
+                      )}
                       <div className="flex-1 bg-gray-100 rounded-full h-2 overflow-hidden">
                         <div
                           className={`h-2 rounded-full ${progressColor(item.status)}`}
