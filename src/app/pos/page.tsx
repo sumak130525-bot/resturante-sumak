@@ -2381,7 +2381,7 @@ function printAdvancePOS(payment: POSPayment, empName: string, empRole: string) 
 </body>
 </html>`
   sessionStorage.setItem('pos_receipt_html', html)
-  window.location.href = '/pos/receipt'
+  window.open('/pos/receipt', '_blank')
 }
 
 function EmployeePOSModal({ onClose }: { onClose: () => void }) {
