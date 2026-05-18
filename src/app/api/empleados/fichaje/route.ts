@@ -73,9 +73,8 @@ export async function GET(req: NextRequest) {
 
 // POST /api/empleados/fichaje — registrar entrada o salida
 // body: { employee_id, action: 'entrada' | 'salida' }
+// No requiere auth — la verificación de identidad se hace por PIN en el frontend
 export async function POST(req: NextRequest) {
-  const user = await requireAuth()
-  if (!user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
 
   const { employee_id, action } = await req.json()
   if (!employee_id || !action) {
