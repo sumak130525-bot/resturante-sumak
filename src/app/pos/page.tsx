@@ -2380,12 +2380,8 @@ function printAdvancePOS(payment: POSPayment, empName: string, empRole: string) 
   <div class="firma">Firma del empleado</div>
 </body>
 </html>`
-  const win = window.open('', '_blank', 'width=400,height=600')
-  if (win) {
-    win.document.write(html)
-    win.document.close()
-    win.onload = () => { win.focus(); win.print() }
-  }
+  sessionStorage.setItem('pos_receipt_html', html)
+  window.open('/pos/receipt', '_blank')
 }
 
 function EmployeePOSModal({ onClose }: { onClose: () => void }) {
