@@ -1360,7 +1360,7 @@ function POSDishCard({
             ? 'opacity-50 cursor-not-allowed'
             : 'cursor-pointer active:scale-95 hover:ring-2 hover:ring-sumak-gold'
       } ${pressed ? 'scale-95 brightness-90' : ''} ${isDragging ? 'opacity-40 scale-95' : ''}`}
-      style={{ touchAction: 'none' }}
+      style={{ touchAction: isDragging ? 'none' : 'auto' }}
     >
       {/* Image */}
       {item.image_url ? (
