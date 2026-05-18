@@ -930,6 +930,26 @@ function TabEmpleados({
 
 // ─── Tab: Historial de Horas ──────────────────────────────────────────────────
 
+// Helper: converts "HH:MM" + date string (YYYY-MM-DD) to UTC ISO using Argentina timezone
+function buildArgIso(date: string, time: string): string {
+  // date = "YYYY-MM-DD", time = "HH:MM"
+  // Argentina is UTC-3 always (no DST)
+  const [h, m] = time.split(':').map(Number)
+  const utcMs = new Date(`${date}T00:00:00Z`).getTime() + (h * 60 + m) * 60 * 1000 + 3 * 60 * 60 * 1000
+  return new Date(utcMs).toISOString()
+}
+
+// Helper: extracts "HH:MM" from UTC ISO in Argentina timezone
+function toArgHHMM(utcIso: string): string {
+  const d = new Date(utcIso)
+  return d.toLocaleTimeString('es-AR', {
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false,
+    timeZone: ARG_TZ,
+  })
+}
+
 function TabHistorial({ employees }: { employees: Employee[] }) {
   const [selectedEmployee, setSelectedEmployee] = useState<string>('')
   const [from, setFrom] = useState(firstDayOfMonthArg())
@@ -939,6 +959,16 @@ function TabHistorial({ employees }: { employees: Employee[] }) {
   const [totalAmount, setTotalAmount] = useState(0)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  // Edit state
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [editClockIn, setEditClockIn] = useState('')
+  const [editClockOut, setEditClockOut] = useState('')
+  const [editSaving, setEditSaving] = useState(false)
+  const [editError, setEditError] = useState<string | null>(null)
+
+  // Delete state
+  const [deletingId, setDeletingId] = useState<string | null>(null)
 
   const fetchHistorial = useCallback(async () => {
     if (!selectedEmployee) return
@@ -961,6 +991,59 @@ function TabHistorial({ employees }: { employees: Employee[] }) {
   useEffect(() => { fetchHistorial() }, [fetchHistorial])
 
   const selectedEmp = employees.find((e) => e.id === selectedEmployee)
+
+  const startEdit = (entry: TimeEntry) => {
+    setEditingId(entry.id)
+    setEditClockIn(toArgHHMM(entry.clock_in))
+    setEditClockOut(entry.clock_out ? toArgHHMM(entry.clock_out) : '')
+    setEditError(null)
+  }
+
+  const cancelEdit = () => {
+    setEditingId(null)
+    setEditClockIn('')
+    setEditClockOut('')
+    setEditError(null)
+  }
+
+  const handleEditSave = async (entry: TimeEntry) => {
+    if (!editClockIn) { setEditError('La hora de entrada es requerida'); return }
+    setEditSaving(true)
+    setEditError(null)
+    const body: { id: string; clock_in: string; clock_out?: string } = {
+      id: entry.id,
+      clock_in: buildArgIso(entry.date, editClockIn),
+    }
+    if (editClockOut) {
+      body.clock_out = buildArgIso(entry.date, editClockOut)
+    }
+    const res = await fetch('/api/empleados/fichaje', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+    if (res.ok) {
+      cancelEdit()
+      await fetchHistorial()
+    } else {
+      const d = await res.json()
+      setEditError(d.error ?? 'Error al guardar')
+    }
+    setEditSaving(false)
+  }
+
+  const handleDelete = async (entry: TimeEntry) => {
+    if (!confirm('¿Eliminar este registro de fichaje?')) return
+    setDeletingId(entry.id)
+    const res = await fetch(`/api/empleados/fichaje?id=${entry.id}`, { method: 'DELETE' })
+    if (res.ok) {
+      await fetchHistorial()
+    } else {
+      const d = await res.json()
+      alert(d.error ?? 'Error al eliminar')
+    }
+    setDeletingId(null)
+  }
 
   return (
     <div className="space-y-5">
@@ -1045,6 +1128,7 @@ function TabHistorial({ employees }: { employees: Employee[] }) {
                     <th className="text-left px-5 py-3.5 font-semibold text-gray-600">Salida</th>
                     <th className="text-right px-5 py-3.5 font-semibold text-gray-600">Horas</th>
                     <th className="text-right px-5 py-3.5 font-semibold text-gray-600 hidden sm:table-cell">Monto</th>
+                    <th className="text-right px-5 py-3.5 font-semibold text-gray-600">Acciones</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-50">
@@ -1052,22 +1136,85 @@ function TabHistorial({ employees }: { employees: Employee[] }) {
                     const hrs = entry.hours_worked ?? 0
                     const rate = selectedEmp?.hourly_rate ?? 0
                     const amount = hrs * rate
+                    const isEditing = editingId === entry.id
                     return (
-                      <tr key={entry.id} className="hover:bg-gray-50/50 transition-colors">
-                        <td className="px-5 py-3.5 text-gray-700 font-medium">
-                          {new Date(entry.date + 'T00:00:00').toLocaleDateString('es-AR', {
-                            day: '2-digit', month: '2-digit', year: 'numeric',
-                          })}
-                        </td>
-                        <td className="px-5 py-3.5 text-gray-600">{toArgTime(entry.clock_in)}</td>
-                        <td className="px-5 py-3.5 text-gray-600">
-                          {entry.clock_out ? toArgTime(entry.clock_out) : <span className="text-gray-300">—</span>}
-                        </td>
-                        <td className="px-5 py-3.5 text-right text-gray-700">{formatHours(hrs)}</td>
-                        <td className="px-5 py-3.5 text-right text-amber-700 font-medium hidden sm:table-cell">
-                          {formatARS(amount)}
-                        </td>
-                      </tr>
+                      <>
+                        <tr key={entry.id} className="hover:bg-gray-50/50 transition-colors">
+                          <td className="px-5 py-3.5 text-gray-700 font-medium">
+                            {new Date(entry.date + 'T00:00:00').toLocaleDateString('es-AR', {
+                              day: '2-digit', month: '2-digit', year: 'numeric',
+                            })}
+                          </td>
+                          <td className="px-5 py-3.5 text-gray-600">{toArgTime(entry.clock_in)}</td>
+                          <td className="px-5 py-3.5 text-gray-600">
+                            {entry.clock_out ? toArgTime(entry.clock_out) : <span className="text-gray-300">—</span>}
+                          </td>
+                          <td className="px-5 py-3.5 text-right text-gray-700">{formatHours(hrs)}</td>
+                          <td className="px-5 py-3.5 text-right text-amber-700 font-medium hidden sm:table-cell">
+                            {formatARS(amount)}
+                          </td>
+                          <td className="px-5 py-3.5">
+                            <div className="flex items-center justify-end gap-1">
+                              <button
+                                onClick={() => startEdit(entry)}
+                                className="p-1.5 rounded-lg text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors"
+                                title="Editar"
+                              >
+                                <Pencil size={14} />
+                              </button>
+                              <button
+                                onClick={() => handleDelete(entry)}
+                                disabled={deletingId === entry.id}
+                                className="p-1.5 rounded-lg text-red-400 hover:text-red-600 hover:bg-red-50 transition-colors disabled:opacity-40"
+                                title="Eliminar"
+                              >
+                                {deletingId === entry.id ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                        {isEditing && (
+                          <tr key={entry.id + '-edit'} className="bg-indigo-50/40">
+                            <td colSpan={6} className="px-5 py-3">
+                              <div className="flex items-center gap-3 flex-wrap">
+                                <div className="flex items-center gap-1.5">
+                                  <span className="text-xs font-semibold text-gray-600">Entrada:</span>
+                                  <input
+                                    type="time"
+                                    className="border border-indigo-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400/50"
+                                    value={editClockIn}
+                                    onChange={(e) => setEditClockIn(e.target.value)}
+                                  />
+                                </div>
+                                <div className="flex items-center gap-1.5">
+                                  <span className="text-xs font-semibold text-gray-600">Salida:</span>
+                                  <input
+                                    type="time"
+                                    className="border border-indigo-300 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400/50"
+                                    value={editClockOut}
+                                    onChange={(e) => setEditClockOut(e.target.value)}
+                                  />
+                                </div>
+                                {editError && <span className="text-xs text-red-600">{editError}</span>}
+                                <button
+                                  onClick={() => handleEditSave(entry)}
+                                  disabled={editSaving}
+                                  className="px-3 py-1.5 bg-indigo-600 text-white rounded-lg text-xs font-medium hover:bg-indigo-700 disabled:opacity-50 flex items-center gap-1"
+                                >
+                                  {editSaving ? <Loader2 size={12} className="animate-spin" /> : null}
+                                  Guardar
+                                </button>
+                                <button
+                                  onClick={cancelEdit}
+                                  className="px-3 py-1.5 border border-gray-200 text-gray-600 rounded-lg text-xs font-medium hover:bg-gray-50"
+                                >
+                                  Cancelar
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                      </>
                     )
                   })}
                 </tbody>
@@ -1076,6 +1223,7 @@ function TabHistorial({ employees }: { employees: Employee[] }) {
                     <td colSpan={3} className="px-5 py-3.5 font-semibold text-gray-700">Total del período</td>
                     <td className="px-5 py-3.5 text-right font-bold text-gray-800">{formatHours(totalHours)}</td>
                     <td className="px-5 py-3.5 text-right font-bold text-amber-700 hidden sm:table-cell">{formatARS(totalAmount)}</td>
+                    <td></td>
                   </tr>
                 </tfoot>
               </table>

@@ -143,3 +143,70 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(data)
   }
 }
+
+// PUT /api/empleados/fichaje — editar entrada/salida de un fichaje existente
+// body: { id, clock_in?, clock_out? }
+export async function PUT(req: NextRequest) {
+  const { id, clock_in, clock_out } = await req.json()
+  if (!id) return NextResponse.json({ error: 'id es requerido' }, { status: 400 })
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const sb = await getServiceClient() as any
+
+  // Build update payload
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const updates: Record<string, any> = {}
+
+  if (clock_in !== undefined) {
+    updates.clock_in = clock_in
+  }
+  if (clock_out !== undefined) {
+    updates.clock_out = clock_out
+  }
+
+  // Recalculate hours_worked if both timestamps are present
+  if (updates.clock_in || updates.clock_out) {
+    // Fetch current entry to fill missing values
+    const { data: current, error: fetchErr } = await sb
+      .from('time_entries')
+      .select('clock_in, clock_out')
+      .eq('id', id)
+      .single()
+    if (fetchErr) return NextResponse.json({ error: fetchErr.message }, { status: 500 })
+
+    const finalClockIn = updates.clock_in ?? current.clock_in
+    const finalClockOut = updates.clock_out ?? current.clock_out
+
+    if (finalClockIn && finalClockOut) {
+      const ms = new Date(finalClockOut).getTime() - new Date(finalClockIn).getTime()
+      updates.hours_worked = Math.round(ms / (1000 * 60 * 60) * 100) / 100
+    }
+  }
+
+  const { data, error } = await sb
+    .from('time_entries')
+    .update(updates)
+    .eq('id', id)
+    .select()
+    .single()
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  return NextResponse.json(data)
+}
+
+// DELETE /api/empleados/fichaje?id=entry_id — eliminar un fichaje
+export async function DELETE(req: NextRequest) {
+  const id = req.nextUrl.searchParams.get('id')
+  if (!id) return NextResponse.json({ error: 'id es requerido' }, { status: 400 })
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const sb = await getServiceClient() as any
+
+  const { error } = await sb
+    .from('time_entries')
+    .delete()
+    .eq('id', id)
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  return NextResponse.json({ ok: true })
+}
