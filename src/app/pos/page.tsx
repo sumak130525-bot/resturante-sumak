@@ -2287,6 +2287,511 @@ function TicketPanel({
   )
 }
 
+// ─── Employee POS Modal ───────────────────────────────────────────────────────
+
+const ADMIN_PIN = '1590'
+
+type POSEmployee = {
+  id: string
+  name: string
+  role: string
+  active: boolean
+}
+
+type POSPayment = {
+  id: string
+  employee_id: string
+  type: 'advance' | 'salary'
+  amount: number
+  description: string | null
+  payment_method: 'cash' | 'transfer' | 'mixed' | null
+  cash_amount: number | null
+  transfer_amount: number | null
+  created_at: string
+}
+
+function formatARSPOS(n: number): string {
+  return new Intl.NumberFormat('es-AR', {
+    style: 'currency',
+    currency: 'ARS',
+    minimumFractionDigits: 0,
+  }).format(n)
+}
+
+function toArgDateTimePOS(utcIso: string): string {
+  const ARG_OFFSET_MS = -3 * 60 * 60 * 1000
+  const d = new Date(new Date(utcIso).getTime() - ARG_OFFSET_MS)
+  return d.toLocaleString('es-AR', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    timeZone: 'UTC',
+  })
+}
+
+function pmLabelPOS(pm: 'cash' | 'transfer' | 'mixed' | null): string {
+  if (pm === 'transfer') return 'Transferencia'
+  if (pm === 'mixed') return 'Mixto'
+  return 'Efectivo'
+}
+
+function printAdvancePOS(payment: POSPayment, empName: string, empRole: string) {
+  const dateStr = toArgDateTimePOS(payment.created_at)
+  const pmLabel = pmLabelPOS(payment.payment_method)
+  const mixedRows = payment.payment_method === 'mixed'
+    ? `<div class="row"><span>  Efectivo:</span><span>${formatARSPOS(payment.cash_amount ?? 0)}</span></div>
+  <div class="row"><span>  Transferencia:</span><span>${formatARSPOS(payment.transfer_amount ?? 0)}</span></div>`
+    : ''
+  const html = `<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Recibo Adelanto</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Courier New', Courier, monospace; font-size: 11px; width: 72mm; padding: 4mm; }
+  .center { text-align: center; }
+  .bold { font-weight: bold; }
+  .separator { border-top: 1px dashed #000; margin: 3mm 0; }
+  .row { display: flex; justify-content: space-between; margin: 1mm 0; }
+  .title { font-size: 13px; font-weight: bold; margin-bottom: 2mm; }
+  .subtitle { font-size: 10px; margin-bottom: 1mm; }
+  .firma { margin-top: 10mm; border-top: 1px solid #000; padding-top: 2mm; width: 50mm; margin-left: auto; margin-right: auto; text-align: center; font-size: 10px; }
+  @media print { @page { margin: 0; size: 72mm auto; } body { padding: 2mm; } }
+</style>
+</head>
+<body>
+  <div class="center">
+    <div class="title">SUMAK RESTAURANTE</div>
+    <div class="subtitle">RECIBO DE ADELANTO</div>
+  </div>
+  <div class="separator"></div>
+  <div class="row"><span>Fecha:</span><span>${dateStr}</span></div>
+  <div class="row"><span>Empleado:</span><span>${empName}</span></div>
+  <div class="row"><span>Cargo:</span><span>${empRole || '—'}</span></div>
+  <div class="separator"></div>
+  <div class="row bold"><span>MONTO ADELANTADO:</span><span>${formatARSPOS(payment.amount)}</span></div>
+  ${payment.description ? `<div class="row"><span>Concepto:</span><span>${payment.description}</span></div>` : ''}
+  <div class="row"><span>Método de pago:</span><span>${pmLabel}</span></div>
+  ${mixedRows}
+  <div class="separator"></div>
+  <div class="firma">Firma del empleado</div>
+</body>
+</html>`
+  const win = window.open('', '_blank', 'width=400,height=600')
+  if (win) {
+    win.document.write(html)
+    win.document.close()
+    win.onload = () => { win.focus(); win.print() }
+  }
+}
+
+function EmployeePOSModal({ onClose }: { onClose: () => void }) {
+  // Phase: 'pin' | 'main'
+  const [phase, setPhase] = useState<'pin' | 'main'>('pin')
+  const [pinInput, setPinInput] = useState('')
+  const [pinError, setPinError] = useState(false)
+
+  // Main phase state
+  const [employees, setEmployees] = useState<POSEmployee[]>([])
+  const [loadingEmps, setLoadingEmps] = useState(false)
+  const [selectedEmp, setSelectedEmp] = useState('')
+  const [payments, setPayments] = useState<POSPayment[]>([])
+  const [loadingPmts, setLoadingPmts] = useState(false)
+
+  // Advance form
+  const [showAdvForm, setShowAdvForm] = useState(false)
+  const [advAmount, setAdvAmount] = useState('')
+  const [advDesc, setAdvDesc] = useState('')
+  const [advPM, setAdvPM] = useState<'cash' | 'transfer' | 'mixed'>('cash')
+  const [advCash, setAdvCash] = useState('')
+  const [advTransfer, setAdvTransfer] = useState('')
+  const [advSaving, setAdvSaving] = useState(false)
+  const [advError, setAdvError] = useState<string | null>(null)
+
+  const handlePinKey = (k: string) => {
+    if (pinInput.length >= 4) return
+    const next = pinInput + k
+    setPinInput(next)
+    setPinError(false)
+    if (next.length === 4) {
+      if (next === ADMIN_PIN) {
+        setPhase('main')
+        loadEmployees()
+      } else {
+        setPinError(true)
+        setTimeout(() => setPinInput(''), 500)
+      }
+    }
+  }
+
+  const loadEmployees = async () => {
+    setLoadingEmps(true)
+    try {
+      const res = await fetch('/api/empleados')
+      if (res.ok) {
+        const data: POSEmployee[] = await res.json()
+        setEmployees(data.filter((e) => e.active))
+      }
+    } catch (e) { void e }
+    setLoadingEmps(false)
+  }
+
+  const loadPayments = async (empId: string) => {
+    setLoadingPmts(true)
+    try {
+      const res = await fetch(`/api/empleados/pagos?employee_id=${empId}`)
+      if (res.ok) setPayments(await res.json())
+      else setPayments([])
+    } catch (e) { void e; setPayments([]) }
+    setLoadingPmts(false)
+  }
+
+  const handleSelectEmp = (id: string) => {
+    setSelectedEmp(id)
+    setShowAdvForm(false)
+    setAdvAmount(''); setAdvDesc(''); setAdvPM('cash'); setAdvCash(''); setAdvTransfer('')
+    setAdvError(null)
+    if (id) loadPayments(id)
+    else setPayments([])
+  }
+
+  const handleAdvSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setAdvError(null)
+    const amt = Number(advAmount)
+    if (!amt || amt <= 0) { setAdvError('Ingresá un monto válido'); return }
+    if (advPM === 'mixed') {
+      const ca = Number(advCash) || 0
+      const ta = Number(advTransfer) || 0
+      if (Math.abs(ca + ta - amt) >= 1) {
+        setAdvError(`La suma debe ser ${formatARSPOS(amt)}`)
+        return
+      }
+    }
+    setAdvSaving(true)
+    try {
+      const res = await fetch('/api/empleados/pagos', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          employee_id: selectedEmp,
+          type: 'advance',
+          amount: amt,
+          description: advDesc || undefined,
+          payment_method: advPM,
+          cash_amount: advPM === 'mixed' ? Number(advCash) || 0 : advPM === 'cash' ? amt : 0,
+          transfer_amount: advPM === 'mixed' ? Number(advTransfer) || 0 : advPM === 'transfer' ? amt : 0,
+        }),
+      })
+      if (res.ok) {
+        const pmt: POSPayment = await res.json()
+        const emp = employees.find((e) => e.id === selectedEmp)
+        setShowAdvForm(false)
+        setAdvAmount(''); setAdvDesc(''); setAdvPM('cash'); setAdvCash(''); setAdvTransfer('')
+        await loadPayments(selectedEmp)
+        printAdvancePOS(pmt, emp?.name ?? '', emp?.role ?? '')
+      } else {
+        const d = await res.json()
+        setAdvError(d.error ?? 'Error al registrar')
+      }
+    } catch (err) {
+      setAdvError(err instanceof Error ? err.message : 'Error')
+    }
+    setAdvSaving(false)
+  }
+
+  const emp = employees.find((e) => e.id === selectedEmp)
+
+  // ── PIN phase ──
+  if (phase === 'pin') {
+    const keys = ['7', '8', '9', '4', '5', '6', '1', '2', '3']
+    return (
+      <div
+        className="fixed inset-0 z-50 flex items-center justify-center bg-black/80"
+        onClick={(e) => { if (e.target === e.currentTarget) onClose() }}
+      >
+        <div
+          className="flex flex-col rounded-2xl overflow-hidden shadow-2xl"
+          style={{ background: '#1a1917', border: '1px solid rgba(255,255,255,0.12)', width: 'min(92vw, 340px)' }}
+        >
+          <div className="px-5 pt-5 pb-3 text-center shrink-0">
+            <p className="text-white font-bold text-lg mb-3">PIN Admin</p>
+            <div className="flex gap-3 justify-center mb-2">
+              {Array.from({ length: 4 }).map((_, i) => (
+                <div
+                  key={i}
+                  className={`w-4 h-4 rounded-full border-2 transition-all ${
+                    i < pinInput.length ? 'bg-white border-white' : 'border-white/30 bg-transparent'
+                  } ${pinError ? 'border-red-400 bg-red-400' : ''}`}
+                />
+              ))}
+            </div>
+            {pinError && <p className="text-red-400 text-sm">PIN incorrecto</p>}
+          </div>
+          <div className="px-5 pb-5">
+            <div className="grid grid-cols-3 gap-3 mb-3">
+              {keys.map((k) => (
+                <button
+                  key={k}
+                  onClick={() => handlePinKey(k)}
+                  className="aspect-square rounded-full border-2 border-white/80 bg-black text-white text-2xl font-bold flex items-center justify-center hover:bg-white/10 active:bg-white/20 active:scale-95 transition-all select-none"
+                >
+                  {k}
+                </button>
+              ))}
+            </div>
+            <div className="grid grid-cols-3 gap-3">
+              <button
+                onClick={() => { setPinInput((p) => p.slice(0, -1)); setPinError(false) }}
+                className="aspect-square rounded-full border-2 border-white/30 bg-gray-700/60 text-white flex items-center justify-center hover:bg-gray-600/60 active:scale-95 transition-all select-none text-lg"
+              >
+                ⌫
+              </button>
+              <button
+                onClick={() => handlePinKey('0')}
+                className="aspect-square rounded-full border-2 border-white/80 bg-black text-white text-2xl font-bold flex items-center justify-center hover:bg-white/10 active:bg-white/20 active:scale-95 transition-all select-none"
+              >
+                0
+              </button>
+              <button
+                onClick={onClose}
+                className="aspect-square rounded-full border-2 border-white/20 bg-transparent text-white/50 text-xs font-bold flex items-center justify-center hover:bg-white/10 active:scale-95 transition-all select-none"
+              >
+                ✕
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // ── Main phase ──
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/80"
+      onClick={(e) => { if (e.target === e.currentTarget) onClose() }}
+    >
+      <div
+        className="flex flex-col rounded-2xl overflow-hidden shadow-2xl"
+        style={{
+          background: '#1a1917',
+          border: '1px solid rgba(255,255,255,0.12)',
+          width: 'min(95vw, 560px)',
+          maxHeight: '90vh',
+        }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="px-5 py-4 shrink-0 flex items-center justify-between" style={{ background: '#2d1f14' }}>
+          <div>
+            <p className="text-white font-bold text-base leading-none">Pagos de Empleados</p>
+            <p className="text-amber-300/60 text-xs mt-0.5">Solo adelantos e historial</p>
+          </div>
+          <button onClick={onClose} className="text-white/50 hover:text-white text-xl leading-none">✕</button>
+        </div>
+
+        {/* Employee selector */}
+        <div className="px-5 pt-4 pb-3 shrink-0" style={{ borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
+          <p className="text-white/50 text-xs font-bold uppercase tracking-wide mb-1.5">Empleado</p>
+          {loadingEmps ? (
+            <div className="h-10 rounded-xl animate-pulse" style={{ background: 'rgba(255,255,255,0.06)' }} />
+          ) : (
+            <select
+              value={selectedEmp}
+              onChange={(e) => handleSelectEmp(e.target.value)}
+              className="w-full rounded-xl px-3 py-2.5 text-sm font-semibold text-white focus:outline-none"
+              style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.12)' }}
+            >
+              <option value="" style={{ background: '#1a1917' }}>Seleccionar empleado…</option>
+              {employees.map((e) => (
+                <option key={e.id} value={e.id} style={{ background: '#1a1917' }}>
+                  {e.name}{e.role ? ` (${e.role})` : ''}
+                </option>
+              ))}
+            </select>
+          )}
+        </div>
+
+        {/* Body */}
+        <div className="flex-1 overflow-y-auto px-5 py-4 flex flex-col gap-4" style={{ minHeight: 0 }}>
+          {!selectedEmp ? (
+            <p className="text-white/30 text-sm text-center py-8">Seleccioná un empleado para ver su historial</p>
+          ) : (
+            <>
+              {/* Register advance button */}
+              {!showAdvForm && (
+                <button
+                  onClick={() => setShowAdvForm(true)}
+                  className="w-full py-3 rounded-xl font-bold text-sm transition-all active:scale-95"
+                  style={{ background: '#c8930a', color: '#fff' }}
+                >
+                  + Registrar adelanto
+                </button>
+              )}
+
+              {/* Advance form */}
+              {showAdvForm && (
+                <form onSubmit={handleAdvSubmit} className="rounded-2xl p-4 flex flex-col gap-3" style={{ background: 'rgba(200,147,10,0.1)', border: '1px solid rgba(200,147,10,0.3)' }}>
+                  <p className="text-amber-300 font-bold text-sm">Registrar adelanto — {emp?.name}</p>
+
+                  <div>
+                    <p className="text-white/50 text-xs font-bold mb-1">Monto (ARS) *</p>
+                    <input
+                      type="number"
+                      min="1"
+                      value={advAmount}
+                      onChange={(e) => setAdvAmount(e.target.value)}
+                      required
+                      placeholder="$ 0"
+                      className="w-full rounded-xl px-3 py-2.5 text-lg font-bold text-white focus:outline-none tabular-nums"
+                      style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)' }}
+                    />
+                  </div>
+
+                  <div>
+                    <p className="text-white/50 text-xs font-bold mb-1">Descripción (opcional)</p>
+                    <input
+                      type="text"
+                      value={advDesc}
+                      onChange={(e) => setAdvDesc(e.target.value)}
+                      placeholder="Concepto..."
+                      className="w-full rounded-xl px-3 py-2 text-sm text-white focus:outline-none"
+                      style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.12)' }}
+                    />
+                  </div>
+
+                  <div>
+                    <p className="text-white/50 text-xs font-bold mb-1.5">Método de pago</p>
+                    <div className="grid grid-cols-3 gap-1.5">
+                      {(['cash', 'transfer', 'mixed'] as const).map((pm) => (
+                        <button
+                          key={pm}
+                          type="button"
+                          onClick={() => setAdvPM(pm)}
+                          className="py-2 rounded-xl font-bold text-xs transition-all active:scale-95"
+                          style={{
+                            background: advPM === pm
+                              ? pm === 'cash' ? '#16a34a' : pm === 'transfer' ? '#2563eb' : '#7c3aed'
+                              : 'rgba(255,255,255,0.08)',
+                            color: '#fff',
+                          }}
+                        >
+                          {pm === 'cash' ? '💵 Efectivo' : pm === 'transfer' ? '📲 Transfer' : '💰 Mixto'}
+                        </button>
+                      ))}
+                    </div>
+
+                    {advPM === 'mixed' && (
+                      <div className="mt-2 flex flex-col gap-2">
+                        <div>
+                          <p className="text-white/40 text-xs mb-0.5">Efectivo</p>
+                          <input
+                            type="number"
+                            min={0}
+                            value={advCash}
+                            onChange={(e) => setAdvCash(e.target.value)}
+                            placeholder="$ 0"
+                            className="w-full rounded-xl px-3 py-2 text-sm font-bold text-white focus:outline-none tabular-nums"
+                            style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.12)' }}
+                          />
+                        </div>
+                        <div>
+                          <p className="text-white/40 text-xs mb-0.5">Transferencia</p>
+                          <input
+                            type="number"
+                            min={0}
+                            value={advTransfer}
+                            onChange={(e) => setAdvTransfer(e.target.value)}
+                            placeholder="$ 0"
+                            className="w-full rounded-xl px-3 py-2 text-sm font-bold text-white focus:outline-none tabular-nums"
+                            style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.12)' }}
+                          />
+                        </div>
+                        {(() => {
+                          const total = Number(advAmount) || 0
+                          const ca = Number(advCash) || 0
+                          const ta = Number(advTransfer) || 0
+                          if (total > 0 && Math.abs(ca + ta - total) < 1) return <p className="text-xs text-green-400 font-semibold">✓ Suma correcta</p>
+                          if (total > 0) return <p className="text-xs text-red-400 font-semibold">Debe sumar {formatARSPOS(total)}</p>
+                          return null
+                        })()}
+                      </div>
+                    )}
+                  </div>
+
+                  {advError && <p className="text-red-400 text-sm font-semibold">{advError}</p>}
+
+                  <div className="flex gap-2 pt-1">
+                    <button
+                      type="button"
+                      onClick={() => { setShowAdvForm(false); setAdvError(null) }}
+                      className="flex-1 py-2.5 rounded-xl font-bold text-sm text-white/50 hover:text-white transition-colors"
+                      style={{ background: 'rgba(255,255,255,0.06)' }}
+                    >
+                      Cancelar
+                    </button>
+                    <button
+                      type="submit"
+                      disabled={advSaving}
+                      className="flex-1 py-2.5 rounded-xl font-bold text-sm transition-all active:scale-95 disabled:opacity-50"
+                      style={{ background: '#c8930a', color: '#fff' }}
+                    >
+                      {advSaving ? 'Guardando…' : '🖨️ Registrar e imprimir'}
+                    </button>
+                  </div>
+                </form>
+              )}
+
+              {/* Payment history */}
+              <div>
+                <p className="text-white/40 text-xs font-bold uppercase tracking-wide mb-2">Historial de adelantos</p>
+                {loadingPmts ? (
+                  <div className="space-y-2">
+                    {[1, 2].map((i) => <div key={i} className="h-12 rounded-xl animate-pulse" style={{ background: 'rgba(255,255,255,0.05)' }} />)}
+                  </div>
+                ) : payments.filter((p) => p.type === 'advance').length === 0 ? (
+                  <p className="text-white/20 text-sm text-center py-4">Sin adelantos registrados</p>
+                ) : (
+                  <ul className="flex flex-col gap-1.5">
+                    {payments.filter((p) => p.type === 'advance').map((pmt) => (
+                      <li
+                        key={pmt.id}
+                        className="flex items-center gap-3 rounded-xl px-3 py-2.5"
+                        style={{ background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.07)' }}
+                      >
+                        <div className="flex-1 min-w-0">
+                          <p className="text-white font-bold text-sm tabular-nums">{formatARSPOS(pmt.amount)}</p>
+                          <p className="text-white/40 text-xs mt-0.5 truncate">
+                            {toArgDateTimePOS(pmt.created_at)}
+                            {pmt.description ? ` · ${pmt.description}` : ''}
+                            {' · '}{pmLabelPOS(pmt.payment_method)}
+                          </p>
+                        </div>
+                        <button
+                          onClick={() => printAdvancePOS(pmt, emp?.name ?? '', emp?.role ?? '')}
+                          className="shrink-0 px-3 py-1.5 rounded-lg font-bold text-xs transition-all active:scale-95"
+                          style={{ background: 'rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.7)' }}
+                          title="Imprimir recibo"
+                        >
+                          🖨️
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function POSPage() {
@@ -2363,6 +2868,9 @@ export default function POSPage() {
   const [showConfirmModal, setShowConfirmModal] = useState(false)
   const [showCashModal, setShowCashModal] = useState(false)
   const [cashModalPrefill, setCashModalPrefill] = useState<PrefillEgreso | undefined>(undefined)
+
+  // ─── Employee payments modal ──────────────────────────────────────────────────
+  const [showEmpPayModal, setShowEmpPayModal] = useState(false)
 
   // ─── Shift state ──────────────────────────────────────────────────────────────
   const [currentShift, setCurrentShift] = useState<Shift | null | undefined>(undefined) // undefined = loading
@@ -2847,6 +3355,14 @@ export default function POSPage() {
           ✏️
         </button>
         )}
+        {/* Empleados button */}
+        <button
+          onClick={() => setShowEmpPayModal(true)}
+          title="Pagos empleados"
+          className="flex items-center justify-center w-8 h-8 rounded-lg bg-sumak-brown-mid text-sumak-gold hover:bg-sumak-brown-light active:scale-95 transition-all shrink-0 font-bold text-base"
+        >
+          💰
+        </button>
         {/* Walkie-talkie */}
         <WalkieTalkie device="pos" />
         {/* Ticket toggle button */}
@@ -3293,6 +3809,11 @@ export default function POSPage() {
             setShowOpenShiftModal(true)
           }}
         />
+      )}
+
+      {/* ── Employee Payments Modal ── */}
+      {showEmpPayModal && (
+        <EmployeePOSModal onClose={() => setShowEmpPayModal(false)} />
       )}
 
     </div>
