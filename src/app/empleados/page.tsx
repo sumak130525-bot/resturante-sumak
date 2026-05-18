@@ -44,6 +44,9 @@ type EmployeePayment = {
   advances_deducted: number | null
   cash_movement_id: string | null
   created_at: string
+  payment_method: 'cash' | 'transfer' | 'mixed' | null
+  cash_amount: number | null
+  transfer_amount: number | null
   employees?: { name: string; role: string; hourly_rate: number } | null
 }
 
@@ -1089,8 +1092,19 @@ function TabHistorial({ employees }: { employees: Employee[] }) {
 
 // ─── Receipt Print Helpers ────────────────────────────────────────────────────
 
+function paymentMethodLabel(pm: 'cash' | 'transfer' | 'mixed' | null): string {
+  if (pm === 'transfer') return 'Transferencia'
+  if (pm === 'mixed') return 'Mixto'
+  return 'Efectivo'
+}
+
 function printAdvanceReceipt(payment: EmployeePayment, empName: string, empRole: string) {
   const dateStr = toArgDateTime(payment.created_at)
+  const pmLabel = paymentMethodLabel(payment.payment_method)
+  const mixedRows = payment.payment_method === 'mixed'
+    ? `<div class="row"><span>  Efectivo:</span><span>${formatARS(payment.cash_amount ?? 0)}</span></div>
+  <div class="row"><span>  Transferencia:</span><span>${formatARS(payment.transfer_amount ?? 0)}</span></div>`
+    : ''
   const html = `<!DOCTYPE html>
 <html lang="es">
 <head>
@@ -1121,6 +1135,8 @@ function printAdvanceReceipt(payment: EmployeePayment, empName: string, empRole:
   <div class="separator"></div>
   <div class="row bold"><span>MONTO ADELANTADO:</span><span>${formatARS(payment.amount)}</span></div>
   ${payment.description ? `<div class="row"><span>Concepto:</span><span>${payment.description}</span></div>` : ''}
+  <div class="row"><span>Método de pago:</span><span>${pmLabel}</span></div>
+  ${mixedRows}
   <div class="separator"></div>
   <div class="firma">Firma del empleado</div>
 </body>
@@ -1147,6 +1163,11 @@ function printSalaryReceipt(payment: EmployeePayment, empName: string, empRole: 
   const periodStr = payment.period_from && payment.period_to
     ? `${formatDate(payment.period_from)} al ${formatDate(payment.period_to)}`
     : '—'
+  const pmLabel = paymentMethodLabel(payment.payment_method)
+  const mixedRows = payment.payment_method === 'mixed'
+    ? `<div class="row"><span>  Efectivo:</span><span>${formatARS(payment.cash_amount ?? 0)}</span></div>
+  <div class="row"><span>  Transferencia:</span><span>${formatARS(payment.transfer_amount ?? 0)}</span></div>`
+    : ''
   const html = `<!DOCTYPE html>
 <html lang="es">
 <head>
@@ -1184,6 +1205,8 @@ function printSalaryReceipt(payment: EmployeePayment, empName: string, empRole: 
   <div class="row deduccion"><span>(-) Adelantos:</span><span>${formatARS(payment.advances_deducted ?? 0)}</span></div>
   <div class="separator"></div>
   <div class="row bold"><span>NETO A PAGAR:</span><span>${formatARS(payment.amount)}</span></div>
+  <div class="row"><span>Método de pago:</span><span>${pmLabel}</span></div>
+  ${mixedRows}
   <div class="separator"></div>
   <div class="firma">Firma del empleado</div>
 </body>
@@ -1223,6 +1246,9 @@ function TabPagos({ employees }: { employees: Employee[] }) {
   const [advEmployee, setAdvEmployee] = useState('')
   const [advAmount, setAdvAmount] = useState('')
   const [advDescription, setAdvDescription] = useState('')
+  const [advPaymentMethod, setAdvPaymentMethod] = useState<'cash' | 'transfer' | 'mixed'>('cash')
+  const [advCashAmount, setAdvCashAmount] = useState('')
+  const [advTransferAmount, setAdvTransferAmount] = useState('')
 
   const [salEmployee, setSalEmployee] = useState('')
   const [salFrom, setSalFrom] = useState(firstDayOfMonthArg())
@@ -1231,6 +1257,9 @@ function TabPagos({ employees }: { employees: Employee[] }) {
   const [calcLoading, setCalcLoading] = useState(false)
   const [calcError, setCalcError] = useState<string | null>(null)
   const [salCustomAmount, setSalCustomAmount] = useState('')
+  const [salPaymentMethod, setSalPaymentMethod] = useState<'cash' | 'transfer' | 'mixed'>('cash')
+  const [salCashAmount, setSalCashAmount] = useState('')
+  const [salTransferAmount, setSalTransferAmount] = useState('')
 
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [deletingId, setDeletingId] = useState<string | null>(null)
@@ -1261,6 +1290,15 @@ function TabPagos({ employees }: { employees: Employee[] }) {
   const handleAdvanceSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setSaveError(null)
+    // Validate mixed amounts
+    if (advPaymentMethod === 'mixed') {
+      const ca = Number(advCashAmount) || 0
+      const ta = Number(advTransferAmount) || 0
+      if (Math.abs(ca + ta - Number(advAmount)) >= 1) {
+        setSaveError(`La suma de efectivo + transferencia debe ser igual al monto total (${formatARS(Number(advAmount))})`)
+        return
+      }
+    }
     setSaving(true)
     const res = await fetch('/api/empleados/pagos', {
       method: 'POST',
@@ -1270,6 +1308,9 @@ function TabPagos({ employees }: { employees: Employee[] }) {
         type: 'advance',
         amount: Number(advAmount),
         description: advDescription || undefined,
+        payment_method: advPaymentMethod,
+        cash_amount: advPaymentMethod === 'mixed' ? Number(advCashAmount) || 0 : advPaymentMethod === 'cash' ? Number(advAmount) : 0,
+        transfer_amount: advPaymentMethod === 'mixed' ? Number(advTransferAmount) || 0 : advPaymentMethod === 'transfer' ? Number(advAmount) : 0,
       }),
     })
     if (res.ok) {
@@ -1308,8 +1349,17 @@ function TabPagos({ employees }: { employees: Employee[] }) {
     e.preventDefault()
     if (!calcResult) return
     setSaveError(null)
-    setSaving(true)
     const netToPay = Number(salCustomAmount) || calcResult.net_amount
+    // Validate mixed amounts
+    if (salPaymentMethod === 'mixed') {
+      const ca = Number(salCashAmount) || 0
+      const ta = Number(salTransferAmount) || 0
+      if (Math.abs(ca + ta - netToPay) >= 1) {
+        setSaveError(`La suma de efectivo + transferencia debe ser igual al monto a pagar (${formatARS(netToPay)})`)
+        return
+      }
+    }
+    setSaving(true)
     const res = await fetch('/api/empleados/pagos', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -1322,6 +1372,9 @@ function TabPagos({ employees }: { employees: Employee[] }) {
         hours_worked: calcResult.hours_worked,
         gross_amount: calcResult.gross_amount,
         advances_deducted: calcResult.advances_total,
+        payment_method: salPaymentMethod,
+        cash_amount: salPaymentMethod === 'mixed' ? Number(salCashAmount) || 0 : salPaymentMethod === 'cash' ? netToPay : 0,
+        transfer_amount: salPaymentMethod === 'mixed' ? Number(salTransferAmount) || 0 : salPaymentMethod === 'transfer' ? netToPay : 0,
       }),
     })
     if (res.ok) {
@@ -1344,10 +1397,12 @@ function TabPagos({ employees }: { employees: Employee[] }) {
 
   function resetAdvForm() {
     setAdvEmployee(''); setAdvAmount(''); setAdvDescription(''); setSaveError(null)
+    setAdvPaymentMethod('cash'); setAdvCashAmount(''); setAdvTransferAmount('')
   }
   function resetSalForm() {
     setSalEmployee(''); setSalFrom(firstDayOfMonthArg()); setSalTo(todayArg())
     setCalcResult(null); setSalCustomAmount(''); setSaveError(null); setCalcError(null)
+    setSalPaymentMethod('cash'); setSalCashAmount(''); setSalTransferAmount('')
   }
 
   const handleEditSave = async (paymentId: string) => {
@@ -1478,6 +1533,7 @@ function TabPagos({ employees }: { employees: Employee[] }) {
                 <th className="text-left px-5 py-3.5 font-semibold text-gray-600">Fecha</th>
                 <th className="text-left px-5 py-3.5 font-semibold text-gray-600">Empleado</th>
                 <th className="text-left px-5 py-3.5 font-semibold text-gray-600 hidden sm:table-cell">Tipo</th>
+                <th className="text-left px-5 py-3.5 font-semibold text-gray-600 hidden md:table-cell">Método</th>
                 <th className="text-right px-5 py-3.5 font-semibold text-gray-600">Monto</th>
                 <th className="text-center px-5 py-3.5 font-semibold text-gray-600">Recibo</th>
                 <th className="text-center px-5 py-3.5 font-semibold text-gray-600">Acciones</th>
@@ -1505,6 +1561,15 @@ function TabPagos({ employees }: { employees: Employee[] }) {
                         <span className={cn('text-xs font-semibold px-2.5 py-1 rounded-full', pmt.type === 'advance' ? 'bg-amber-100 text-amber-700' : 'bg-green-100 text-green-700')}>
                           {pmt.type === 'advance' ? 'Adelanto' : 'Sueldo'}
                         </span>
+                      </td>
+                      <td className="px-5 py-3.5 hidden md:table-cell">
+                        {pmt.payment_method === 'transfer' ? (
+                          <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-blue-100 text-blue-700">Transfer</span>
+                        ) : pmt.payment_method === 'mixed' ? (
+                          <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-purple-100 text-purple-700">Mixto</span>
+                        ) : (
+                          <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-green-100 text-green-700">Efectivo</span>
+                        )}
                       </td>
                       <td className="px-5 py-3.5 text-right font-bold text-gray-800">{formatARS(pmt.amount)}</td>
                       <td className="px-5 py-3.5 text-center">
@@ -1545,7 +1610,7 @@ function TabPagos({ employees }: { employees: Employee[] }) {
                     </tr>
                     {isEditing && (
                       <tr key={pmt.id + '-edit'} className="bg-amber-50/60">
-                        <td colSpan={6} className="px-5 py-3">
+                        <td colSpan={7} className="px-5 py-3">
                           <div className="flex items-center gap-3 flex-wrap">
                             <span className="text-xs font-semibold text-gray-600">Nuevo monto (ARS):</span>
                             <input
@@ -1578,8 +1643,11 @@ function TabPagos({ employees }: { employees: Employee[] }) {
                     )}
                     {isExpanded && !isEditing && (
                       <tr key={pmt.id + '-detail'} className="bg-amber-50/30">
-                        <td colSpan={6} className="px-5 py-3 text-xs text-gray-600 space-y-1">
+                        <td colSpan={7} className="px-5 py-3 text-xs text-gray-600 space-y-1">
                           {pmt.type === 'advance' && pmt.description && <div>Concepto: {pmt.description}</div>}
+                          {pmt.payment_method === 'mixed' && (
+                            <div>Desglose: Efectivo {formatARS(pmt.cash_amount ?? 0)} + Transferencia {formatARS(pmt.transfer_amount ?? 0)}</div>
+                          )}
                           {pmt.type === 'salary' && (
                             <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-6 gap-y-1">
                               <div>Período: {pmt.period_from ? `${formatDate(pmt.period_from)} – ${formatDate(pmt.period_to!)}` : '—'}</div>
@@ -1622,7 +1690,68 @@ function TabPagos({ employees }: { employees: Employee[] }) {
                 <label className="block text-xs font-bold text-gray-600 mb-1">Descripción</label>
                 <input className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-sumak-brown/30" value={advDescription} onChange={(e) => setAdvDescription(e.target.value)} placeholder="Opcional" />
               </div>
-              <p className="text-xs text-amber-700 bg-amber-50 rounded-xl px-3 py-2">Se registrará como egreso en caja y se imprimirá el recibo.</p>
+              {/* Payment method */}
+              <div>
+                <p className="text-xs font-bold text-gray-600 mb-2">Método de pago</p>
+                <div className="grid grid-cols-3 gap-1.5">
+                  {(['cash', 'transfer', 'mixed'] as const).map((pm) => (
+                    <button
+                      key={pm}
+                      type="button"
+                      onClick={() => setAdvPaymentMethod(pm)}
+                      className={`py-2.5 rounded-xl font-bold text-sm transition-all active:scale-95 ${
+                        advPaymentMethod === pm
+                          ? pm === 'cash' ? 'bg-green-600 text-white shadow-sm'
+                            : pm === 'transfer' ? 'bg-blue-600 text-white shadow-sm'
+                            : 'bg-purple-600 text-white shadow-sm'
+                          : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                      }`}
+                    >
+                      {pm === 'cash' ? '💵 Efectivo' : pm === 'transfer' ? '📲 Transfer' : '💰 Mixto'}
+                    </button>
+                  ))}
+                </div>
+                {advPaymentMethod === 'mixed' && (
+                  <div className="mt-3 flex flex-col gap-2">
+                    <div>
+                      <p className="text-xs font-semibold text-gray-500 mb-1">Monto efectivo</p>
+                      <input
+                        type="number"
+                        inputMode="decimal"
+                        min={0}
+                        value={advCashAmount}
+                        onChange={(e) => setAdvCashAmount(e.target.value)}
+                        placeholder="$ 0"
+                        className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm font-bold text-gray-900 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-sumak-brown/30 tabular-nums"
+                      />
+                    </div>
+                    <div>
+                      <p className="text-xs font-semibold text-gray-500 mb-1">Monto transferencia</p>
+                      <input
+                        type="number"
+                        inputMode="decimal"
+                        min={0}
+                        value={advTransferAmount}
+                        onChange={(e) => setAdvTransferAmount(e.target.value)}
+                        placeholder="$ 0"
+                        className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm font-bold text-gray-900 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-sumak-brown/30 tabular-nums"
+                      />
+                    </div>
+                    {(() => {
+                      const total = Number(advAmount) || 0
+                      const ca = Number(advCashAmount) || 0
+                      const ta = Number(advTransferAmount) || 0
+                      const diff = ca + ta - total
+                      if (total > 0 && Math.abs(diff) < 1) return <p className="text-xs text-green-600 font-semibold">Suma correcta</p>
+                      if (total > 0) return <p className="text-xs text-red-500 font-semibold">Debe sumar {formatARS(total)}</p>
+                      return null
+                    })()}
+                  </div>
+                )}
+              </div>
+              {advPaymentMethod === 'cash' && <p className="text-xs text-amber-700 bg-amber-50 rounded-xl px-3 py-2">Se registrará como egreso en caja y se imprimirá el recibo.</p>}
+              {advPaymentMethod === 'transfer' && <p className="text-xs text-blue-700 bg-blue-50 rounded-xl px-3 py-2">No toca la caja física. Solo se registra el pago.</p>}
+              {advPaymentMethod === 'mixed' && <p className="text-xs text-purple-700 bg-purple-50 rounded-xl px-3 py-2">Solo el monto en efectivo se registrará como egreso en caja.</p>}
               {saveError && <div className="bg-red-50 border border-red-200 text-red-700 text-sm p-3 rounded-xl">{saveError}</div>}
               <div className="flex gap-3 pt-1">
                 <button type="button" onClick={() => { setModal('none'); resetAdvForm() }} className="flex-1 border border-gray-200 text-gray-600 rounded-xl py-2.5 text-sm font-medium hover:bg-gray-50 transition-colors">Cancelar</button>
@@ -1678,10 +1807,70 @@ function TabPagos({ employees }: { employees: Employee[] }) {
                 </div>
                 <div>
                   <label className="block text-xs font-bold text-gray-600 mb-1">Monto a pagar (ARS) *</label>
-                  <input type="number" min="0" step="0.01" className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-sumak-brown/30" value={salCustomAmount} onChange={(e) => setSalCustomAmount(e.target.value)} required />
+                  <input type="number" min="0" step="0.01" className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-sumak-brown/30" value={salCustomAmount} onChange={(e) => { setSalCustomAmount(e.target.value); setSalCashAmount(''); setSalTransferAmount('') }} required />
                   <p className="text-xs text-gray-400 mt-1">Podés ajustar el monto si es necesario.</p>
                 </div>
-                <p className="text-xs text-green-700 bg-green-50 rounded-xl px-3 py-2">Se registrará como egreso en caja y se imprimirá el recibo de sueldo.</p>
+                {/* Payment method */}
+                <div>
+                  <p className="text-xs font-bold text-gray-600 mb-2">Método de pago</p>
+                  <div className="grid grid-cols-3 gap-1.5">
+                    {(['cash', 'transfer', 'mixed'] as const).map((pm) => (
+                      <button
+                        key={pm}
+                        type="button"
+                        onClick={() => setSalPaymentMethod(pm)}
+                        className={`py-2.5 rounded-xl font-bold text-sm transition-all active:scale-95 ${
+                          salPaymentMethod === pm
+                            ? pm === 'cash' ? 'bg-green-600 text-white shadow-sm'
+                              : pm === 'transfer' ? 'bg-blue-600 text-white shadow-sm'
+                              : 'bg-purple-600 text-white shadow-sm'
+                            : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                        }`}
+                      >
+                        {pm === 'cash' ? '💵 Efectivo' : pm === 'transfer' ? '📲 Transfer' : '💰 Mixto'}
+                      </button>
+                    ))}
+                  </div>
+                  {salPaymentMethod === 'mixed' && (
+                    <div className="mt-3 flex flex-col gap-2">
+                      <div>
+                        <p className="text-xs font-semibold text-gray-500 mb-1">Monto efectivo</p>
+                        <input
+                          type="number"
+                          inputMode="decimal"
+                          min={0}
+                          value={salCashAmount}
+                          onChange={(e) => setSalCashAmount(e.target.value)}
+                          placeholder="$ 0"
+                          className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm font-bold text-gray-900 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-sumak-brown/30 tabular-nums"
+                        />
+                      </div>
+                      <div>
+                        <p className="text-xs font-semibold text-gray-500 mb-1">Monto transferencia</p>
+                        <input
+                          type="number"
+                          inputMode="decimal"
+                          min={0}
+                          value={salTransferAmount}
+                          onChange={(e) => setSalTransferAmount(e.target.value)}
+                          placeholder="$ 0"
+                          className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm font-bold text-gray-900 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-sumak-brown/30 tabular-nums"
+                        />
+                      </div>
+                      {(() => {
+                        const total = Number(salCustomAmount) || calcResult.net_amount
+                        const ca = Number(salCashAmount) || 0
+                        const ta = Number(salTransferAmount) || 0
+                        if (total > 0 && Math.abs(ca + ta - total) < 1) return <p className="text-xs text-green-600 font-semibold">Suma correcta</p>
+                        if (total > 0) return <p className="text-xs text-red-500 font-semibold">Debe sumar {formatARS(total)}</p>
+                        return null
+                      })()}
+                    </div>
+                  )}
+                </div>
+                {salPaymentMethod === 'cash' && <p className="text-xs text-green-700 bg-green-50 rounded-xl px-3 py-2">Se registrará como egreso en caja y se imprimirá el recibo de sueldo.</p>}
+                {salPaymentMethod === 'transfer' && <p className="text-xs text-blue-700 bg-blue-50 rounded-xl px-3 py-2">No toca la caja física. Solo se registra el pago.</p>}
+                {salPaymentMethod === 'mixed' && <p className="text-xs text-purple-700 bg-purple-50 rounded-xl px-3 py-2">Solo el monto en efectivo se registrará como egreso en caja.</p>}
                 {saveError && <div className="bg-red-50 border border-red-200 text-red-700 text-sm p-3 rounded-xl">{saveError}</div>}
                 <div className="flex gap-3 pt-1">
                   <button type="button" onClick={() => { setModal('none'); resetSalForm() }} className="flex-1 border border-gray-200 text-gray-600 rounded-xl py-2.5 text-sm font-medium hover:bg-gray-50 transition-colors">Cancelar</button>

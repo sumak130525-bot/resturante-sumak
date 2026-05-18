@@ -25,6 +25,14 @@
  *   FOR ALL TO service_role USING (true) WITH CHECK (true);
  *
  * ============================================================
+ * Nuevas columnas para método de pago split (ejecutar una sola vez):
+ * ============================================================
+ *
+ * ALTER TABLE public.employee_payments ADD COLUMN IF NOT EXISTS payment_method text DEFAULT 'cash';
+ * ALTER TABLE public.employee_payments ADD COLUMN IF NOT EXISTS cash_amount numeric DEFAULT 0;
+ * ALTER TABLE public.employee_payments ADD COLUMN IF NOT EXISTS transfer_amount numeric DEFAULT 0;
+ *
+ * ============================================================
  */
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -96,9 +104,16 @@ export async function GET(req: NextRequest) {
 }
 
 // POST /api/empleados/pagos
-// Body para adelanto: { employee_id, type: 'advance', amount, description }
+// Body para adelanto: { employee_id, type: 'advance', amount, description,
+//                       payment_method?, cash_amount?, transfer_amount? }
 // Body para sueldo:   { employee_id, type: 'salary', amount, description?,
-//                       period_from, period_to, hours_worked, gross_amount, advances_deducted }
+//                       period_from, period_to, hours_worked, gross_amount, advances_deducted,
+//                       payment_method?, cash_amount?, transfer_amount? }
+//
+// payment_method: 'cash' (default) | 'transfer' | 'mixed'
+//   cash     → crea cash_movement egreso por el total
+//   transfer → NO crea cash_movement
+//   mixed    → crea cash_movement egreso solo por cash_amount
 export async function POST(req: NextRequest) {
   const user = await requireAuth()
   if (!user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
@@ -114,6 +129,9 @@ export async function POST(req: NextRequest) {
     hours_worked,
     gross_amount,
     advances_deducted,
+    payment_method = 'cash',
+    cash_amount,
+    transfer_amount,
   } = body
 
   if (!employee_id) return NextResponse.json({ error: 'employee_id es requerido' }, { status: 400 })
@@ -140,26 +158,36 @@ export async function POST(req: NextRequest) {
     .limit(1)
     .maybeSingle()
 
-  // 2. Register cash movement as egreso
-  const movementDescription =
-    type === 'advance'
-      ? `Adelanto empleado${description ? ': ' + description : ''}`
-      : `Sueldo empleado${period_from ? ` (${period_from} al ${period_to})` : ''}`
+  // 2. Register cash movement as egreso — only when payment touches cash
+  let cashMovementId: string | null = null
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: cashMovement, error: cashErr } = await (sb as any)
-    .from('cash_movements')
-    .insert({
-      type: 'egreso',
-      amount: Number(amount),
-      description: movementDescription,
-      shift_id: openShift?.id ?? null,
-      created_at: nowArgIso(),
-    })
-    .select('id')
-    .single()
+  if (payment_method !== 'transfer') {
+    // 'cash': egreso = total amount; 'mixed': egreso = cash_amount only
+    const egresoAmount = payment_method === 'mixed'
+      ? Number(cash_amount ?? 0)
+      : Number(amount)
 
-  if (cashErr) return NextResponse.json({ error: cashErr.message }, { status: 500 })
+    const movementDescription =
+      type === 'advance'
+        ? `Adelanto empleado${description ? ': ' + description : ''}`
+        : `Sueldo empleado${period_from ? ` (${period_from} al ${period_to})` : ''}`
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: cashMovement, error: cashErr } = await (sb as any)
+      .from('cash_movements')
+      .insert({
+        type: 'egreso',
+        amount: egresoAmount,
+        description: movementDescription,
+        shift_id: openShift?.id ?? null,
+        created_at: nowArgIso(),
+      })
+      .select('id')
+      .single()
+
+    if (cashErr) return NextResponse.json({ error: cashErr.message }, { status: 500 })
+    cashMovementId = cashMovement.id
+  }
 
   // 3. Register employee payment record
   const paymentRecord: Record<string, unknown> = {
@@ -167,7 +195,14 @@ export async function POST(req: NextRequest) {
     type,
     amount: Number(amount),
     description: description ?? null,
-    cash_movement_id: cashMovement.id,
+    cash_movement_id: cashMovementId,
+    payment_method: payment_method ?? 'cash',
+    cash_amount: payment_method === 'mixed'
+      ? Number(cash_amount ?? 0)
+      : payment_method === 'transfer' ? 0 : Number(amount),
+    transfer_amount: payment_method === 'mixed'
+      ? Number(transfer_amount ?? 0)
+      : payment_method === 'transfer' ? Number(amount) : 0,
     created_at: nowArgIso(),
   }
 
