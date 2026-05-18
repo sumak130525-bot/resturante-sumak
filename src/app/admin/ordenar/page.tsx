@@ -7,9 +7,9 @@ import { cn } from '@/lib/utils'
 import type { MenuItem } from '@/lib/types'
 import { Save, RefreshCw, Tv2, X, ChevronLeft, ChevronRight, ChevronUp, ChevronDown } from 'lucide-react'
 
-const GRID_COLS = 6
-const GRID_ROWS = 4
-const TOTAL_CELLS = GRID_COLS * GRID_ROWS // 24
+const DEFAULT_GRID_COLS = 6
+const DEFAULT_GRID_ROWS = 4
+const DEFAULT_TOTAL_CELLS = DEFAULT_GRID_COLS * DEFAULT_GRID_ROWS
 
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
@@ -18,11 +18,11 @@ type GridState = (MenuItem | null)[]
 
 // ─── Helpers ───────────────────────────────────────────────────────────────────
 
-function buildGrid(items: MenuItem[]): GridState {
-  const grid: GridState = Array(TOTAL_CELLS).fill(null)
+function buildGrid(items: MenuItem[], totalCells: number): GridState {
+  const grid: GridState = Array(totalCells).fill(null)
   for (const item of items) {
     const order = item.display_order ?? 0
-    if (order >= 1 && order <= TOTAL_CELLS) {
+    if (order >= 1 && order <= totalCells) {
       grid[order - 1] = item
     }
   }
@@ -125,20 +125,22 @@ interface GridCellProps {
   index: number
   item: MenuItem | null
   available: MenuItem[]
+  gridCols: number
+  gridRows: number
   onPlace: (cellIndex: number, item: MenuItem) => void
   onRemove: (cellIndex: number) => void
   onMove: (from: number, to: number) => void
 }
 
-function GridCell({ index, item, available, onPlace, onRemove, onMove }: GridCellProps) {
+function GridCell({ index, item, available, gridCols, gridRows, onPlace, onRemove, onMove }: GridCellProps) {
   const [open, setOpen] = useState(false)
 
-  const col = index % GRID_COLS
-  const row = Math.floor(index / GRID_COLS)
+  const col = index % gridCols
+  const row = Math.floor(index / gridCols)
   const canLeft = col > 0
-  const canRight = col < GRID_COLS - 1
+  const canRight = col < gridCols - 1
   const canUp = row > 0
-  const canDown = row < GRID_ROWS - 1
+  const canDown = row < gridRows - 1
 
   if (item) {
     return (
@@ -180,7 +182,7 @@ function GridCell({ index, item, available, onPlace, onRemove, onMove }: GridCel
             </button>
             <div className="flex flex-col gap-0.5">
               <button
-                onClick={() => canUp && onMove(index, index - GRID_COLS)}
+                onClick={() => canUp && onMove(index, index - gridCols)}
                 disabled={!canUp}
                 className="w-5 h-5 bg-white/20 text-white rounded flex items-center justify-center hover:bg-white/40 disabled:opacity-0 transition-all"
                 title="Mover arriba"
@@ -188,7 +190,7 @@ function GridCell({ index, item, available, onPlace, onRemove, onMove }: GridCel
                 <ChevronUp size={10} />
               </button>
               <button
-                onClick={() => canDown && onMove(index, index + GRID_COLS)}
+                onClick={() => canDown && onMove(index, index + gridCols)}
                 disabled={!canDown}
                 className="w-5 h-5 bg-white/20 text-white rounded flex items-center justify-center hover:bg-white/40 disabled:opacity-0 transition-all"
                 title="Mover abajo"
@@ -245,10 +247,36 @@ function GridCell({ index, item, available, onPlace, onRemove, onMove }: GridCel
 
 export default function OrdenarMenuPage() {
   const [allItems, setAllItems] = useState<MenuItem[]>([])
-  const [grid, setGrid] = useState<GridState>(Array(TOTAL_CELLS).fill(null))
+  const [grid, setGrid] = useState<GridState>(Array(DEFAULT_TOTAL_CELLS).fill(null))
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [toast, setToast] = useState<{ msg: string; ok: boolean } | null>(null)
+
+  // Grid settings (fetched on load)
+  const [gridCols, setGridCols] = useState(DEFAULT_GRID_COLS)
+  const [gridRows, setGridRows] = useState(DEFAULT_GRID_ROWS)
+  const [totalCells, setTotalCells] = useState(DEFAULT_TOTAL_CELLS)
+  useEffect(() => {
+    Promise.all([
+      fetch('/api/admin/settings?key=grid_cols').then((r) => r.ok ? r.json() : []),
+      fetch('/api/admin/settings?key=grid_rows').then((r) => r.ok ? r.json() : []),
+    ]).then(([colsData, rowsData]) => {
+      const cols = colsData[0]?.value ? parseInt(colsData[0].value, 10) : DEFAULT_GRID_COLS
+      const rows = rowsData[0]?.value ? parseInt(rowsData[0].value, 10) : DEFAULT_GRID_ROWS
+      const safeCols = isNaN(cols) ? DEFAULT_GRID_COLS : cols
+      const safeRows = isNaN(rows) ? DEFAULT_GRID_ROWS : rows
+      setGridCols(safeCols)
+      setGridRows(safeRows)
+      setTotalCells(safeCols * safeRows)
+      setGrid((prev) => {
+        const newSize = safeCols * safeRows
+        if (prev.length === newSize) return prev
+        const next = Array(newSize).fill(null)
+        prev.forEach((item, i) => { if (i < newSize) next[i] = item })
+        return next
+      })
+    }).catch(() => {})
+  }, [])
 
   const showToast = (msg: string, ok: boolean) => {
     setToast({ msg, ok })
@@ -267,10 +295,10 @@ export default function OrdenarMenuPage() {
     if (data) {
       const items = data as MenuItem[]
       setAllItems(items)
-      setGrid(buildGrid(items))
+      setGrid(buildGrid(items, totalCells))
     }
     setLoading(false)
-  }, [])
+  }, [totalCells])
 
   useEffect(() => { fetchItems() }, [fetchItems])
 
@@ -391,7 +419,7 @@ export default function OrdenarMenuPage() {
               <div className="flex items-center justify-between mb-3">
                 <p className="text-[#F5C842] text-sm font-bold flex items-center gap-2">
                   <Tv2 size={16} />
-                  Grilla TV (6×4) — {assignedCount} de {TOTAL_CELLS} celdas ocupadas
+                  Grilla TV ({gridCols}×{gridRows}) — {assignedCount} de {totalCells} celdas ocupadas
                 </p>
               </div>
 
@@ -402,11 +430,11 @@ export default function OrdenarMenuPage() {
                   className="flex flex-col shrink-0"
                   style={{ gap: '6px' }}
                 >
-                  {Array.from({ length: GRID_ROWS }).map((_, r) => (
+                  {Array.from({ length: gridRows }).map((_, r) => (
                     <div
                       key={r}
                       className="text-[10px] text-gray-500 font-medium flex items-center justify-end pr-1"
-                      style={{ height: `calc((100% - ${(GRID_ROWS - 1) * 6}px) / ${GRID_ROWS})` }}
+                      style={{ height: `calc((100% - ${(gridRows - 1) * 6}px) / ${gridRows})` }}
                     >
                       F{r + 1}
                     </div>
@@ -418,16 +446,18 @@ export default function OrdenarMenuPage() {
                   className="flex-1"
                   style={{
                     display: 'grid',
-                    gridTemplateColumns: `repeat(${GRID_COLS}, 1fr)`,
+                    gridTemplateColumns: `repeat(${gridCols}, 1fr)`,
                     gap: '6px',
                   }}
                 >
-                  {Array.from({ length: TOTAL_CELLS }).map((_, i) => (
+                  {Array.from({ length: totalCells }).map((_, i) => (
                     <GridCell
                       key={i}
                       index={i}
                       item={grid[i]}
                       available={available}
+                      gridCols={gridCols}
+                      gridRows={gridRows}
                       onPlace={handlePlace}
                       onRemove={handleRemove}
                       onMove={handleMove}
@@ -438,7 +468,7 @@ export default function OrdenarMenuPage() {
 
               {/* Column numbers */}
               <div className="flex gap-2 mt-1 ml-8">
-                {Array.from({ length: GRID_COLS }).map((_, c) => (
+                {Array.from({ length: gridCols }).map((_, c) => (
                   <div key={c} className="flex-1 text-center text-[9px] text-gray-600">
                     C{c + 1}
                   </div>

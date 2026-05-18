@@ -13,7 +13,9 @@ import type { MenuItem } from '@/lib/types'
 
 const CURSOR_HIDE_MS      = 5_000
 const FALLBACK_REFRESH_MS = 15 * 1_000  // Refresh every 15s to pick up admin changes
-const MAX_VISIBLE         = 96   // 6 × 16 grid — scrollable
+const DEFAULT_GRID_COLS   = 6
+const DEFAULT_GRID_ROWS   = 16
+const MAX_VISIBLE         = DEFAULT_GRID_COLS * DEFAULT_GRID_ROWS
 
 // ─── Category Icons ───────────────────────────────────────────────────────────
 
@@ -607,10 +609,10 @@ function DishCard({ item, locale }: DishCardProps) {
 
 // ─── Skeleton grid ────────────────────────────────────────────────────────────
 
-function SkeletonGrid() {
+function SkeletonGrid({ count }: { count: number }) {
   return (
     <>
-      {Array.from({ length: MAX_VISIBLE }).map((_, i) => (
+      {Array.from({ length: count }).map((_, i) => (
         <div key={i} className="w-full h-full rounded-lg bg-white/5 animate-pulse" />
       ))}
     </>
@@ -629,6 +631,23 @@ export default function MenuDisplayPage() {
   const time = useClock()
   useWakeLock()
   useCursorHide()
+
+  // Grid settings (fetched on load)
+  const [gridCols, setGridCols] = useState(DEFAULT_GRID_COLS)
+  const [gridMaxVisible, setGridMaxVisible] = useState(MAX_VISIBLE)
+  useEffect(() => {
+    Promise.all([
+      fetch('/api/admin/settings?key=grid_cols').then((r) => r.ok ? r.json() : []),
+      fetch('/api/admin/settings?key=grid_rows').then((r) => r.ok ? r.json() : []),
+    ]).then(([colsData, rowsData]) => {
+      const cols = colsData[0]?.value ? parseInt(colsData[0].value, 10) : DEFAULT_GRID_COLS
+      const rows = rowsData[0]?.value ? parseInt(rowsData[0].value, 10) : DEFAULT_GRID_ROWS
+      const safeCols = isNaN(cols) ? DEFAULT_GRID_COLS : cols
+      const safeRows = isNaN(rows) ? DEFAULT_GRID_ROWS : rows
+      setGridCols(safeCols)
+      setGridMaxVisible(safeCols * safeRows)
+    }).catch(() => {})
+  }, [])
 
   // Force locale to 'es' when languages are disabled
   useEffect(() => {
@@ -654,13 +673,13 @@ export default function MenuDisplayPage() {
     setAssigningPosition(null)
   }
 
-  // Filter items for current tab — show only positioned items (display_order > 0), cap at MAX_VISIBLE
+  // Filter items for current tab — show only positioned items (display_order > 0), cap at gridMaxVisible
   const filteredItems = (() => {
     const positioned = menuItems.filter((i) => (i.display_order ?? 0) > 0)
-    if (activeTab === 'all') return positioned.slice(0, MAX_VISIBLE)
+    if (activeTab === 'all') return positioned.slice(0, gridMaxVisible)
     const cat = categories.find((c) => c.slug === activeTab)
     if (!cat) return []
-    return positioned.filter((i) => i.category_id === cat.id).slice(0, MAX_VISIBLE)
+    return positioned.filter((i) => i.category_id === cat.id).slice(0, gridMaxVisible)
   })()
 
   // Tab switch with fade transition
@@ -773,7 +792,7 @@ export default function MenuDisplayPage() {
         </div>
       </header>
 
-      {/* ── 6 × 16 grid — scrollable ── */}
+      {/* ── grid — scrollable ── */}
       <main
         className={cn(
           'flex-1 min-h-0 p-1 transition-opacity duration-200 overflow-y-auto',
@@ -781,18 +800,18 @@ export default function MenuDisplayPage() {
         )}
         style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(6, 1fr)',
+          gridTemplateColumns: `repeat(${gridCols}, 1fr)`,
           gridTemplateRows: 'repeat(4, calc(25% - 5px))',
           gridAutoRows: 'calc(25% - 5px)',
           gap: '4px',
         }}
       >
         {loading ? (
-          <SkeletonGrid />
+          <SkeletonGrid count={gridMaxVisible} />
         ) : (
           <>
-            {Array.from({ length: MAX_VISIBLE }).map((_, gridIndex) => {
-              const position = gridIndex + 1 // positions 1-96
+            {Array.from({ length: gridMaxVisible }).map((_, gridIndex) => {
+              const position = gridIndex + 1
               const item = filteredItems.find((i) => i.display_order === position)
               if (item) {
                 return (

@@ -19,6 +19,12 @@ export default function AdminConfiguracionPage() {
   const [langLoading, setLangLoading] = useState(true)
   const [langSaving, setLangSaving] = useState(false)
 
+  // ── Grid settings ──────────────────────────────────────────────────────────
+  const [gridCols, setGridCols] = useState(6)
+  const [gridRows, setGridRows] = useState(16)
+  const [gridLoading, setGridLoading] = useState(true)
+  const [gridSaving, setGridSaving] = useState(false)
+
   // ── Ticket config ──────────────────────────────────────────────────────────
   const [ticketConfig, setTicketConfig] = useState<TicketConfig>(DEFAULT_TICKET_CONFIG)
   const [ticketConfigLoading, setTicketConfigLoading] = useState(true)
@@ -57,6 +63,48 @@ export default function AdminConfiguracionPage() {
       })
       .catch(() => setTicketConfigLoading(false))
   }, [])
+
+  // Fetch grid settings on mount
+  useEffect(() => {
+    fetch('/api/admin/settings?key=grid_cols')
+      .then((r) => r.ok ? r.json() : [])
+      .then((d: { key: string; value: string }[]) => {
+        const cols = d[0]?.value ? parseInt(d[0].value, 10) : 6
+        if (!isNaN(cols)) setGridCols(cols)
+      })
+      .catch(() => {})
+    fetch('/api/admin/settings?key=grid_rows')
+      .then((r) => r.ok ? r.json() : [])
+      .then((d: { key: string; value: string }[]) => {
+        const rows = d[0]?.value ? parseInt(d[0].value, 10) : 16
+        if (!isNaN(rows)) setGridRows(rows)
+        setGridLoading(false)
+      })
+      .catch(() => setGridLoading(false))
+  }, [])
+
+  const handleSaveGrid = async () => {
+    setGridSaving(true)
+    setError(null)
+    try {
+      await Promise.all([
+        fetch('/api/admin/settings', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ key: 'grid_cols', value: String(gridCols) }),
+        }),
+        fetch('/api/admin/settings', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ key: 'grid_rows', value: String(gridRows) }),
+        }),
+      ])
+      showSuccess('Configuración de grilla guardada')
+    } catch {
+      setError('Error al guardar configuración de grilla')
+    }
+    setGridSaving(false)
+  }
 
   const handleToggleLanguages = async (value: boolean) => {
     setLangSaving(true)
@@ -671,6 +719,63 @@ export default function AdminConfiguracionPage() {
                   className="flex items-center gap-2 bg-sumak-brown text-white text-sm font-medium px-5 py-2.5 rounded-xl hover:bg-sumak-brown/90 disabled:opacity-50 transition-colors"
                 >
                   {ticketConfigSaving ? 'Guardando...' : 'Guardar configuración de ticket'}
+                </button>
+              </>
+            )}
+          </div>
+        </section>
+
+        {/* Sección: Configuración de grilla POS / Menu Display */}
+        <section>
+          <h2 className="text-base font-semibold text-gray-700 mb-3">Grilla POS y Menu Display</h2>
+          <div className="bg-white rounded-2xl shadow-sm p-6 space-y-5">
+            {gridLoading ? (
+              <div className="space-y-3">
+                <div className="h-9 rounded-xl bg-gray-100 animate-pulse" />
+                <div className="h-9 rounded-xl bg-gray-100 animate-pulse" />
+              </div>
+            ) : (
+              <>
+                <p className="text-xs text-gray-500">
+                  Define el número de columnas y filas de la grilla de productos. Se aplica en el POS y en las pantallas de menú (menu-display).
+                </p>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className={labelClass}>Columnas (3 – 12)</label>
+                    <input
+                      type="number"
+                      min={3}
+                      max={12}
+                      className={inputClass}
+                      value={gridCols}
+                      onChange={(e) => {
+                        const v = Math.max(3, Math.min(12, parseInt(e.target.value, 10) || 6))
+                        setGridCols(v)
+                      }}
+                    />
+                  </div>
+                  <div>
+                    <label className={labelClass}>Filas (4 – 30)</label>
+                    <input
+                      type="number"
+                      min={4}
+                      max={30}
+                      className={inputClass}
+                      value={gridRows}
+                      onChange={(e) => {
+                        const v = Math.max(4, Math.min(30, parseInt(e.target.value, 10) || 16))
+                        setGridRows(v)
+                      }}
+                    />
+                  </div>
+                </div>
+                <p className="text-xs text-gray-400">Total de celdas: {gridCols * gridRows}</p>
+                <button
+                  onClick={handleSaveGrid}
+                  disabled={gridSaving}
+                  className="flex items-center gap-2 bg-sumak-brown text-white text-sm font-medium px-5 py-2.5 rounded-xl hover:bg-sumak-brown/90 disabled:opacity-50 transition-colors"
+                >
+                  {gridSaving ? 'Guardando...' : 'Guardar configuración de grilla'}
                 </button>
               </>
             )}

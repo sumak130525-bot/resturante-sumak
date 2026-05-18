@@ -13,7 +13,9 @@ import type { MenuItem } from '@/lib/types'
 
 const CURSOR_HIDE_MS      = 5_000
 const FALLBACK_REFRESH_MS = 15 * 1_000  // Refresh every 15s to pick up admin changes
-const MAX_VISIBLE         = 24   // 6 × 4 grid — no scroll on TV
+const DEFAULT_GRID_COLS   = 6
+const DEFAULT_GRID_ROWS   = 4
+const MAX_VISIBLE         = DEFAULT_GRID_COLS * DEFAULT_GRID_ROWS
 
 // ─── Tabs ─────────────────────────────────────────────────────────────────────
 
@@ -527,10 +529,10 @@ function DishCard({ item, locale }: DishCardProps) {
 
 // ─── Skeleton grid ────────────────────────────────────────────────────────────
 
-function SkeletonGrid() {
+function SkeletonGrid({ count }: { count: number }) {
   return (
     <>
-      {Array.from({ length: MAX_VISIBLE }).map((_, i) => (
+      {Array.from({ length: count }).map((_, i) => (
         <div key={i} className="w-full h-full rounded-lg bg-white/5 animate-pulse" />
       ))}
     </>
@@ -549,6 +551,23 @@ export default function MenuDisplayPage() {
   const time = useClock()
   useWakeLock()
   useCursorHide()
+
+  // Grid settings (fetched on load)
+  const [gridCols, setGridCols] = useState(DEFAULT_GRID_COLS)
+  const [gridMaxVisible, setGridMaxVisible] = useState(MAX_VISIBLE)
+  useEffect(() => {
+    Promise.all([
+      fetch('/api/admin/settings?key=grid_cols').then((r) => r.ok ? r.json() : []),
+      fetch('/api/admin/settings?key=grid_rows').then((r) => r.ok ? r.json() : []),
+    ]).then(([colsData, rowsData]) => {
+      const cols = colsData[0]?.value ? parseInt(colsData[0].value, 10) : DEFAULT_GRID_COLS
+      const rows = rowsData[0]?.value ? parseInt(rowsData[0].value, 10) : DEFAULT_GRID_ROWS
+      const safeCols = isNaN(cols) ? DEFAULT_GRID_COLS : cols
+      const safeRows = isNaN(rows) ? DEFAULT_GRID_ROWS : rows
+      setGridCols(safeCols)
+      setGridMaxVisible(safeCols * safeRows)
+    }).catch(() => {})
+  }, [])
 
   // Force locale to 'es' when languages are disabled
   useEffect(() => {
@@ -581,7 +600,7 @@ export default function MenuDisplayPage() {
     return availableSlugs.has(tab.key)
   })
 
-  // Filter items for current tab — cap at MAX_VISIBLE (TV has no scroll)
+  // Filter items for current tab — cap at gridMaxVisible (TV has no scroll)
   const filteredItems = (() => {
     let items: typeof menuItems
     if (activeTab === 'all') {
@@ -593,7 +612,7 @@ export default function MenuDisplayPage() {
     } else {
       items = menuItems.filter((i) => i.categories?.slug === activeTab)
     }
-    return items.slice(0, MAX_VISIBLE)
+    return items.slice(0, gridMaxVisible)
   })()
 
   // Tab switch with fade transition — manual only, no auto-rotate
@@ -694,7 +713,7 @@ export default function MenuDisplayPage() {
         </div>
       </header>
 
-      {/* ── 6 × 4 grid — fills all remaining height ── */}
+      {/* ── grid — fills all remaining height ── */}
       <main
         className={cn(
           'flex-1 min-h-0 p-1 transition-opacity duration-200',
@@ -702,13 +721,13 @@ export default function MenuDisplayPage() {
         )}
         style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(6, 1fr)',
+          gridTemplateColumns: `repeat(${gridCols}, 1fr)`,
           gridTemplateRows: 'repeat(4, 1fr)',
           gap: '4px',
         }}
       >
         {loading ? (
-          <SkeletonGrid />
+          <SkeletonGrid count={gridMaxVisible} />
         ) : filteredItems.length === 0 && isVirtualTab ? (
           <div
             className="flex flex-col items-center justify-center gap-3 text-white/30"
@@ -719,8 +738,8 @@ export default function MenuDisplayPage() {
           </div>
         ) : (
           <>
-            {Array.from({ length: MAX_VISIBLE }).map((_, gridIndex) => {
-              const position = gridIndex + 1 // positions 1-24
+            {Array.from({ length: gridMaxVisible }).map((_, gridIndex) => {
+              const position = gridIndex + 1
               const item = filteredItems.find((i) => i.display_order === position)
               if (item) {
                 return (

@@ -243,7 +243,9 @@ const CATEGORY_ICONS: Record<string, string> = {
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const MAX_VISIBLE = 50 // max items in normal grid (scrollable)
-const GRID_SIZE = 96   // 6 columns × 16 rows, scrollable
+const DEFAULT_GRID_COLS = 6
+const DEFAULT_GRID_ROWS = 16
+const DEFAULT_GRID_SIZE = DEFAULT_GRID_COLS * DEFAULT_GRID_ROWS
 
 // ─── Price format (ARS: $12.500) ──────────────────────────────────────────────
 
@@ -2944,6 +2946,23 @@ export default function POSPage() {
       .catch(() => {})
   }, [])
 
+  // Grid settings (fetched once on load)
+  const [gridCols, setGridCols] = useState(DEFAULT_GRID_COLS)
+  const [gridSize, setGridSize] = useState(DEFAULT_GRID_SIZE)
+  useEffect(() => {
+    Promise.all([
+      fetch('/api/admin/settings?key=grid_cols').then((r) => r.ok ? r.json() : []),
+      fetch('/api/admin/settings?key=grid_rows').then((r) => r.ok ? r.json() : []),
+    ]).then(([colsData, rowsData]) => {
+      const cols = colsData[0]?.value ? parseInt(colsData[0].value, 10) : DEFAULT_GRID_COLS
+      const rows = rowsData[0]?.value ? parseInt(rowsData[0].value, 10) : DEFAULT_GRID_ROWS
+      const safeCols = isNaN(cols) ? DEFAULT_GRID_COLS : cols
+      const safeRows = isNaN(rows) ? DEFAULT_GRID_ROWS : rows
+      setGridCols(safeCols)
+      setGridSize(safeCols * safeRows)
+    }).catch(() => {})
+  }, [])
+
   // Frequent customers
   const [customers, setCustomers] = useState<FrequentCustomer[]>([])
   useEffect(() => {
@@ -3230,7 +3249,7 @@ export default function POSPage() {
         return cat ? item.category_id === cat.id : true
       })
 
-  const displayItems = activeCategory === 'all' ? filteredItems.slice(0, GRID_SIZE) : filteredItems.slice(0, MAX_VISIBLE)
+  const displayItems = activeCategory === 'all' ? filteredItems.slice(0, gridSize) : filteredItems.slice(0, MAX_VISIBLE)
 
   // Items for edit mode: all positioned items (display_order 1-24), not filtered by category
   const positionedItems = menuItems.filter((item) => (item.display_order ?? 0) > 0)
@@ -3627,7 +3646,7 @@ export default function POSPage() {
             className="flex-1 min-w-0 p-2 overflow-y-auto"
             style={{
               display: 'grid',
-              gridTemplateColumns: 'repeat(6, 1fr)',
+              gridTemplateColumns: `repeat(${gridCols}, 1fr)`,
               gridTemplateRows: editMode ? 'repeat(4, calc(25% - 5px))' : 'repeat(4, calc(25% - 5px))',
               gridAutoRows: 'calc(25% - 5px)',
               gap: '6px',
@@ -3638,8 +3657,8 @@ export default function POSPage() {
                 <div key={i} className="w-full h-full rounded-xl bg-sumak-cream-dark animate-pulse" />
               ))
             ) : editMode && activeCategory === 'all' ? (
-              // Edit mode (only in Todos): fixed 24-cell grid, find items by display_order
-              Array.from({ length: GRID_SIZE }).map((_, gridIndex) => {
+              // Edit mode (only in Todos): fixed grid, find items by display_order
+              Array.from({ length: gridSize }).map((_, gridIndex) => {
                 const position = gridIndex + 1
                 const item = positionedItems.find((i) => i.display_order === position)
                 const isDropTarget = draggedItem !== null && dropTarget === position && position !== (draggedItem.display_order ?? 0)
@@ -3692,8 +3711,8 @@ export default function POSPage() {
                 )
               })
             ) : activeCategory === 'all' ? (
-              // Normal mode Todos: fixed 24-cell grid by position
-              Array.from({ length: GRID_SIZE }).map((_, gridIndex) => {
+              // Normal mode Todos: fixed grid by position
+              Array.from({ length: gridSize }).map((_, gridIndex) => {
                 const position = gridIndex + 1
                 const item = displayItems.find((i) => i.display_order === position)
                 const isDropTarget = draggedItem !== null && dropTarget === position && position !== (draggedItem.display_order ?? 0)
