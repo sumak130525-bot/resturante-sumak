@@ -1098,6 +1098,27 @@ function paymentMethodLabel(pm: 'cash' | 'transfer' | 'mixed' | null): string {
   return 'Efectivo'
 }
 
+function printViaIframe(html: string) {
+  const iframe = document.createElement('iframe')
+  iframe.style.position = 'fixed'
+  iframe.style.right = '0'
+  iframe.style.bottom = '0'
+  iframe.style.width = '0'
+  iframe.style.height = '0'
+  iframe.style.border = '0'
+  document.body.appendChild(iframe)
+  const doc = iframe.contentDocument || iframe.contentWindow?.document
+  if (!doc) { document.body.removeChild(iframe); return }
+  doc.open()
+  doc.write(html)
+  doc.close()
+  iframe.onload = () => {
+    iframe.contentWindow?.focus()
+    iframe.contentWindow?.print()
+    setTimeout(() => document.body.removeChild(iframe), 500)
+  }
+}
+
 function printAdvanceReceipt(payment: EmployeePayment, empName: string, empRole: string) {
   const dateStr = toArgDateTime(payment.created_at)
   const pmLabel = paymentMethodLabel(payment.payment_method)
@@ -1141,21 +1162,7 @@ function printAdvanceReceipt(payment: EmployeePayment, empName: string, empRole:
   <div class="firma">Firma del empleado</div>
 </body>
 </html>`
-  const w = window.open('', '_blank')
-  if (!w) {
-    alert('El navegador bloqueó la ventana emergente. Permitir popups para imprimir.')
-    return
-  }
-  w.document.write(html)
-  w.document.close()
-  w.focus()
-  const doPrint = () => { w.print(); w.close() }
-  if (w.onload !== undefined) {
-    w.onload = doPrint
-    setTimeout(doPrint, 800)
-  } else {
-    setTimeout(doPrint, 800)
-  }
+  printViaIframe(html)
 }
 
 function printSalaryReceipt(payment: EmployeePayment, empName: string, empRole: string) {
@@ -1211,21 +1218,7 @@ function printSalaryReceipt(payment: EmployeePayment, empName: string, empRole: 
   <div class="firma">Firma del empleado</div>
 </body>
 </html>`
-  const w = window.open('', '_blank')
-  if (!w) {
-    alert('El navegador bloqueó la ventana emergente. Permitir popups para imprimir.')
-    return
-  }
-  w.document.write(html)
-  w.document.close()
-  w.focus()
-  const doPrint = () => { w.print(); w.close() }
-  if (w.onload !== undefined) {
-    w.onload = doPrint
-    setTimeout(doPrint, 800)
-  } else {
-    setTimeout(doPrint, 800)
-  }
+  printViaIframe(html)
 }
 
 // ─── Tab: Pagos ───────────────────────────────────────────────────────────────
@@ -1537,6 +1530,7 @@ function TabPagos({ employees }: { employees: Employee[] }) {
                 <th className="text-right px-5 py-3.5 font-semibold text-gray-600">Monto</th>
                 <th className="text-center px-5 py-3.5 font-semibold text-gray-600">Recibo</th>
                 <th className="text-center px-5 py-3.5 font-semibold text-gray-600">Acciones</th>
+                <th className="w-8"></th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
@@ -1572,9 +1566,10 @@ function TabPagos({ employees }: { employees: Employee[] }) {
                         )}
                       </td>
                       <td className="px-5 py-3.5 text-right font-bold text-gray-800">{formatARS(pmt.amount)}</td>
-                      <td className="px-5 py-3.5 text-center">
+                      <td className="px-5 py-3.5 text-center" onClick={(e) => e.stopPropagation()}>
                         <button
                           onClick={(e) => {
+                            e.preventDefault()
                             e.stopPropagation()
                             if (pmt.type === 'advance') printAdvanceReceipt(pmt, empName, empRole)
                             else printSalaryReceipt(pmt, empName, empRole)
@@ -1584,7 +1579,9 @@ function TabPagos({ employees }: { employees: Employee[] }) {
                         >
                           <Printer size={15} />
                         </button>
-                        {isExpanded ? <ChevronUp size={13} className="inline ml-1 text-gray-300" /> : <ChevronDown size={13} className="inline ml-1 text-gray-300" />}
+                      </td>
+                      <td className="px-2 py-3.5 text-center">
+                        {isExpanded ? <ChevronUp size={13} className="text-gray-300" /> : <ChevronDown size={13} className="text-gray-300" />}
                       </td>
                       <td className="px-5 py-3.5 text-center" onClick={(e) => e.stopPropagation()}>
                         <div className="flex items-center justify-center gap-1">
@@ -1610,7 +1607,7 @@ function TabPagos({ employees }: { employees: Employee[] }) {
                     </tr>
                     {isEditing && (
                       <tr key={pmt.id + '-edit'} className="bg-amber-50/60">
-                        <td colSpan={7} className="px-5 py-3">
+                        <td colSpan={8} className="px-5 py-3">
                           <div className="flex items-center gap-3 flex-wrap">
                             <span className="text-xs font-semibold text-gray-600">Nuevo monto (ARS):</span>
                             <input
@@ -1643,7 +1640,7 @@ function TabPagos({ employees }: { employees: Employee[] }) {
                     )}
                     {isExpanded && !isEditing && (
                       <tr key={pmt.id + '-detail'} className="bg-amber-50/30">
-                        <td colSpan={7} className="px-5 py-3 text-xs text-gray-600 space-y-1">
+                        <td colSpan={8} className="px-5 py-3 text-xs text-gray-600 space-y-1">
                           {pmt.type === 'advance' && pmt.description && <div>Concepto: {pmt.description}</div>}
                           {pmt.payment_method === 'mixed' && (
                             <div>Desglose: Efectivo {formatARS(pmt.cash_amount ?? 0)} + Transferencia {formatARS(pmt.transfer_amount ?? 0)}</div>
