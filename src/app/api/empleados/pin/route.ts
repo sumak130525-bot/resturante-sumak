@@ -91,8 +91,6 @@ export async function POST(req: NextRequest) {
     },
     status: openEntry
       ? 'working'
-      : hasClosedToday
-      ? 'finished'
       : 'not_clocked',
     open_entry: openEntry
       ? { id: openEntry.id, clock_in: openEntry.clock_in }
