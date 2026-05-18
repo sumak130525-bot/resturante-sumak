@@ -75,50 +75,47 @@ type PinOpenEntry = { id: string; clock_in: string } | null
 
 // ─── Argentina time helpers ───────────────────────────────────────────────────
 
-const ARG_OFFSET_MS = -3 * 60 * 60 * 1000
+const ARG_TZ = 'America/Argentina/Buenos_Aires'
 
 function toArgTime(utcIso: string): string {
-  const d = new Date(new Date(utcIso).getTime() - ARG_OFFSET_MS)
+  const d = new Date(utcIso)
   return d.toLocaleTimeString('es-AR', {
     hour: '2-digit',
     minute: '2-digit',
-    timeZone: 'UTC',
+    timeZone: ARG_TZ,
   })
 }
 
 function toArgDateTime(utcIso: string): string {
-  const d = new Date(new Date(utcIso).getTime() - ARG_OFFSET_MS)
+  const d = new Date(utcIso)
   return d.toLocaleString('es-AR', {
     day: '2-digit',
     month: '2-digit',
     year: 'numeric',
     hour: '2-digit',
     minute: '2-digit',
-    timeZone: 'UTC',
+    timeZone: ARG_TZ,
   })
 }
 
 function todayArg(): string {
-  const d = new Date(Date.now() - ARG_OFFSET_MS)
-  const y = d.getUTCFullYear()
-  const m = String(d.getUTCMonth() + 1).padStart(2, '0')
-  const dd = String(d.getUTCDate()).padStart(2, '0')
-  return `${y}-${m}-${dd}`
+  const d = new Date()
+  const parts = d.toLocaleDateString('en-CA', { timeZone: ARG_TZ }).split('-')
+  return parts.join('-')
 }
 
 function firstDayOfMonthArg(): string {
-  const d = new Date(Date.now() - ARG_OFFSET_MS)
-  const y = d.getUTCFullYear()
-  const m = String(d.getUTCMonth() + 1).padStart(2, '0')
-  return `${y}-${m}-01`
+  const d = new Date()
+  const parts = d.toLocaleDateString('en-CA', { timeZone: ARG_TZ }).split('-')
+  return `${parts[0]}-${parts[1]}-01`
 }
 
 function nowArgTimeString(): string {
-  const d = new Date(Date.now() - ARG_OFFSET_MS)
+  const d = new Date()
   return d.toLocaleTimeString('es-AR', {
     hour: '2-digit',
     minute: '2-digit',
-    timeZone: 'UTC',
+    timeZone: ARG_TZ,
   })
 }
 
