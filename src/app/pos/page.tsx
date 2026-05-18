@@ -1259,20 +1259,84 @@ function POSDishCard({
   locale,
   editMode,
   onUnassign,
+  onDragStart,
+  isDragging,
 }: {
   item: MenuItem
   onAdd: (item: MenuItem) => void
   locale: Locale
   editMode: boolean
   onUnassign: (item: MenuItem) => void
+  onDragStart?: (item: MenuItem, clientX: number, clientY: number) => void
+  isDragging?: boolean
 }) {
   const isUnavailable = item.available === 0 || item.available_qty === 0
   const isSoldOutByQty = item.available_qty === 0
   const hasLimitedQty = item.available_qty !== null && item.available_qty !== undefined && item.available_qty >= 1 && item.available_qty <= 3
   const [pressed, setPressed] = useState(false)
 
-  const handleClick = () => {
-    if (editMode) return // clicks in edit mode handled by X button only
+  const longPressTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const didLongPress = useRef(false)
+  const pressStartPos = useRef<{ x: number; y: number } | null>(null)
+
+  const startLongPress = (clientX: number, clientY: number) => {
+    if (editMode) return
+    didLongPress.current = false
+    pressStartPos.current = { x: clientX, y: clientY }
+    longPressTimer.current = setTimeout(() => {
+      didLongPress.current = true
+      if (typeof navigator !== 'undefined' && navigator.vibrate) {
+        navigator.vibrate(50)
+      }
+      onDragStart?.(item, clientX, clientY)
+    }, 600)
+  }
+
+  const cancelLongPress = () => {
+    if (longPressTimer.current !== null) {
+      clearTimeout(longPressTimer.current)
+      longPressTimer.current = null
+    }
+  }
+
+  // Touch handlers
+  const handleTouchStart = (e: React.TouchEvent) => {
+    const t = e.touches[0]
+    startLongPress(t.clientX, t.clientY)
+  }
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (longPressTimer.current !== null) {
+      const t = e.touches[0]
+      const start = pressStartPos.current
+      if (start) {
+        const dx = Math.abs(t.clientX - start.x)
+        const dy = Math.abs(t.clientY - start.y)
+        if (dx > 8 || dy > 8) cancelLongPress()
+      }
+    }
+  }
+
+  const handleTouchEnd = () => {
+    cancelLongPress()
+  }
+
+  // Mouse handlers
+  const handleMouseDown = (e: React.MouseEvent) => {
+    if (e.button !== 0) return
+    startLongPress(e.clientX, e.clientY)
+  }
+
+  const handleMouseUp = () => {
+    cancelLongPress()
+  }
+
+  const handleClick = (e: React.MouseEvent) => {
+    if (didLongPress.current) {
+      e.preventDefault()
+      return
+    }
+    if (editMode) return
     if (isUnavailable) return
     setPressed(true)
     onAdd(item)
@@ -1282,14 +1346,21 @@ function POSDishCard({
   return (
     <article
       onClick={handleClick}
+      onMouseDown={handleMouseDown}
+      onMouseUp={handleMouseUp}
+      onMouseLeave={cancelLongPress}
+      onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
+      onTouchEnd={handleTouchEnd}
+      onTouchCancel={handleTouchEnd}
       className={`relative w-full h-full rounded-xl overflow-hidden select-none transition-all duration-150 ${
         editMode
           ? 'cursor-default border-2 border-red-500/40'
           : isUnavailable
             ? 'opacity-50 cursor-not-allowed'
             : 'cursor-pointer active:scale-95 hover:ring-2 hover:ring-sumak-gold'
-      } ${pressed ? 'scale-95 brightness-90' : ''}`}
-      style={{ touchAction: 'manipulation' }}
+      } ${pressed ? 'scale-95 brightness-90' : ''} ${isDragging ? 'opacity-40 scale-95' : ''}`}
+      style={{ touchAction: 'none' }}
     >
       {/* Image */}
       {item.image_url ? (
@@ -1363,6 +1434,61 @@ function POSDishCard({
         </button>
       )}
     </article>
+  )
+}
+
+// ─── Drag Ghost ────────────────────────────────────────────────────────────────
+function DragGhost({
+  item,
+  x,
+  y,
+  locale,
+}: {
+  item: MenuItem
+  x: number
+  y: number
+  locale: Locale
+}) {
+  return (
+    <div
+      style={{
+        position: 'fixed',
+        left: x - 60,
+        top: y - 60,
+        width: 120,
+        height: 120,
+        zIndex: 9999,
+        pointerEvents: 'none',
+        transform: 'scale(1.08)',
+        transition: 'transform 0.1s',
+        borderRadius: '0.75rem',
+        overflow: 'hidden',
+        boxShadow: '0 8px 32px rgba(0,0,0,0.7)',
+      }}
+    >
+      {item.image_url ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={item.image_url}
+          alt={item.name}
+          style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+          draggable={false}
+        />
+      ) : (
+        <div style={{ width: '100%', height: '100%', background: '#374151', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <span style={{ fontSize: '2.5rem' }}>🍽️</span>
+        </div>
+      )}
+      <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to top, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0.1) 60%, transparent 100%)' }} />
+      <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, padding: '6px 8px' }}>
+        <p style={{ margin: 0, fontWeight: 700, color: '#fff', fontSize: '0.72rem', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', textShadow: '0 1px 3px rgba(0,0,0,0.9)' }}>
+          {getItemName(item, locale)}
+        </p>
+        <p style={{ margin: 0, fontWeight: 700, color: '#f5c842', fontSize: '0.78rem', textShadow: '0 1px 3px rgba(0,0,0,0.9)' }}>
+          {formatARS(item.price)}
+        </p>
+      </div>
+    </div>
   )
 }
 
@@ -2939,6 +3065,118 @@ export default function POSPage() {
     setEditMode((prev) => !prev)
   }, [])
 
+  // ─── Drag & Drop state ────────────────────────────────────────────────────────
+  const [draggedItem, setDraggedItem] = useState<MenuItem | null>(null)
+  const [dragPos, setDragPos] = useState<{ x: number; y: number }>({ x: 0, y: 0 })
+  const [dropTarget, setDropTarget] = useState<number | null>(null) // grid position (1-96)
+  const gridRef = useRef<HTMLElement | null>(null)
+  // Map position → cell DOM element for hit-testing
+  const cellElemsRef = useRef<Map<number, HTMLElement>>(new Map())
+
+  const getPositionFromPoint = useCallback((clientX: number, clientY: number): number | null => {
+    let best: number | null = null
+    cellElemsRef.current.forEach((el, position) => {
+      const rect = el.getBoundingClientRect()
+      if (
+        clientX >= rect.left &&
+        clientX <= rect.right &&
+        clientY >= rect.top &&
+        clientY <= rect.bottom
+      ) {
+        best = position
+      }
+    })
+    return best
+  }, [])
+
+  const handleDragStart = useCallback((item: MenuItem, clientX: number, clientY: number) => {
+    setDraggedItem(item)
+    setDragPos({ x: clientX, y: clientY })
+    setDropTarget(item.display_order ?? null)
+  }, [])
+
+  const handleDragMove = useCallback((clientX: number, clientY: number) => {
+    if (!draggedItem) return
+    setDragPos({ x: clientX, y: clientY })
+    const pos = getPositionFromPoint(clientX, clientY)
+    setDropTarget(pos)
+  }, [draggedItem, getPositionFromPoint])
+
+  const handleDragEnd = useCallback(async (clientX: number, clientY: number) => {
+    if (!draggedItem) return
+    const targetPosition = getPositionFromPoint(clientX, clientY)
+    const sourcePosition = draggedItem.display_order ?? 0
+
+    if (targetPosition !== null && targetPosition !== sourcePosition) {
+      // Find if another item occupies the target position
+      const targetItem = menuItems.find((i) => i.display_order === targetPosition)
+      try {
+        if (targetItem) {
+          // Swap
+          await fetch('/api/menu-display/reorder', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              updates: [
+                { id: draggedItem.id, display_order: targetPosition },
+                { id: targetItem.id, display_order: sourcePosition },
+              ],
+            }),
+          })
+        } else {
+          // Move to empty cell
+          await fetch('/api/menu-display/reorder', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              updates: [{ id: draggedItem.id, display_order: targetPosition }],
+            }),
+          })
+        }
+      } catch (e) { void e }
+    }
+    setDraggedItem(null)
+    setDropTarget(null)
+  }, [draggedItem, menuItems, getPositionFromPoint])
+
+  const cancelDrag = useCallback(() => {
+    setDraggedItem(null)
+    setDropTarget(null)
+  }, [])
+
+  // Global move/end listeners while dragging
+  useEffect(() => {
+    if (!draggedItem) return
+
+    const onMouseMove = (e: MouseEvent) => handleDragMove(e.clientX, e.clientY)
+    const onMouseUp = (e: MouseEvent) => { void handleDragEnd(e.clientX, e.clientY) }
+    const onTouchMove = (e: TouchEvent) => {
+      e.preventDefault()
+      const t = e.touches[0]
+      handleDragMove(t.clientX, t.clientY)
+    }
+    const onTouchEnd = (e: TouchEvent) => {
+      const t = e.changedTouches[0]
+      void handleDragEnd(t.clientX, t.clientY)
+    }
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') cancelDrag()
+    }
+
+    window.addEventListener('mousemove', onMouseMove)
+    window.addEventListener('mouseup', onMouseUp)
+    window.addEventListener('touchmove', onTouchMove, { passive: false })
+    window.addEventListener('touchend', onTouchEnd)
+    window.addEventListener('keydown', onKeyDown)
+    return () => {
+      window.removeEventListener('mousemove', onMouseMove)
+      window.removeEventListener('mouseup', onMouseUp)
+      window.removeEventListener('touchmove', onTouchMove)
+      window.removeEventListener('touchend', onTouchEnd)
+      window.removeEventListener('keydown', onKeyDown)
+    }
+  }, [draggedItem, handleDragMove, handleDragEnd, cancelDrag])
+
   // Unassign item: set display_order to 0
   const handleUnassign = useCallback(async (item: MenuItem) => {
     try {
@@ -3385,6 +3623,7 @@ export default function POSPage() {
         <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
           {/* Dish Grid */}
           <main
+            ref={(el) => { gridRef.current = el }}
             className="flex-1 min-w-0 p-2 overflow-y-auto"
             style={{
               display: 'grid',
@@ -3403,28 +3642,53 @@ export default function POSPage() {
               Array.from({ length: GRID_SIZE }).map((_, gridIndex) => {
                 const position = gridIndex + 1
                 const item = positionedItems.find((i) => i.display_order === position)
+                const isDropTarget = draggedItem !== null && dropTarget === position && position !== (draggedItem.display_order ?? 0)
                 if (item) {
                   return (
-                    <POSDishCard
+                    <div
                       key={item.id}
-                      item={item}
-                      onAdd={handleAddItem}
-                      locale={locale}
-                      editMode={true}
-                      onUnassign={handleUnassign}
-                    />
+                      ref={(el) => {
+                        if (el) cellElemsRef.current.set(position, el)
+                        else cellElemsRef.current.delete(position)
+                      }}
+                      className={`relative w-full h-full rounded-xl ${isDropTarget ? 'ring-2 ring-blue-400 ring-offset-1 ring-offset-black' : ''}`}
+                    >
+                      <POSDishCard
+                        item={item}
+                        onAdd={handleAddItem}
+                        locale={locale}
+                        editMode={true}
+                        onUnassign={handleUnassign}
+                        onDragStart={handleDragStart}
+                        isDragging={draggedItem?.id === item.id}
+                      />
+                      {isDropTarget && (
+                        <div className="absolute inset-0 rounded-xl border-2 border-dashed border-blue-400 bg-blue-500/10 pointer-events-none" />
+                      )}
+                    </div>
                   )
                 }
                 // Empty cell: show + button
                 return (
-                  <button
+                  <div
                     key={`empty-${position}`}
-                    onClick={() => setAssigningPosition(position)}
-                    className="w-full h-full rounded-xl bg-gray-900/60 border border-gray-700/50 flex items-center justify-center hover:bg-gray-800/60 active:bg-gray-700/60 transition-all group"
-                    aria-label={`Agregar plato en celda ${position}`}
+                    ref={(el) => {
+                      if (el) cellElemsRef.current.set(position, el)
+                      else cellElemsRef.current.delete(position)
+                    }}
+                    className={`relative w-full h-full ${isDropTarget ? 'rounded-xl ring-2 ring-blue-400 ring-offset-1 ring-offset-black' : ''}`}
                   >
-                    <span className="text-white/20 text-2xl font-bold group-hover:text-white/40 transition-colors select-none">+</span>
-                  </button>
+                    <button
+                      onClick={() => setAssigningPosition(position)}
+                      className="w-full h-full rounded-xl bg-gray-900/60 border border-gray-700/50 flex items-center justify-center hover:bg-gray-800/60 active:bg-gray-700/60 transition-all group"
+                      aria-label={`Agregar plato en celda ${position}`}
+                    >
+                      <span className="text-white/20 text-2xl font-bold group-hover:text-white/40 transition-colors select-none">+</span>
+                    </button>
+                    {isDropTarget && (
+                      <div className="absolute inset-0 rounded-xl border-2 border-dashed border-blue-400 bg-blue-500/10 pointer-events-none" />
+                    )}
+                  </div>
                 )
               })
             ) : activeCategory === 'all' ? (
@@ -3432,19 +3696,46 @@ export default function POSPage() {
               Array.from({ length: GRID_SIZE }).map((_, gridIndex) => {
                 const position = gridIndex + 1
                 const item = displayItems.find((i) => i.display_order === position)
+                const isDropTarget = draggedItem !== null && dropTarget === position && position !== (draggedItem.display_order ?? 0)
                 if (item) {
                   return (
-                    <POSDishCard
+                    <div
                       key={item.id}
-                      item={item}
-                      onAdd={handleAddItem}
-                      locale={locale}
-                      editMode={false}
-                      onUnassign={handleUnassign}
-                    />
+                      ref={(el) => {
+                        if (el) cellElemsRef.current.set(position, el)
+                        else cellElemsRef.current.delete(position)
+                      }}
+                      className={`relative w-full h-full rounded-xl ${isDropTarget ? 'ring-2 ring-blue-400 ring-offset-1 ring-offset-black' : ''}`}
+                    >
+                      <POSDishCard
+                        item={item}
+                        onAdd={handleAddItem}
+                        locale={locale}
+                        editMode={false}
+                        onUnassign={handleUnassign}
+                        onDragStart={handleDragStart}
+                        isDragging={draggedItem?.id === item.id}
+                      />
+                      {isDropTarget && (
+                        <div className="absolute inset-0 rounded-xl border-2 border-dashed border-blue-400 bg-blue-500/10 pointer-events-none" />
+                      )}
+                    </div>
                   )
                 }
-                return <div key={`empty-${position}`} className="w-full h-full" />
+                return (
+                  <div
+                    key={`empty-${position}`}
+                    ref={(el) => {
+                      if (el) cellElemsRef.current.set(position, el)
+                      else cellElemsRef.current.delete(position)
+                    }}
+                    className={`relative w-full h-full ${isDropTarget ? 'rounded-xl' : ''}`}
+                  >
+                    {isDropTarget && (
+                      <div className="absolute inset-0 rounded-xl border-2 border-dashed border-blue-400 bg-blue-500/10 pointer-events-none" />
+                    )}
+                  </div>
+                )
               })
             ) : (
               // Category tab: items from that category, grouped by subcategory if Bebidas
@@ -3511,6 +3802,10 @@ export default function POSPage() {
               })()
             )}
           </main>
+          {/* Drag ghost */}
+          {draggedItem && (
+            <DragGhost item={draggedItem} x={dragPos.x} y={dragPos.y} locale={locale} />
+          )}
         </div>
 
         {/* ── Right: Ticket Panel (slide-in) ── */}
