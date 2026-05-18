@@ -190,3 +190,99 @@ export async function POST(req: NextRequest) {
 
   return NextResponse.json(payment, { status: 201 })
 }
+
+// PUT /api/empleados/pagos
+// Body: { id: string, amount: number }  — only advance payments can be edited
+export async function PUT(req: NextRequest) {
+  const user = await requireAuth()
+  if (!user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
+
+  const body = await req.json()
+  const { id, amount } = body
+
+  if (!id) return NextResponse.json({ error: 'id es requerido' }, { status: 400 })
+  if (!amount || Number(amount) <= 0)
+    return NextResponse.json({ error: 'amount debe ser mayor que 0' }, { status: 400 })
+
+  const sb = getServiceClient()
+
+  // Only advance payments can be edited
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: existing, error: fetchErr } = await (sb as any)
+    .from('employee_payments')
+    .select('id, type, cash_movement_id')
+    .eq('id', id)
+    .single()
+
+  if (fetchErr || !existing)
+    return NextResponse.json({ error: 'Pago no encontrado' }, { status: 404 })
+
+  if (existing.type !== 'advance')
+    return NextResponse.json({ error: 'Solo se puede editar el monto de adelantos' }, { status: 400 })
+
+  // Update the payment record
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: updated, error: updateErr } = await (sb as any)
+    .from('employee_payments')
+    .update({ amount: Number(amount) })
+    .eq('id', id)
+    .select('*, employees(name, role, hourly_rate)')
+    .single()
+
+  if (updateErr) return NextResponse.json({ error: updateErr.message }, { status: 500 })
+
+  // Also update the linked cash_movement amount if it exists
+  if (existing.cash_movement_id) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await (sb as any)
+      .from('cash_movements')
+      .update({ amount: Number(amount) })
+      .eq('id', existing.cash_movement_id)
+  }
+
+  return NextResponse.json(updated)
+}
+
+// DELETE /api/empleados/pagos?id=...
+export async function DELETE(req: NextRequest) {
+  const user = await requireAuth()
+  if (!user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
+
+  const { searchParams } = req.nextUrl
+  const id = searchParams.get('id')
+
+  if (!id) return NextResponse.json({ error: 'id es requerido' }, { status: 400 })
+
+  const sb = getServiceClient()
+
+  // Fetch the payment to get cash_movement_id
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: existing, error: fetchErr } = await (sb as any)
+    .from('employee_payments')
+    .select('id, cash_movement_id')
+    .eq('id', id)
+    .single()
+
+  if (fetchErr || !existing)
+    return NextResponse.json({ error: 'Pago no encontrado' }, { status: 404 })
+
+  // Delete the payment record first
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { error: delErr } = await (sb as any)
+    .from('employee_payments')
+    .delete()
+    .eq('id', id)
+
+  if (delErr) return NextResponse.json({ error: delErr.message }, { status: 500 })
+
+  // Delete the linked cash_movement if it exists
+  if (existing.cash_movement_id) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await (sb as any)
+      .from('cash_movements')
+      .delete()
+      .eq('id', existing.cash_movement_id)
+  }
+
+  return NextResponse.json({ ok: true })
+}

@@ -1125,13 +1125,20 @@ function printAdvanceReceipt(payment: EmployeePayment, empName: string, empRole:
   <div class="firma">Firma del empleado</div>
 </body>
 </html>`
-  sessionStorage.setItem('receipt_print', html)
-  const w = window.open('', '_blank', 'width=400,height=600')
-  if (w) {
-    w.document.write(html)
-    w.document.close()
-    w.focus()
-    setTimeout(() => { w.print(); w.close() }, 400)
+  const w = window.open('', '_blank')
+  if (!w) {
+    alert('El navegador bloqueó la ventana emergente. Permitir popups para imprimir.')
+    return
+  }
+  w.document.write(html)
+  w.document.close()
+  w.focus()
+  const doPrint = () => { w.print(); w.close() }
+  if (w.onload !== undefined) {
+    w.onload = doPrint
+    setTimeout(doPrint, 800)
+  } else {
+    setTimeout(doPrint, 800)
   }
 }
 
@@ -1181,13 +1188,20 @@ function printSalaryReceipt(payment: EmployeePayment, empName: string, empRole: 
   <div class="firma">Firma del empleado</div>
 </body>
 </html>`
-  sessionStorage.setItem('receipt_print', html)
-  const w = window.open('', '_blank', 'width=400,height=700')
-  if (w) {
-    w.document.write(html)
-    w.document.close()
-    w.focus()
-    setTimeout(() => { w.print(); w.close() }, 400)
+  const w = window.open('', '_blank')
+  if (!w) {
+    alert('El navegador bloqueó la ventana emergente. Permitir popups para imprimir.')
+    return
+  }
+  w.document.write(html)
+  w.document.close()
+  w.focus()
+  const doPrint = () => { w.print(); w.close() }
+  if (w.onload !== undefined) {
+    w.onload = doPrint
+    setTimeout(doPrint, 800)
+  } else {
+    setTimeout(doPrint, 800)
   }
 }
 
@@ -1219,6 +1233,11 @@ function TabPagos({ employees }: { employees: Employee[] }) {
   const [salCustomAmount, setSalCustomAmount] = useState('')
 
   const [expandedId, setExpandedId] = useState<string | null>(null)
+  const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [editAmount, setEditAmount] = useState('')
+  const [editSaving, setEditSaving] = useState(false)
+  const [editError, setEditError] = useState<string | null>(null)
 
   const fetchPayments = useCallback(async () => {
     setListLoading(true)
@@ -1331,6 +1350,40 @@ function TabPagos({ employees }: { employees: Employee[] }) {
     setCalcResult(null); setSalCustomAmount(''); setSaveError(null); setCalcError(null)
   }
 
+  const handleEditSave = async (paymentId: string) => {
+    const newAmt = Number(editAmount)
+    if (!newAmt || newAmt <= 0) { setEditError('El monto debe ser mayor que 0'); return }
+    setEditSaving(true)
+    setEditError(null)
+    const res = await fetch('/api/empleados/pagos', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: paymentId, amount: newAmt }),
+    })
+    if (res.ok) {
+      setEditingId(null)
+      setEditAmount('')
+      await fetchPayments()
+    } else {
+      const d = await res.json()
+      setEditError(d.error ?? 'Error al editar')
+    }
+    setEditSaving(false)
+  }
+
+  const handleDeletePayment = async (paymentId: string) => {
+    if (!confirm('¿Borrar este registro? También se eliminará el movimiento de caja asociado.')) return
+    setDeletingId(paymentId)
+    const res = await fetch(`/api/empleados/pagos?id=${paymentId}`, { method: 'DELETE' })
+    if (res.ok) {
+      await fetchPayments()
+    } else {
+      const d = await res.json()
+      alert(d.error ?? 'Error al borrar')
+    }
+    setDeletingId(null)
+  }
+
   const totalAdvances = payments.filter((p) => p.type === 'advance').reduce((s, p) => s + Number(p.amount), 0)
   const totalSalaries = payments.filter((p) => p.type === 'salary').reduce((s, p) => s + Number(p.amount), 0)
 
@@ -1427,11 +1480,13 @@ function TabPagos({ employees }: { employees: Employee[] }) {
                 <th className="text-left px-5 py-3.5 font-semibold text-gray-600 hidden sm:table-cell">Tipo</th>
                 <th className="text-right px-5 py-3.5 font-semibold text-gray-600">Monto</th>
                 <th className="text-center px-5 py-3.5 font-semibold text-gray-600">Recibo</th>
+                <th className="text-center px-5 py-3.5 font-semibold text-gray-600">Acciones</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-50">
               {payments.map((pmt) => {
                 const isExpanded = expandedId === pmt.id
+                const isEditing = editingId === pmt.id
                 const empName = pmt.employees?.name ?? '—'
                 const empRole = pmt.employees?.role ?? ''
                 return (
@@ -1466,10 +1521,64 @@ function TabPagos({ employees }: { employees: Employee[] }) {
                         </button>
                         {isExpanded ? <ChevronUp size={13} className="inline ml-1 text-gray-300" /> : <ChevronDown size={13} className="inline ml-1 text-gray-300" />}
                       </td>
+                      <td className="px-5 py-3.5 text-center" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex items-center justify-center gap-1">
+                          {pmt.type === 'advance' && (
+                            <button
+                              onClick={() => { setEditingId(pmt.id); setEditAmount(String(pmt.amount)); setEditError(null) }}
+                              className="p-1.5 rounded-lg text-gray-400 hover:text-sumak-brown hover:bg-sumak-brown/10 transition-colors"
+                              title="Editar monto"
+                            >
+                              <Pencil size={14} />
+                            </button>
+                          )}
+                          <button
+                            onClick={() => handleDeletePayment(pmt.id)}
+                            disabled={deletingId === pmt.id}
+                            className="p-1.5 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors disabled:opacity-40"
+                            title="Borrar"
+                          >
+                            {deletingId === pmt.id ? <Loader2 size={14} className="animate-spin" /> : <Trash2 size={14} />}
+                          </button>
+                        </div>
+                      </td>
                     </tr>
-                    {isExpanded && (
+                    {isEditing && (
+                      <tr key={pmt.id + '-edit'} className="bg-amber-50/60">
+                        <td colSpan={6} className="px-5 py-3">
+                          <div className="flex items-center gap-3 flex-wrap">
+                            <span className="text-xs font-semibold text-gray-600">Nuevo monto (ARS):</span>
+                            <input
+                              type="number"
+                              min="1"
+                              step="0.01"
+                              className="border border-amber-300 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400/50 w-36"
+                              value={editAmount}
+                              onChange={(e) => setEditAmount(e.target.value)}
+                              onClick={(e) => e.stopPropagation()}
+                            />
+                            {editError && <span className="text-xs text-red-600">{editError}</span>}
+                            <button
+                              onClick={() => handleEditSave(pmt.id)}
+                              disabled={editSaving}
+                              className="px-3 py-1.5 bg-amber-600 text-white rounded-lg text-xs font-medium hover:bg-amber-700 disabled:opacity-50 flex items-center gap-1"
+                            >
+                              {editSaving ? <Loader2 size={12} className="animate-spin" /> : null}
+                              Guardar
+                            </button>
+                            <button
+                              onClick={() => { setEditingId(null); setEditAmount(''); setEditError(null) }}
+                              className="px-3 py-1.5 border border-gray-200 text-gray-600 rounded-lg text-xs font-medium hover:bg-gray-50"
+                            >
+                              Cancelar
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                    {isExpanded && !isEditing && (
                       <tr key={pmt.id + '-detail'} className="bg-amber-50/30">
-                        <td colSpan={5} className="px-5 py-3 text-xs text-gray-600 space-y-1">
+                        <td colSpan={6} className="px-5 py-3 text-xs text-gray-600 space-y-1">
                           {pmt.type === 'advance' && pmt.description && <div>Concepto: {pmt.description}</div>}
                           {pmt.type === 'salary' && (
                             <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-6 gap-y-1">
