@@ -54,7 +54,7 @@ export async function GET(req: NextRequest) {
 
   let query = sb
     .from('time_entries')
-    .select('id, clock_in, clock_out, hours_worked, date, employee_id, employees(name, role, hourly_rate)')
+    .select('id, clock_in, clock_out, hours_worked, date, employee_id, employees(name, role, hourly_rate), pause_entries(id, time_entry_id, pause_start, pause_end, reason, created_at)')
     .eq('employee_id', employee_id)
     .not('clock_out', 'is', null) // only completed entries
     .order('date', { ascending: true })

@@ -1,3 +1,24 @@
+/*
+ * ============================================================
+ * SQL — ejecutar en Supabase Dashboard → SQL Editor:
+ * ============================================================
+ *
+ * CREATE TABLE IF NOT EXISTS public.pause_entries (
+ *   id             uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
+ *   time_entry_id  uuid        NOT NULL REFERENCES public.time_entries(id) ON DELETE CASCADE,
+ *   pause_start    timestamptz NOT NULL,
+ *   pause_end      timestamptz,
+ *   reason         text        NOT NULL,
+ *   created_at     timestamptz DEFAULT now()
+ * );
+ *
+ * -- Index for fast lookups by time_entry_id
+ * CREATE INDEX IF NOT EXISTS pause_entries_time_entry_id_idx
+ *   ON public.pause_entries(time_entry_id);
+ *
+ * ============================================================
+ */
+
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient, type CookieOptions } from '@supabase/ssr'
 import { cookies } from 'next/headers'
@@ -71,17 +92,17 @@ export async function GET(req: NextRequest) {
   return NextResponse.json(data ?? [])
 }
 
-// POST /api/empleados/fichaje — registrar entrada o salida
-// body: { employee_id, action: 'entrada' | 'salida' }
+// POST /api/empleados/fichaje — registrar entrada, salida, pausa o regresar
+// body: { employee_id, action: 'entrada' | 'salida' | 'pausa' | 'regresar', reason?: string }
 // No requiere auth — la verificación de identidad se hace por PIN en el frontend
 export async function POST(req: NextRequest) {
 
-  const { employee_id, action } = await req.json()
+  const { employee_id, action, reason } = await req.json()
   if (!employee_id || !action) {
     return NextResponse.json({ error: 'employee_id y action son requeridos' }, { status: 400 })
   }
-  if (action !== 'entrada' && action !== 'salida') {
-    return NextResponse.json({ error: 'action debe ser "entrada" o "salida"' }, { status: 400 })
+  if (!['entrada', 'salida', 'pausa', 'regresar'].includes(action)) {
+    return NextResponse.json({ error: 'action debe ser "entrada", "salida", "pausa" o "regresar"' }, { status: 400 })
   }
 
   const now = new Date().toISOString()
@@ -90,6 +111,7 @@ export async function POST(req: NextRequest) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const sb = await getServiceClient() as any
 
+  // ── ENTRADA ──────────────────────────────────────────────────────────────────
   if (action === 'entrada') {
     // Check no open entry already exists for today
     const { data: existing } = await sb
@@ -112,7 +134,10 @@ export async function POST(req: NextRequest) {
 
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
     return NextResponse.json(data, { status: 201 })
-  } else {
+  }
+
+  // ── SALIDA ────────────────────────────────────────────────────────────────────
+  if (action === 'salida') {
     // Find open entry for today
     const { data: openEntry, error: findErr } = await sb
       .from('time_entries')
@@ -127,7 +152,23 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'No hay entrada abierta para registrar salida' }, { status: 404 })
     }
 
-    // Calculate hours worked
+    // Auto-close any open pause before registering clock_out
+    const { data: openPause } = await sb
+      .from('pause_entries')
+      .select('id')
+      .eq('time_entry_id', openEntry.id)
+      .is('pause_end', null)
+      .maybeSingle()
+
+    if (openPause) {
+      await sb
+        .from('pause_entries')
+        .update({ pause_end: now })
+        .eq('id', openPause.id)
+    }
+
+    // Calculate hours_worked = clock_out - clock_in (gross, without subtracting pauses)
+    // Effective hours are computed in the frontend using pause_entries data
     const clockInMs = new Date(openEntry.clock_in).getTime()
     const clockOutMs = new Date(now).getTime()
     const hours_worked = Math.round((clockOutMs - clockInMs) / (1000 * 60 * 60) * 100) / 100
@@ -142,6 +183,90 @@ export async function POST(req: NextRequest) {
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
     return NextResponse.json(data)
   }
+
+  // ── PAUSA ─────────────────────────────────────────────────────────────────────
+  if (action === 'pausa') {
+    if (!reason || typeof reason !== 'string' || !reason.trim()) {
+      return NextResponse.json({ error: 'El motivo de la pausa es obligatorio' }, { status: 400 })
+    }
+
+    // Find open entry for today
+    const { data: openEntry, error: findErr } = await sb
+      .from('time_entries')
+      .select('id')
+      .eq('employee_id', employee_id)
+      .eq('date', today)
+      .is('clock_out', null)
+      .maybeSingle()
+
+    if (findErr) return NextResponse.json({ error: findErr.message }, { status: 500 })
+    if (!openEntry) {
+      return NextResponse.json({ error: 'No hay entrada abierta para iniciar una pausa' }, { status: 404 })
+    }
+
+    // Check no open pause already exists
+    const { data: existingPause } = await sb
+      .from('pause_entries')
+      .select('id')
+      .eq('time_entry_id', openEntry.id)
+      .is('pause_end', null)
+      .maybeSingle()
+
+    if (existingPause) {
+      return NextResponse.json({ error: 'Ya hay una pausa abierta para este turno' }, { status: 409 })
+    }
+
+    const { data, error } = await sb
+      .from('pause_entries')
+      .insert({ time_entry_id: openEntry.id, pause_start: now, reason: reason.trim() })
+      .select()
+      .single()
+
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    return NextResponse.json(data, { status: 201 })
+  }
+
+  // ── REGRESAR ──────────────────────────────────────────────────────────────────
+  if (action === 'regresar') {
+    // Find open entry for today
+    const { data: openEntry, error: findErr } = await sb
+      .from('time_entries')
+      .select('id')
+      .eq('employee_id', employee_id)
+      .eq('date', today)
+      .is('clock_out', null)
+      .maybeSingle()
+
+    if (findErr) return NextResponse.json({ error: findErr.message }, { status: 500 })
+    if (!openEntry) {
+      return NextResponse.json({ error: 'No hay entrada abierta' }, { status: 404 })
+    }
+
+    // Find open pause for this entry
+    const { data: openPause, error: pauseErr } = await sb
+      .from('pause_entries')
+      .select('id')
+      .eq('time_entry_id', openEntry.id)
+      .is('pause_end', null)
+      .maybeSingle()
+
+    if (pauseErr) return NextResponse.json({ error: pauseErr.message }, { status: 500 })
+    if (!openPause) {
+      return NextResponse.json({ error: 'No hay pausa abierta para cerrar' }, { status: 404 })
+    }
+
+    const { data, error } = await sb
+      .from('pause_entries')
+      .update({ pause_end: now })
+      .eq('id', openPause.id)
+      .select()
+      .single()
+
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    return NextResponse.json(data)
+  }
+
+  return NextResponse.json({ error: 'Acción no reconocida' }, { status: 400 })
 }
 
 // PUT /api/empleados/fichaje — editar entrada/salida de un fichaje existente

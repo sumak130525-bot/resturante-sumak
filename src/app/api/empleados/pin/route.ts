@@ -81,7 +81,18 @@ export async function POST(req: NextRequest) {
     .order('clock_in', { ascending: false })
 
   const openEntry = (entries ?? []).find((e: { clock_out: string | null }) => !e.clock_out) ?? null
-  const hasClosedToday = (entries ?? []).some((e: { clock_out: string | null }) => e.clock_out)
+
+  // Check if there is an open (unfinished) pause for the open entry
+  let has_open_pause = false
+  if (openEntry) {
+    const { data: openPause } = await sb
+      .from('pause_entries')
+      .select('id')
+      .eq('time_entry_id', openEntry.id)
+      .is('pause_end', null)
+      .maybeSingle()
+    has_open_pause = !!openPause
+  }
 
   return NextResponse.json({
     employee: {
@@ -95,5 +106,6 @@ export async function POST(req: NextRequest) {
     open_entry: openEntry
       ? { id: openEntry.id, clock_in: openEntry.clock_in }
       : null,
+    has_open_pause,
   })
 }

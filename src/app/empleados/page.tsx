@@ -5,7 +5,7 @@ import { createClient } from '@/lib/supabase/client'
 import {
   Users, Clock, History, Plus, Pencil, Trash2, Loader2,
   LogIn, LogOut, Lock, CheckCircle2, XCircle, Banknote, Printer,
-  ChevronDown, ChevronUp, Eye, EyeOff, Delete, ArrowLeft,
+  ChevronDown, ChevronUp, Eye, EyeOff, Delete, ArrowLeft, PauseCircle, PlayCircle,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -29,6 +29,16 @@ type TimeEntry = {
   hours_worked: number | null
   date: string
   employees?: { name: string; role: string; hourly_rate: number } | null
+  pause_entries?: PauseEntry[]
+}
+
+type PauseEntry = {
+  id: string
+  time_entry_id: string
+  pause_start: string
+  pause_end: string | null
+  reason: string
+  created_at: string
 }
 
 type EmployeePayment = {
@@ -143,7 +153,7 @@ function formatDate(iso: string): string {
 
 // ─── PIN Screen ───────────────────────────────────────────────────────────────
 
-type PinScreenPhase = 'keyboard' | 'employee' | 'confirm'
+type PinScreenPhase = 'keyboard' | 'employee' | 'confirm' | 'pause_reason'
 
 function PinScreen({ onExitPin }: { onExitPin: () => void }) {
   const [pin, setPin] = useState('')
@@ -154,8 +164,10 @@ function PinScreen({ onExitPin }: { onExitPin: () => void }) {
   const [employee, setEmployee] = useState<PinEmployee | null>(null)
   const [status, setStatus] = useState<PinStatus>('not_clocked')
   const [openEntry, setOpenEntry] = useState<PinOpenEntry>(null)
+  const [hasOpenPause, setHasOpenPause] = useState(false)
   const [actionLoading, setActionLoading] = useState(false)
   const [confirmMsg, setConfirmMsg] = useState<string | null>(null)
+  const [pauseReason, setPauseReason] = useState('')
 
   const pressKey = (key: string) => {
     if (pin.length < 4) {
@@ -187,6 +199,7 @@ function PinScreen({ onExitPin }: { onExitPin: () => void }) {
       setEmployee(d.employee)
       setStatus(d.status)
       setOpenEntry(d.open_entry)
+      setHasOpenPause(d.has_open_pause ?? false)
       setPhase('employee')
     } else {
       setError('PIN incorrecto')
@@ -195,21 +208,25 @@ function PinScreen({ onExitPin }: { onExitPin: () => void }) {
     setLoading(false)
   }
 
-  const handleAction = async (action: 'entrada' | 'salida') => {
+  const handleAction = async (action: 'entrada' | 'salida' | 'pausa' | 'regresar', reason?: string) => {
     if (!employee) return
     setActionLoading(true)
+    const body: Record<string, string> = { employee_id: employee.id, action }
+    if (reason) body.reason = reason
     const res = await fetch('/api/empleados/fichaje', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ employee_id: employee.id, action }),
+      body: JSON.stringify(body),
     })
     if (res.ok) {
       const timeStr = nowArgTimeString()
-      setConfirmMsg(
-        action === 'entrada'
-          ? `Entrada registrada ${timeStr}`
-          : `Salida registrada ${timeStr}`
-      )
+      const msgs: Record<string, string> = {
+        entrada: `Entrada registrada ${timeStr}`,
+        salida: `Salida registrada ${timeStr}`,
+        pausa: `Pausa iniciada ${timeStr}`,
+        regresar: `Regreso registrado ${timeStr}`,
+      }
+      setConfirmMsg(msgs[action] ?? `Registrado ${timeStr}`)
       setPhase('confirm')
       setTimeout(() => {
         setPhase('keyboard')
@@ -217,6 +234,8 @@ function PinScreen({ onExitPin }: { onExitPin: () => void }) {
         setEmployee(null)
         setConfirmMsg(null)
         setError(null)
+        setPauseReason('')
+        setHasOpenPause(false)
       }, 3000)
     } else {
       const d = await res.json()
@@ -230,6 +249,8 @@ function PinScreen({ onExitPin }: { onExitPin: () => void }) {
     setPin('')
     setEmployee(null)
     setError(null)
+    setPauseReason('')
+    setHasOpenPause(false)
   }
 
   // ── Confirmation screen ──
@@ -242,6 +263,64 @@ function PinScreen({ onExitPin }: { onExitPin: () => void }) {
           </div>
           <p className="text-white text-2xl font-bold text-center">{confirmMsg}</p>
           <p className="text-white/40 text-sm">Volviendo al teclado…</p>
+        </div>
+      </div>
+    )
+  }
+
+  // ── Pause reason screen ──
+  if (phase === 'pause_reason' && employee) {
+    return (
+      <div className="min-h-screen bg-black flex flex-col">
+        <div className="bg-[#3d2b1f] px-6 py-4 flex items-center gap-3">
+          <button
+            onClick={() => { setPhase('employee'); setError(null); setPauseReason('') }}
+            className="text-white/60 hover:text-white transition-colors p-1"
+          >
+            <ArrowLeft size={22} />
+          </button>
+          <div>
+            <h1 className="text-white font-bold text-xl">Motivo de la pausa</h1>
+            <p className="text-amber-300/70 text-sm">{employee.name}</p>
+          </div>
+        </div>
+
+        <div className="flex-1 flex flex-col items-center justify-center px-6 gap-6">
+          <p className="text-white/60 text-sm text-center">Ingresá el motivo de la pausa (obligatorio)</p>
+          <textarea
+            className="w-full max-w-sm bg-white/10 border border-white/20 rounded-2xl px-4 py-3 text-white text-base placeholder-white/30 focus:outline-none focus:ring-2 focus:ring-amber-500/50 resize-none"
+            rows={3}
+            placeholder="Ej: Almuerzo, descanso, trámite…"
+            value={pauseReason}
+            onChange={(e) => setPauseReason(e.target.value)}
+            autoFocus
+          />
+          {error && (
+            <div className="bg-red-900/40 border border-red-500/50 text-red-300 text-sm px-4 py-3 rounded-xl text-center w-full max-w-sm">
+              {error}
+            </div>
+          )}
+          <button
+            onClick={() => {
+              if (!pauseReason.trim()) { setError('El motivo es obligatorio'); return }
+              setError(null)
+              handleAction('pausa', pauseReason.trim())
+            }}
+            disabled={actionLoading || !pauseReason.trim()}
+            className="w-full max-w-sm py-6 rounded-3xl text-2xl font-bold flex items-center justify-center gap-4 transition-all bg-yellow-500 text-black hover:bg-yellow-400 active:scale-95 shadow-lg shadow-yellow-900/50 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {actionLoading ? <Loader2 size={32} className="animate-spin" /> : <PauseCircle size={32} />}
+            CONFIRMAR PAUSA
+          </button>
+        </div>
+
+        <div className="pb-8 text-center">
+          <button
+            onClick={onExitPin}
+            className="text-amber-500/70 hover:text-amber-400 text-sm transition-colors underline underline-offset-4"
+          >
+            Salir de modo PIN
+          </button>
         </div>
       </div>
     )
@@ -271,13 +350,17 @@ function PinScreen({ onExitPin }: { onExitPin: () => void }) {
         <div className="flex-1 flex flex-col items-center justify-center px-6 gap-8">
           <div className={cn(
             'px-5 py-2.5 rounded-full text-base font-semibold',
-            status === 'working'
+            status === 'working' && hasOpenPause
+              ? 'bg-yellow-500/20 text-yellow-400 border border-yellow-500/40'
+              : status === 'working'
               ? 'bg-green-500/20 text-green-400 border border-green-500/40'
               : status === 'finished'
               ? 'bg-gray-600/30 text-gray-400 border border-gray-500/30'
               : 'bg-gray-700/30 text-gray-400 border border-gray-600/30'
           )}>
-            {status === 'working' && openEntry
+            {status === 'working' && hasOpenPause
+              ? 'En pausa'
+              : status === 'working' && openEntry
               ? `Trabajando desde ${toArgTime(openEntry.clock_in)}`
               : status === 'finished'
               ? 'Turno finalizado hoy'
@@ -291,7 +374,8 @@ function PinScreen({ onExitPin }: { onExitPin: () => void }) {
           )}
 
           {/* Action buttons */}
-          <div className="w-full max-w-sm flex flex-col gap-5">
+          <div className="w-full max-w-sm flex flex-col gap-4">
+            {/* ENTRADA — only when not clocked */}
             <button
               onClick={() => handleAction('entrada')}
               disabled={actionLoading || status === 'working' || status === 'finished'}
@@ -306,6 +390,31 @@ function PinScreen({ onExitPin }: { onExitPin: () => void }) {
               ENTRADA
             </button>
 
+            {/* PAUSA — only when working (no open pause) */}
+            {status === 'working' && !hasOpenPause && (
+              <button
+                onClick={() => { setError(null); setPauseReason(''); setPhase('pause_reason') }}
+                disabled={actionLoading}
+                className="w-full py-7 rounded-3xl text-2xl font-bold flex items-center justify-center gap-4 transition-all bg-yellow-500 text-black hover:bg-yellow-400 active:scale-95 shadow-lg shadow-yellow-900/50 disabled:opacity-50"
+              >
+                <PauseCircle size={32} />
+                PAUSA
+              </button>
+            )}
+
+            {/* REGRESAR — only when there is an open pause */}
+            {status === 'working' && hasOpenPause && (
+              <button
+                onClick={() => handleAction('regresar')}
+                disabled={actionLoading}
+                className="w-full py-7 rounded-3xl text-2xl font-bold flex items-center justify-center gap-4 transition-all bg-green-600 text-white hover:bg-green-500 active:scale-95 shadow-lg shadow-green-900/50 disabled:opacity-50"
+              >
+                {actionLoading ? <Loader2 size={32} className="animate-spin" /> : <PlayCircle size={32} />}
+                REGRESAR
+              </button>
+            )}
+
+            {/* FINALIZAR — only when working */}
             <button
               onClick={() => handleAction('salida')}
               disabled={actionLoading || status !== 'working'}
@@ -930,6 +1039,16 @@ function TabEmpleados({
 
 // ─── Tab: Historial de Horas ──────────────────────────────────────────────────
 
+// Helper: sums all completed pauses for a time entry, returns minutes
+function totalPauseMinutes(pauses: PauseEntry[] | undefined): number {
+  if (!pauses || pauses.length === 0) return 0
+  return pauses.reduce((acc, p) => {
+    if (!p.pause_end) return acc
+    const ms = new Date(p.pause_end).getTime() - new Date(p.pause_start).getTime()
+    return acc + ms / 60000
+  }, 0)
+}
+
 // Helper: converts "HH:MM" + date string (YYYY-MM-DD) to UTC ISO using Argentina timezone
 function buildArgIso(date: string, time: string): string {
   // date = "YYYY-MM-DD", time = "HH:MM"
@@ -1095,23 +1214,40 @@ function TabHistorial({ employees }: { employees: Employee[] }) {
       ) : (
         <>
           {/* Summary cards */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <div className="bg-white rounded-2xl border border-blue-100 p-5">
-              <p className="text-xs text-gray-400 mb-1">Registros</p>
-              <p className="text-2xl font-bold text-gray-800">{entries.length}</p>
-            </div>
-            <div className="bg-white rounded-2xl border border-green-100 p-5">
-              <p className="text-xs text-gray-400 mb-1">Total horas</p>
-              <p className="text-2xl font-bold text-green-700">{formatHours(totalHours)}</p>
-            </div>
-            <div className="bg-white rounded-2xl border border-amber-100 p-5">
-              <p className="text-xs text-gray-400 mb-1">
-                Monto estimado
-                {selectedEmp ? <span className="ml-1 font-normal text-gray-300">({formatARS(selectedEmp.hourly_rate)}/h)</span> : ''}
-              </p>
-              <p className="text-2xl font-bold text-amber-700">{formatARS(totalAmount)}</p>
-            </div>
-          </div>
+          {(() => {
+            // Compute effective hours (gross - pauses) across all entries
+            const totalEffectiveMinutes = entries.reduce((acc, e) => {
+              const grossMin = (e.hours_worked ?? 0) * 60
+              const pauseMin = totalPauseMinutes(e.pause_entries)
+              return acc + Math.max(0, grossMin - pauseMin)
+            }, 0)
+            const totalEffectiveHours = Math.round(totalEffectiveMinutes / 60 * 100) / 100
+            const rate = selectedEmp?.hourly_rate ?? 0
+            const effectiveAmount = Math.round(totalEffectiveHours * rate * 100) / 100
+            return (
+              <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
+                <div className="bg-white rounded-2xl border border-blue-100 p-5">
+                  <p className="text-xs text-gray-400 mb-1">Registros</p>
+                  <p className="text-2xl font-bold text-gray-800">{entries.length}</p>
+                </div>
+                <div className="bg-white rounded-2xl border border-gray-200 p-5">
+                  <p className="text-xs text-gray-400 mb-1">Horas brutas</p>
+                  <p className="text-2xl font-bold text-gray-600">{formatHours(totalHours)}</p>
+                </div>
+                <div className="bg-white rounded-2xl border border-green-100 p-5">
+                  <p className="text-xs text-gray-400 mb-1">Horas efectivas</p>
+                  <p className="text-2xl font-bold text-green-700">{formatHours(totalEffectiveHours)}</p>
+                </div>
+                <div className="bg-white rounded-2xl border border-amber-100 p-5">
+                  <p className="text-xs text-gray-400 mb-1">
+                    Monto estimado
+                    {selectedEmp ? <span className="ml-1 font-normal text-gray-300">({formatARS(rate)}/h)</span> : ''}
+                  </p>
+                  <p className="text-2xl font-bold text-amber-700">{formatARS(effectiveAmount)}</p>
+                </div>
+              </div>
+            )
+          })()}
 
           {/* Table */}
           {entries.length === 0 ? (
@@ -1126,17 +1262,21 @@ function TabHistorial({ employees }: { employees: Employee[] }) {
                     <th className="text-left px-5 py-3.5 font-semibold text-gray-600">Fecha</th>
                     <th className="text-left px-5 py-3.5 font-semibold text-gray-600">Entrada</th>
                     <th className="text-left px-5 py-3.5 font-semibold text-gray-600">Salida</th>
-                    <th className="text-right px-5 py-3.5 font-semibold text-gray-600">Horas</th>
-                    <th className="text-right px-5 py-3.5 font-semibold text-gray-600 hidden sm:table-cell">Monto</th>
+                    <th className="text-right px-5 py-3.5 font-semibold text-gray-600">Brutas</th>
+                    <th className="text-right px-5 py-3.5 font-semibold text-gray-600 hidden sm:table-cell">Efectivas</th>
+                    <th className="text-right px-5 py-3.5 font-semibold text-gray-600 hidden md:table-cell">Monto</th>
                     <th className="text-right px-5 py-3.5 font-semibold text-gray-600">Acciones</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-50">
                   {entries.map((entry) => {
-                    const hrs = entry.hours_worked ?? 0
+                    const grossHrs = entry.hours_worked ?? 0
+                    const pauseMin = totalPauseMinutes(entry.pause_entries)
+                    const effectiveHrs = Math.max(0, Math.round((grossHrs * 60 - pauseMin) / 60 * 100) / 100)
                     const rate = selectedEmp?.hourly_rate ?? 0
-                    const amount = hrs * rate
+                    const amount = effectiveHrs * rate
                     const isEditing = editingId === entry.id
+                    const pauses = entry.pause_entries ?? []
                     return (
                       <>
                         <tr key={entry.id} className="hover:bg-gray-50/50 transition-colors">
@@ -1149,8 +1289,16 @@ function TabHistorial({ employees }: { employees: Employee[] }) {
                           <td className="px-5 py-3.5 text-gray-600">
                             {entry.clock_out ? toArgTime(entry.clock_out) : <span className="text-gray-300">—</span>}
                           </td>
-                          <td className="px-5 py-3.5 text-right text-gray-700">{formatHours(hrs)}</td>
-                          <td className="px-5 py-3.5 text-right text-amber-700 font-medium hidden sm:table-cell">
+                          <td className="px-5 py-3.5 text-right text-gray-500">{formatHours(grossHrs)}</td>
+                          <td className="px-5 py-3.5 text-right text-gray-700 font-medium hidden sm:table-cell">
+                            {formatHours(effectiveHrs)}
+                            {pauses.length > 0 && (
+                              <span className="ml-1 text-xs text-yellow-600">
+                                (-{Math.round(pauseMin)}m pausa)
+                              </span>
+                            )}
+                          </td>
+                          <td className="px-5 py-3.5 text-right text-amber-700 font-medium hidden md:table-cell">
                             {formatARS(amount)}
                           </td>
                           <td className="px-5 py-3.5">
@@ -1173,9 +1321,32 @@ function TabHistorial({ employees }: { employees: Employee[] }) {
                             </div>
                           </td>
                         </tr>
+                        {/* Pause sub-rows */}
+                        {pauses.map((pause) => {
+                          const pauseDurMin = pause.pause_end
+                            ? Math.round((new Date(pause.pause_end).getTime() - new Date(pause.pause_start).getTime()) / 60000)
+                            : null
+                          return (
+                            <tr key={pause.id} className="bg-yellow-50/60">
+                              <td className="pl-10 pr-2 py-2 text-yellow-700 text-xs" colSpan={2}>
+                                <span className="inline-flex items-center gap-1.5">
+                                  <PauseCircle size={11} className="text-yellow-500 flex-shrink-0" />
+                                  {toArgTime(pause.pause_start)}
+                                  {pause.pause_end ? ` → ${toArgTime(pause.pause_end)}` : ' (abierta)'}
+                                </span>
+                              </td>
+                              <td className="px-2 py-2 text-yellow-700 text-xs" colSpan={2}>
+                                {pauseDurMin !== null ? `${pauseDurMin} min` : '—'}
+                              </td>
+                              <td className="px-2 py-2 text-yellow-600 text-xs italic" colSpan={3}>
+                                {pause.reason}
+                              </td>
+                            </tr>
+                          )
+                        })}
                         {isEditing && (
                           <tr key={entry.id + '-edit'} className="bg-indigo-50/40">
-                            <td colSpan={6} className="px-5 py-3">
+                            <td colSpan={7} className="px-5 py-3">
                               <div className="flex items-center gap-3 flex-wrap">
                                 <div className="flex items-center gap-1.5">
                                   <span className="text-xs font-semibold text-gray-600">Entrada:</span>
@@ -1219,12 +1390,25 @@ function TabHistorial({ employees }: { employees: Employee[] }) {
                   })}
                 </tbody>
                 <tfoot className="bg-gray-50 border-t border-gray-200">
-                  <tr>
-                    <td colSpan={3} className="px-5 py-3.5 font-semibold text-gray-700">Total del período</td>
-                    <td className="px-5 py-3.5 text-right font-bold text-gray-800">{formatHours(totalHours)}</td>
-                    <td className="px-5 py-3.5 text-right font-bold text-amber-700 hidden sm:table-cell">{formatARS(totalAmount)}</td>
-                    <td></td>
-                  </tr>
+                  {(() => {
+                    const totalEffectiveMinutes = entries.reduce((acc, e) => {
+                      const grossMin = (e.hours_worked ?? 0) * 60
+                      const pauseMin = totalPauseMinutes(e.pause_entries)
+                      return acc + Math.max(0, grossMin - pauseMin)
+                    }, 0)
+                    const totalEffectiveHours = Math.round(totalEffectiveMinutes / 60 * 100) / 100
+                    const rate = selectedEmp?.hourly_rate ?? 0
+                    const effectiveAmount = Math.round(totalEffectiveHours * rate * 100) / 100
+                    return (
+                      <tr>
+                        <td colSpan={3} className="px-5 py-3.5 font-semibold text-gray-700">Total del período</td>
+                        <td className="px-5 py-3.5 text-right font-bold text-gray-500">{formatHours(totalHours)}</td>
+                        <td className="px-5 py-3.5 text-right font-bold text-gray-800 hidden sm:table-cell">{formatHours(totalEffectiveHours)}</td>
+                        <td className="px-5 py-3.5 text-right font-bold text-amber-700 hidden md:table-cell">{formatARS(effectiveAmount)}</td>
+                        <td></td>
+                      </tr>
+                    )
+                  })()}
                 </tfoot>
               </table>
             </div>
