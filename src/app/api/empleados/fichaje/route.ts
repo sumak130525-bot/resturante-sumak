@@ -97,12 +97,12 @@ export async function GET(req: NextRequest) {
 // No requiere auth — la verificación de identidad se hace por PIN en el frontend
 export async function POST(req: NextRequest) {
 
-  const { employee_id, action, reason } = await req.json()
+  const { employee_id, action, reason, clock_in, clock_out, date } = await req.json()
   if (!employee_id || !action) {
     return NextResponse.json({ error: 'employee_id y action son requeridos' }, { status: 400 })
   }
-  if (!['entrada', 'salida', 'pausa', 'regresar'].includes(action)) {
-    return NextResponse.json({ error: 'action debe ser "entrada", "salida", "pausa" o "regresar"' }, { status: 400 })
+  if (!['entrada', 'salida', 'pausa', 'regresar', 'manual'].includes(action)) {
+    return NextResponse.json({ error: 'action debe ser "entrada", "salida", "pausa", "regresar" o "manual"' }, { status: 400 })
   }
 
   const now = new Date().toISOString()
@@ -110,6 +110,27 @@ export async function POST(req: NextRequest) {
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const sb = await getServiceClient() as any
+
+  // ── MANUAL (agregar día) ────────────────────────────────────────────────────
+  if (action === 'manual') {
+    if (!clock_in || !date) {
+      return NextResponse.json({ error: 'clock_in y date son requeridos para entrada manual' }, { status: 400 })
+    }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const entry: any = { employee_id, clock_in, date }
+    if (clock_out) {
+      entry.clock_out = clock_out
+      const ms = new Date(clock_out).getTime() - new Date(clock_in).getTime()
+      entry.hours_worked = Math.round(ms / (1000 * 60 * 60) * 100) / 100
+    }
+    const { data, error } = await sb
+      .from('time_entries')
+      .insert(entry)
+      .select()
+      .single()
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    return NextResponse.json(data, { status: 201 })
+  }
 
   // ── ENTRADA ──────────────────────────────────────────────────────────────────
   if (action === 'entrada') {

@@ -1089,6 +1089,15 @@ function TabHistorial({ employees }: { employees: Employee[] }) {
   // Delete state
   const [deletingId, setDeletingId] = useState<string | null>(null)
 
+  // Add manual entry state
+  const [showAddModal, setShowAddModal] = useState(false)
+  const [addDate, setAddDate] = useState(todayArg())
+  const [addClockIn, setAddClockIn] = useState('08:00')
+  const [addClockOut, setAddClockOut] = useState('17:00')
+  const [addEmployee, setAddEmployee] = useState('')
+  const [addSaving, setAddSaving] = useState(false)
+  const [addError, setAddError] = useState<string | null>(null)
+
   const fetchHistorial = useCallback(async () => {
     if (!selectedEmployee) return
     setLoading(true)
@@ -1164,6 +1173,36 @@ function TabHistorial({ employees }: { employees: Employee[] }) {
     setDeletingId(null)
   }
 
+  const handleAddDay = async () => {
+    const empId = addEmployee || selectedEmployee
+    if (!empId) { setAddError('Seleccioná un empleado'); return }
+    if (!addDate || !addClockIn) { setAddError('Fecha y hora entrada son requeridos'); return }
+    setAddSaving(true)
+    setAddError(null)
+    const body: { employee_id: string; action: string; date: string; clock_in: string; clock_out?: string } = {
+      employee_id: empId,
+      action: 'manual',
+      date: addDate,
+      clock_in: buildArgIso(addDate, addClockIn),
+    }
+    if (addClockOut) {
+      body.clock_out = buildArgIso(addDate, addClockOut)
+    }
+    const res = await fetch('/api/empleados/fichaje', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+    if (res.ok) {
+      setShowAddModal(false)
+      await fetchHistorial()
+    } else {
+      const d = await res.json()
+      setAddError(d.error ?? 'Error al agregar')
+    }
+    setAddSaving(false)
+  }
+
   return (
     <div className="space-y-5">
       {/* Filters */}
@@ -1202,6 +1241,60 @@ function TabHistorial({ employees }: { employees: Employee[] }) {
           </div>
         </div>
       </div>
+
+      {/* Add day button */}
+      <div className="flex justify-end">
+        <button
+          onClick={() => { setAddEmployee(selectedEmployee); setShowAddModal(true); setAddError(null) }}
+          className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-medium transition-colors"
+        >
+          <Plus size={15} />
+          Agregar día
+        </button>
+      </div>
+
+      {/* Add day modal */}
+      {showAddModal && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6 space-y-4">
+            <h3 className="text-lg font-bold text-gray-800">Agregar día trabajado</h3>
+            <div>
+              <label className="block text-xs font-semibold text-gray-500 mb-1">Empleado</label>
+              <select
+                className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm"
+                value={addEmployee}
+                onChange={(e) => setAddEmployee(e.target.value)}
+              >
+                <option value="">Seleccionar…</option>
+                {employees.map((emp) => (
+                  <option key={emp.id} value={emp.id}>{emp.name}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-gray-500 mb-1">Fecha</label>
+              <input type="date" className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm" value={addDate} onChange={(e) => setAddDate(e.target.value)} />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-semibold text-gray-500 mb-1">Entrada</label>
+                <input type="time" className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm" value={addClockIn} onChange={(e) => setAddClockIn(e.target.value)} />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-500 mb-1">Salida</label>
+                <input type="time" className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm" value={addClockOut} onChange={(e) => setAddClockOut(e.target.value)} />
+              </div>
+            </div>
+            {addError && <p className="text-red-600 text-sm">{addError}</p>}
+            <div className="flex gap-3 pt-2">
+              <button onClick={() => setShowAddModal(false)} className="flex-1 px-4 py-2.5 border border-gray-200 rounded-xl text-sm font-medium text-gray-600 hover:bg-gray-50">Cancelar</button>
+              <button onClick={handleAddDay} disabled={addSaving} className="flex-1 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-medium disabled:opacity-50">
+                {addSaving ? 'Guardando…' : 'Guardar'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {error && (
         <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-xl px-4 py-3">{error}</div>
