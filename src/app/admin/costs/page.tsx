@@ -29,6 +29,8 @@ interface CostRow {
   id: string
   name: string
   price: number
+  category: string | null
+  category_id: string | null
   ingredientCost: number
   packaging: number
   labor: number
@@ -431,6 +433,7 @@ export default function CostsPage() {
   // Costs state
   const [costs, setCosts] = useState<CostRow[]>([])
   const [costsLoading, setCostsLoading] = useState(true)
+  const [categoryFilter, setCategoryFilter] = useState<string>('all')
   const [editPlate, setEditPlate] = useState<CostRow | null>(null)
   const [plateRecipe, setPlateRecipe] = useState<RecipeRow[]>([])
   const [plateCostInit, setPlateCostInit] = useState({ packaging: 0, labor: 0, indirect: 0, notes: '' })
@@ -564,6 +567,10 @@ export default function CostsPage() {
     await fetchCosts()
     setEditPlate(null)
   }
+
+  // Derived: unique categories for filter
+  const categories = Array.from(new Set(costs.map((c) => c.category).filter(Boolean))) as string[]
+  const filteredCosts = categoryFilter === 'all' ? costs : costs.filter((c) => c.category === categoryFilter)
 
   return (
     <AdminLayoutClient active="costs">
@@ -705,6 +712,30 @@ export default function CostsPage() {
         {/* ── TAB: COSTS PER PLATE ── */}
         {tab === 'costs' && (
           <div>
+            {/* Category filter */}
+            {categories.length > 0 && (
+              <div className="flex items-center gap-2 mb-4 flex-wrap">
+                <button
+                  onClick={() => setCategoryFilter('all')}
+                  className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                    categoryFilter === 'all' ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                  }`}
+                >
+                  Todos
+                </button>
+                {categories.map((cat) => (
+                  <button
+                    key={cat}
+                    onClick={() => setCategoryFilter(cat)}
+                    className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                      categoryFilter === cat ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                    }`}
+                  >
+                    {cat}
+                  </button>
+                ))}
+              </div>
+            )}
             {costsLoading ? (
               <div className="text-center py-12 text-gray-400">Cargando platos...</div>
             ) : (
@@ -713,6 +744,10 @@ export default function CostsPage() {
                   <div className="text-center py-16 text-gray-400">
                     <Utensils size={40} className="mx-auto mb-3 opacity-30" />
                     <p>No hay platos activos en el menú.</p>
+                  </div>
+                ) : filteredCosts.length === 0 ? (
+                  <div className="text-center py-12 text-gray-400">
+                    <p>No hay platos en esta categoría.</p>
                   </div>
                 ) : (
                   <div className="overflow-x-auto">
@@ -728,7 +763,7 @@ export default function CostsPage() {
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-50">
-                        {costs.map((row) => (
+                        {filteredCosts.map((row) => (
                           <tr
                             key={row.id}
                             className="hover:bg-gray-50 transition-colors cursor-pointer"

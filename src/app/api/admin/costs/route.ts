@@ -39,7 +39,7 @@ export async function GET() {
   const db = await getUntypedClient(true) as any
 
   const [menuRes, recipeRes, plateCostsRes, ingredientsRes] = await Promise.all([
-    db.from('menu_items').select('id, name, price').eq('active', true).order('name'),
+    db.from('menu_items').select('id, name, price, category_id, categories(id, name)').eq('active', true).order('name'),
     db.from('recipe_items').select('menu_item_id, ingredient_id, quantity'),
     db.from('plate_costs').select('*'),
     db.from('ingredients').select('id, price_per_unit'),
@@ -74,7 +74,8 @@ export async function GET() {
     }
   }
 
-  const results = (menuRes.data ?? []).map((item: { id: string; name: string; price: number }) => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const results = (menuRes.data ?? []).map((item: any) => {
     const recipe = recipeByItem[item.id] ?? []
     const ingredientCost = recipe.reduce((sum: number, ri: { ingredient_id: string; quantity: number }) => {
       return sum + (ingredientPriceMap[ri.ingredient_id] ?? 0) * ri.quantity
@@ -91,6 +92,8 @@ export async function GET() {
       id: item.id,
       name: item.name,
       price,
+      category: item.categories?.name ?? null,
+      category_id: item.category_id ?? null,
       ingredientCost,
       packaging: pc.packaging,
       labor: pc.labor,
