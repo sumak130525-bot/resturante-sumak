@@ -289,7 +289,7 @@ function PlateCostModal({
                       <input
                         type="number"
                         min="0"
-                        step="0.001"
+                        step="any"
                         className="border border-gray-200 rounded-lg px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
                         value={row.quantity}
                         onChange={(e) => updateRecipeRow(idx, 'quantity', e.target.value)}
