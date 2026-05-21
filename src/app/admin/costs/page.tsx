@@ -629,26 +629,17 @@ export default function CostsPage() {
 
             {/* Ingredient category filter */}
             {ingredientCategories.length > 0 && (
-              <div className="flex items-center gap-2 mb-4 flex-wrap">
-                <button
-                  onClick={() => setIngredientCategoryFilter('all')}
-                  className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                    ingredientCategoryFilter === 'all' ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                  }`}
+              <div className="flex items-center gap-3 mb-4">
+                <select
+                  value={ingredientCategoryFilter}
+                  onChange={(e) => setIngredientCategoryFilter(e.target.value)}
+                  className="border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
                 >
-                  Todos
-                </button>
-                {ingredientCategories.map((cat) => (
-                  <button
-                    key={cat}
-                    onClick={() => setIngredientCategoryFilter(cat)}
-                    className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                      ingredientCategoryFilter === cat ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                    }`}
-                  >
-                    {cat}
-                  </button>
-                ))}
+                  <option value="all">Todas las categorías</option>
+                  {ingredientCategories.map((cat) => (
+                    <option key={cat} value={cat}>{cat}</option>
+                  ))}
+                </select>
               </div>
             )}
 
@@ -748,26 +739,17 @@ export default function CostsPage() {
           <div>
             {/* Category filter */}
             {categories.length > 0 && (
-              <div className="flex items-center gap-2 mb-4 flex-wrap">
-                <button
-                  onClick={() => setCategoryFilter('all')}
-                  className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                    categoryFilter === 'all' ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                  }`}
+              <div className="flex items-center gap-3 mb-4">
+                <select
+                  value={categoryFilter}
+                  onChange={(e) => setCategoryFilter(e.target.value)}
+                  className="border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
                 >
-                  Todos
-                </button>
-                {categories.map((cat) => (
-                  <button
-                    key={cat}
-                    onClick={() => setCategoryFilter(cat)}
-                    className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                      categoryFilter === cat ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                    }`}
-                  >
-                    {cat}
-                  </button>
-                ))}
+                  <option value="all">Todas las categorías</option>
+                  {categories.map((cat) => (
+                    <option key={cat} value={cat}>{cat}</option>
+                  ))}
+                </select>
               </div>
             )}
             {costsLoading ? (
