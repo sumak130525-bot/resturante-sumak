@@ -105,13 +105,26 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Ya hay una caja abierta' }, { status: 400 })
     }
 
+    // Auto-close any lingering open POS shifts
+    await supabase
+      .from('shifts')
+      .update({ status: 'closed', closed_at: new Date().toISOString() })
+      .eq('status', 'open')
+
+    const now = new Date().toISOString()
+
     const { data: shift, error } = await supabase
       .from('cash_shifts')
-      .insert({ opening_amount: Number(opening_amount), status: 'open' })
+      .insert({ opening_amount: Number(opening_amount), status: 'open', opened_at: now })
       .select()
       .single()
 
     if (error) throw new Error(error.message)
+
+    // Sync: also create a matching POS shift
+    await supabase
+      .from('shifts')
+      .insert({ opening_amount: Number(opening_amount), status: 'open', opened_at: now })
 
     return NextResponse.json({ shift }, { status: 201 })
   } catch (err) {
@@ -174,6 +187,12 @@ export async function PATCH(request: NextRequest) {
       .single()
 
     if (error) throw new Error(error.message)
+
+    // Sync: also close any open POS shift
+    await supabase
+      .from('shifts')
+      .update({ status: 'closed', closed_at: new Date().toISOString() })
+      .eq('status', 'open')
 
     return NextResponse.json({ shift: updated })
   } catch (err) {
