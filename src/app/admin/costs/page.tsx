@@ -464,10 +464,13 @@ export default function CostsPage() {
   // Ingredient CRUD
   const handleSaveIngredient = async (data: Partial<Ingredient>) => {
     const method = data.id ? 'PUT' : 'POST'
+    // Strip non-column fields before sending
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    const { ingredient_categories, ...cleanData } = data as Ingredient
     const res = await fetch('/api/admin/ingredients', {
       method,
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
+      body: JSON.stringify(cleanData),
     })
     if (!res.ok) {
       const err = await res.json()
