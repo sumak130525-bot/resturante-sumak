@@ -110,7 +110,8 @@ export async function POST(request: NextRequest) {
 // PUT: update ingredient (optionally link to menu_item if menu_item_id provided)
 export async function PUT(request: NextRequest) {
   const body = await request.json()
-  const { id, menu_item_id, ...updates } = body
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const { id, menu_item_id, ingredient_categories, linked_menu_item_id, recipe_items, ...updates } = body
   if (!id) return NextResponse.json({ error: 'id required' }, { status: 400 })
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const admin = await getUntypedClient(true) as any

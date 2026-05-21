@@ -466,7 +466,7 @@ export default function CostsPage() {
     const method = data.id ? 'PUT' : 'POST'
     // Strip non-column fields before sending
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const { ingredient_categories, ...cleanData } = data as Ingredient
+    const { ingredient_categories, linked_menu_item_id, ...cleanData } = data as any
     const res = await fetch('/api/admin/ingredients', {
       method,
       headers: { 'Content-Type': 'application/json' },
