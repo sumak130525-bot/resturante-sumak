@@ -952,52 +952,30 @@ function CloseShiftModal({
   const [error, setError] = useState<string | null>(null)
   const [notes, setNotes] = useState('')
 
-  // Pre-calculate live summary by fetching movements
+  // Pre-calculate live summary using same logic as close endpoint
   useEffect(() => {
     let cancelled = false
     setLoadingSummary(true)
 
     async function loadPreview() {
       try {
-        const res = await fetch('/api/pos/shifts/current')
+        const res = await fetch('/api/pos/shifts/preview')
+        if (!res.ok) throw new Error('Error loading preview')
         const data = await res.json()
         if (cancelled) return
 
-        // Get movements for current shift
-        const movRes = await fetch('/api/pos/cash-movements')
-        const movData = await movRes.json()
-
-        if (cancelled) return
-
-        const movements: Array<{ type: string; amount: number }> = movData.movements ?? []
-        const totalIncome = movements
-          .filter((m) => m.type === 'ingreso')
-          .reduce((s, m) => s + Number(m.amount), 0)
-        const totalExpense = movements
-          .filter((m) => m.type === 'egreso')
-          .reduce((s, m) => s + Number(m.amount), 0)
-
-        // Estimated totals from movements
-        const cashMov = movements.filter((m) => m.type === 'venta_efectivo')
-        const transferMov = movements.filter((m) => m.type === 'venta_transferencia')
-        const totalCash = cashMov.reduce((s, m) => s + Number(m.amount), 0)
-        const totalTransfer = transferMov.reduce((s, m) => s + Number(m.amount), 0)
-
-        const opening = Number(shift.opening_amount ?? 0)
-        const expectedAmount = opening + totalCash + totalIncome - totalExpense
-
         setSummary({
-          opening_amount: opening,
+          opening_amount: data.opening_amount,
           closing_amount: 0,
-          expected_amount: expectedAmount,
+          expected_amount: data.expected_amount,
           difference: 0,
-          total_cash_sales: totalCash,
-          total_transfer_sales: totalTransfer,
-          total_mixed_sales: 0,
-          total_income: totalIncome,
-          total_expense: totalExpense,
-          total_refunds: 0,
-          opened_at: shift.opened_at,
+          total_cash_sales: data.total_cash_sales,
+          total_transfer_sales: data.total_transfer_sales,
+          total_mixed_sales: data.total_mixed_sales,
+          total_income: data.total_income,
+          total_expense: data.total_expense,
+          total_refunds: data.total_refunds,
+          opened_at: data.opened_at,
           closed_at: new Date().toISOString(),
         })
       } catch (e) { void e }
@@ -1008,7 +986,7 @@ function CloseShiftModal({
     return () => { cancelled = true }
   }, [shift])
 
-  const counted = parseFloat(countedAmount.replace(',', '.') || '0')
+  const counted = parseFloat(countedAmount.replace(/\./g, '').replace(',', '.') || '0')
   const expected = summary?.expected_amount ?? 0
   const difference = counted - expected
   const hasAmount = countedAmount.trim() !== ''
