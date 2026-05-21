@@ -1744,6 +1744,14 @@ type SentOrder = {
   transfer_amount?: number | null
   created_at: string
   status?: string | null
+  order_items?: Array<{
+    id: string
+    menu_item_id: string
+    name: string
+    price: number
+    quantity: number
+    status?: string | null
+  }>
 }
 
 function ChangePaymentModal({
@@ -1989,6 +1997,172 @@ function CancelOrderModal({
             {cancelling ? 'Anulando...' : 'Confirmar anulación'}
           </button>
         </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── Swap Item Modal ──────────────────────────────────────────────────────────
+
+function SwapItemModal({
+  order,
+  menuItems,
+  onClose,
+  onSuccess,
+}: {
+  order: SentOrder
+  menuItems: Array<{ id: string; name: string; price: number; category_id?: string }>
+  onClose: () => void
+  onSuccess: () => void
+}) {
+  const [selectedItem, setSelectedItem] = useState<string | null>(null)
+  const [newMenuItemId, setNewMenuItemId] = useState<string>('')
+  const [search, setSearch] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [result, setResult] = useState<{ difference: number; old_item: string; new_item: string } | null>(null)
+
+  const items = order.order_items ?? []
+  const selectedOrderItem = items.find((i) => i.id === selectedItem)
+
+  const filteredMenu = menuItems.filter((m) =>
+    m.name.toLowerCase().includes(search.toLowerCase()) &&
+    m.id !== selectedOrderItem?.menu_item_id
+  )
+
+  const newMenuItem = menuItems.find((m) => m.id === newMenuItemId)
+  const priceDiff = selectedOrderItem && newMenuItem
+    ? (Number(newMenuItem.price) - Number(selectedOrderItem.price)) * Number(selectedOrderItem.quantity)
+    : 0
+
+  const handleSwap = async () => {
+    if (!selectedItem || !newMenuItemId || !newMenuItem) return
+    setSaving(true)
+    setError(null)
+    try {
+      const res = await fetch(`/api/pos/orders/${order.id}/swap-item`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          order_item_id: selectedItem,
+          new_menu_item_id: newMenuItemId,
+          new_name: newMenuItem.name,
+          new_price: newMenuItem.price,
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error ?? 'Error')
+      setResult(data)
+      setTimeout(() => onSuccess(), 1500)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Error')
+    }
+    setSaving(false)
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={(e) => { if (e.target === e.currentTarget) onClose() }}>
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md flex flex-col overflow-hidden" style={{ maxHeight: '85vh' }}>
+        <div className="px-5 py-4 bg-purple-600 flex items-center justify-between shrink-0">
+          <div>
+            <h3 className="text-white font-black text-lg leading-none">Cambiar plato</h3>
+            <p className="text-purple-200 text-xs mt-0.5">{order.customer_name}</p>
+          </div>
+          <button onClick={onClose} className="text-white/70 hover:text-white text-xl">✕</button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-4 space-y-4" style={{ minHeight: 0 }}>
+          {result ? (
+            <div className="text-center py-6 space-y-2">
+              <p className="text-green-600 font-bold text-lg">✓ Plato cambiado</p>
+              <p className="text-sm text-gray-600">{result.old_item} → {result.new_item}</p>
+              {Math.abs(result.difference) >= 1 && (
+                <p className={`text-sm font-bold ${result.difference > 0 ? 'text-blue-600' : 'text-red-600'}`}>
+                  {result.difference > 0 ? `Cobrar diferencia: +$${result.difference.toLocaleString('es-AR')}` : `Devolución: $${Math.abs(result.difference).toLocaleString('es-AR')}`}
+                </p>
+              )}
+            </div>
+          ) : (
+            <>
+              {/* Step 1: Select item to replace */}
+              <div>
+                <p className="text-xs font-bold text-gray-500 mb-2">1. Seleccionar plato a cambiar</p>
+                <div className="space-y-1.5">
+                  {items.map((item) => (
+                    <button
+                      key={item.id}
+                      onClick={() => { setSelectedItem(item.id); setNewMenuItemId('') }}
+                      className={`w-full text-left px-3 py-2.5 rounded-xl border transition-all ${
+                        selectedItem === item.id
+                          ? 'border-purple-500 bg-purple-50 ring-2 ring-purple-200'
+                          : 'border-gray-200 hover:border-purple-300'
+                      }`}
+                    >
+                      <span className="font-semibold text-sm text-gray-800">{item.quantity}x {item.name}</span>
+                      <span className="text-xs text-gray-500 ml-2">${Number(item.price).toLocaleString('es-AR')}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Step 2: Select replacement */}
+              {selectedItem && (
+                <div>
+                  <p className="text-xs font-bold text-gray-500 mb-2">2. Elegir nuevo plato</p>
+                  <input
+                    type="text"
+                    placeholder="Buscar plato..."
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm mb-2 focus:outline-none focus:ring-2 focus:ring-purple-400"
+                  />
+                  <div className="max-h-40 overflow-y-auto space-y-1">
+                    {filteredMenu.slice(0, 20).map((m) => (
+                      <button
+                        key={m.id}
+                        onClick={() => setNewMenuItemId(m.id)}
+                        className={`w-full text-left px-3 py-2 rounded-lg border transition-all text-sm ${
+                          newMenuItemId === m.id
+                            ? 'border-purple-500 bg-purple-50'
+                            : 'border-gray-100 hover:border-purple-300'
+                        }`}
+                      >
+                        <span className="font-medium text-gray-800">{m.name}</span>
+                        <span className="text-xs text-gray-500 ml-2">${Number(m.price).toLocaleString('es-AR')}</span>
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Price difference preview */}
+                  {newMenuItemId && (
+                    <div className={`mt-3 px-3 py-2 rounded-xl text-sm font-bold ${
+                      priceDiff > 0 ? 'bg-blue-50 text-blue-700' : priceDiff < 0 ? 'bg-red-50 text-red-700' : 'bg-gray-50 text-gray-600'
+                    }`}>
+                      {priceDiff > 0 ? `Cobrar diferencia: +$${priceDiff.toLocaleString('es-AR')}` :
+                       priceDiff < 0 ? `Devolver: $${Math.abs(priceDiff).toLocaleString('es-AR')}` :
+                       'Sin diferencia de precio'}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {error && <p className="text-red-600 text-sm font-semibold">{error}</p>}
+            </>
+          )}
+        </div>
+
+        {!result && (
+          <div className="px-4 py-3 border-t border-gray-100 flex gap-3">
+            <button onClick={onClose} className="flex-1 py-2.5 rounded-xl font-bold text-sm bg-gray-100 text-gray-700 hover:bg-gray-200">Cancelar</button>
+            <button
+              onClick={handleSwap}
+              disabled={!selectedItem || !newMenuItemId || saving}
+              className="flex-1 py-2.5 rounded-xl font-bold text-sm bg-purple-600 text-white hover:bg-purple-700 disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              {saving ? 'Cambiando...' : 'Confirmar cambio'}
+            </button>
+          </div>
+        )}
       </div>
     </div>
   )
@@ -3033,6 +3207,7 @@ export default function POSPage() {
   const [showSentOrders, setShowSentOrders] = useState(false)
   const [changePaymentOrder, setChangePaymentOrder] = useState<SentOrder | null>(null)
   const [cancelOrder, setCancelOrder] = useState<SentOrder | null>(null)
+  const [swapItemOrder, setSwapItemOrder] = useState<SentOrder | null>(null)
 
   const loadSentOrders = useCallback(async () => {
     setLoadingSentOrders(true)
@@ -3947,13 +4122,22 @@ export default function POSPage() {
                         {!isCancelled && (
                           <div className="flex items-center gap-1.5 shrink-0">
                             {!isDelivered && (
-                              <button
-                                onClick={() => { setCancelOrder(order); setShowSentOrders(false) }}
-                                className="px-3 py-1.5 rounded-lg bg-red-100 hover:bg-red-200 text-red-700 font-bold text-xs active:scale-95 transition-all"
-                                title="Anular pedido"
-                              >
-                                Anular
-                              </button>
+                              <>
+                                <button
+                                  onClick={() => { setSwapItemOrder(order); setShowSentOrders(false) }}
+                                  className="px-3 py-1.5 rounded-lg bg-purple-100 hover:bg-purple-200 text-purple-700 font-bold text-xs active:scale-95 transition-all"
+                                  title="Cambiar plato"
+                                >
+                                  Cambiar
+                                </button>
+                                <button
+                                  onClick={() => { setCancelOrder(order); setShowSentOrders(false) }}
+                                  className="px-3 py-1.5 rounded-lg bg-red-100 hover:bg-red-200 text-red-700 font-bold text-xs active:scale-95 transition-all"
+                                  title="Anular pedido"
+                                >
+                                  Anular
+                                </button>
+                              </>
                             )}
                             <button
                               onClick={() => { setChangePaymentOrder(order); setShowSentOrders(false) }}
@@ -3982,6 +4166,20 @@ export default function POSPage() {
           onSuccess={() => {
             setChangePaymentOrder(null)
             setToast('Método de pago actualizado')
+          }}
+        />
+      )}
+
+      {/* ── Swap Item Modal ── */}
+      {swapItemOrder && (
+        <SwapItemModal
+          order={swapItemOrder}
+          menuItems={menuItems}
+          onClose={() => setSwapItemOrder(null)}
+          onSuccess={() => {
+            setSwapItemOrder(null)
+            loadSentOrders()
+            setToast('Plato cambiado correctamente')
           }}
         />
       )}
