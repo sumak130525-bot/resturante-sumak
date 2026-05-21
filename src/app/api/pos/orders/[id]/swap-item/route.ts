@@ -27,10 +27,10 @@ export async function PATCH(
 
     const supabase = getAdminClient()
 
-    // Get the current order item
+    // Get the current order item with menu_item name
     const { data: oldItem, error: itemErr } = await supabase
       .from('order_items')
-      .select('id, name, price, quantity')
+      .select('id, menu_item_id, unit_price, quantity, menu_items(name)')
       .eq('id', order_item_id)
       .single()
 
@@ -38,7 +38,9 @@ export async function PATCH(
       return NextResponse.json({ error: 'Item no encontrado' }, { status: 404 })
     }
 
-    const oldTotal = Number(oldItem.price) * Number(oldItem.quantity)
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const oldName = (oldItem as any).menu_items?.name ?? 'Item'
+    const oldTotal = Number(oldItem.unit_price) * Number(oldItem.quantity)
     const newTotal = Number(new_price) * Number(oldItem.quantity)
     const difference = newTotal - oldTotal // positive = more expensive, negative = cheaper
 
@@ -47,8 +49,8 @@ export async function PATCH(
       .from('order_items')
       .update({
         menu_item_id: new_menu_item_id,
-        name: new_name,
-        price: new_price,
+        unit_price: new_price,
+        subtotal: newTotal,
       })
       .eq('id', order_item_id)
 
@@ -57,10 +59,10 @@ export async function PATCH(
     // Recalculate order total
     const { data: allItems } = await supabase
       .from('order_items')
-      .select('price, quantity')
+      .select('unit_price, quantity')
       .eq('order_id', orderId)
 
-    const newOrderTotal = (allItems ?? []).reduce((sum, i) => sum + Number(i.price) * Number(i.quantity), 0)
+    const newOrderTotal = (allItems ?? []).reduce((sum, i) => sum + Number(i.unit_price) * Number(i.quantity), 0)
 
     // Update order total
     const { error: orderErr } = await supabase
@@ -87,7 +89,7 @@ export async function PATCH(
         await supabase.from('cash_movements').insert({
           type: 'egreso',
           amount: Math.abs(difference),
-          description: `Devolución cambio plato: ${oldItem.name} → ${new_name}`,
+          description: `Devolución cambio plato: ${oldName} → ${new_name}`,
           shift_id: shiftId,
         })
       } else {
@@ -95,24 +97,17 @@ export async function PATCH(
         await supabase.from('cash_movements').insert({
           type: 'ingreso',
           amount: difference,
-          description: `Cobro diferencia cambio plato: ${oldItem.name} → ${new_name}`,
+          description: `Cobro diferencia cambio plato: ${oldName} → ${new_name}`,
           shift_id: shiftId,
         })
       }
     }
 
-    // Insert new item into kitchen (KDS) — mark as pending
-    // We update the existing order_items status to trigger KDS
-    await supabase
-      .from('order_items')
-      .update({ status: 'pending' })
-      .eq('id', order_item_id)
-
     return NextResponse.json({
       success: true,
       difference,
       new_total: newOrderTotal,
-      old_item: oldItem.name,
+      old_item: oldName,
       new_item: new_name,
     })
   } catch (err) {

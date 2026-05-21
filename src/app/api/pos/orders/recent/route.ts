@@ -19,7 +19,7 @@ export async function GET() {
 
     const { data, error } = await supabase
       .from('orders')
-      .select('id, customer_name, total, payment_method, cash_amount, transfer_amount, created_at, status, order_items(id, menu_item_id, name, price, quantity, status)')
+      .select('id, customer_name, total, payment_method, cash_amount, transfer_amount, created_at, status, order_items(id, menu_item_id, quantity, unit_price, subtotal, menu_items(name))')
       .eq('channel', 'pos')
       .gte('created_at', since)
       .order('created_at', { ascending: false })
@@ -27,7 +27,20 @@ export async function GET() {
 
     if (error) throw new Error(error.message)
 
-    return NextResponse.json({ orders: data ?? [] })
+    // Flatten menu_items name into order_items
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const orders = (data ?? []).map((order: any) => ({
+      ...order,
+      order_items: (order.order_items ?? []).map((item: any) => ({
+        id: item.id,
+        menu_item_id: item.menu_item_id,
+        name: item.menu_items?.name ?? 'Sin nombre',
+        price: item.unit_price,
+        quantity: item.quantity,
+      })),
+    }))
+
+    return NextResponse.json({ orders })
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Error interno'
     console.error('[GET /api/pos/orders/recent]', message)
