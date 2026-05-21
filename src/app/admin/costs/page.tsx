@@ -23,6 +23,8 @@ interface Ingredient {
   unit: string
   price_per_unit: number
   supplier: string | null
+  category_id: string | null
+  ingredient_categories?: { id: string; name: string } | null
 }
 
 interface CostRow {
@@ -422,6 +424,7 @@ export default function CostsPage() {
   // Ingredients state
   const [ingredients, setIngredients] = useState<Ingredient[]>([])
   const [ingredientsLoading, setIngredientsLoading] = useState(true)
+  const [ingredientCategoryFilter, setIngredientCategoryFilter] = useState<string>('all')
   const [editIngredient, setEditIngredient] = useState<Partial<Ingredient> | null | undefined>(undefined) // undefined = closed
 
   // Inline price edit state
@@ -572,6 +575,12 @@ export default function CostsPage() {
   const categories = Array.from(new Set(costs.map((c) => c.category).filter(Boolean))) as string[]
   const filteredCosts = categoryFilter === 'all' ? costs : costs.filter((c) => c.category === categoryFilter)
 
+  // Derived: ingredient categories for filter
+  const ingredientCategories = Array.from(new Set(ingredients.map((i) => i.ingredient_categories?.name).filter(Boolean))) as string[]
+  const filteredIngredients = ingredientCategoryFilter === 'all'
+    ? ingredients
+    : ingredients.filter((i) => i.ingredient_categories?.name === ingredientCategoryFilter)
+
   return (
     <AdminLayoutClient active="costs">
       <div className="max-w-screen-xl mx-auto">
@@ -618,6 +627,31 @@ export default function CostsPage() {
               </button>
             </div>
 
+            {/* Ingredient category filter */}
+            {ingredientCategories.length > 0 && (
+              <div className="flex items-center gap-2 mb-4 flex-wrap">
+                <button
+                  onClick={() => setIngredientCategoryFilter('all')}
+                  className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                    ingredientCategoryFilter === 'all' ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                  }`}
+                >
+                  Todos
+                </button>
+                {ingredientCategories.map((cat) => (
+                  <button
+                    key={cat}
+                    onClick={() => setIngredientCategoryFilter(cat)}
+                    className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                      ingredientCategoryFilter === cat ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                    }`}
+                  >
+                    {cat}
+                  </button>
+                ))}
+              </div>
+            )}
+
             {ingredientsLoading ? (
               <div className="text-center py-12 text-gray-400">Cargando ingredientes...</div>
             ) : (
@@ -641,7 +675,7 @@ export default function CostsPage() {
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-50">
-                        {ingredients.map((ing) => (
+                        {filteredIngredients.map((ing) => (
                           <tr key={ing.id} className="hover:bg-gray-50 transition-colors">
                             <td className="p-4 font-medium text-gray-800">{ing.name}</td>
                             <td className="p-4 text-gray-500">
