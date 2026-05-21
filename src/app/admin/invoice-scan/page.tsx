@@ -290,6 +290,10 @@ export default function InvoiceScanPage() {
     try {
       // 1. Fetch existing ingredients (now includes linked_menu_item_id via recipe_items)
       const ingRes = await fetch('/api/admin/ingredients')
+      if (!ingRes.ok) {
+        const errText = await ingRes.text().catch(() => '')
+        console.error('[invoice-scan] Error fetching ingredients:', ingRes.status, errText)
+      }
       const existingIngredients: { id: string; name: string; unit: string; price_per_unit?: number; linked_menu_item_id?: string | null }[] =
         ingRes.ok ? await ingRes.json() : []
 
@@ -374,15 +378,16 @@ export default function InvoiceScanPage() {
               quantity: stockQty,
               price: item.total ?? (unitPrice !== null ? unitPrice * item.quantity : undefined),
               notes: invoiceData.supplier ? `Factura: ${invoiceData.supplier}` : 'Factura escaneada',
-              date: invoiceData.date ? new Date(invoiceData.date).toISOString() : undefined,
+              date: invoiceData.date && !isNaN(Date.parse(invoiceData.date)) ? new Date(invoiceData.date).toISOString() : undefined,
             }),
           })
         }
       }
 
       setSaveResults(results)
-    } catch {
-      setSaveError('Error al guardar los datos')
+    } catch (err) {
+      console.error('[invoice-scan] Save error:', err)
+      setSaveError(`Error al guardar: ${err instanceof Error ? err.message : String(err)}`)
     } finally {
       setSaving(false)
     }
