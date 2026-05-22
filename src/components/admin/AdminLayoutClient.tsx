@@ -9,7 +9,7 @@ import type { User } from '@supabase/supabase-js'
 
 interface AdminLayoutClientProps {
   children: React.ReactNode
-  active: 'dashboard' | 'menu' | 'categorias' | 'ordenar' | 'orders' | 'qr' | 'loyverse' | 'notificaciones' | 'clientes' | 'configuracion' | 'modificadores' | 'caja' | 'analytics' | 'costs' | 'profitability' | 'reports' | 'inventory' | 'predictions' | 'invoice-scan' | 'bonus-reasons' | 'finanzas' | 'shopping-list'
+  active: 'dashboard' | 'menu' | 'categorias' | 'ordenar' | 'orders' | 'qr' | 'loyverse' | 'notificaciones' | 'clientes' | 'configuracion' | 'modificadores' | 'caja' | 'analytics' | 'costs' | 'profitability' | 'reports' | 'inventory' | 'predictions' | 'invoice-scan' | 'bonus-reasons' | 'finanzas'
 }
 
 const NAV_ITEMS = [
@@ -28,7 +28,6 @@ const NAV_ITEMS = [
   { href: '/admin/invoice-scan', label: 'Escanear Factura', icon: ScanLine, key: 'invoice-scan' as const },
   { href: '/admin/reports', label: 'Reportes', icon: FileText, key: 'reports' as const },
   { href: '/admin/finanzas', label: 'Finanzas', icon: TrendingUp, key: 'finanzas' as const },
-  { href: '/admin/shopping-list', label: 'Lista Compras', icon: ShoppingBag, key: 'shopping-list' as const },
   { href: '/admin/qr', label: 'Códigos QR', icon: QrCode, key: 'qr' as const },
   { href: '/admin/loyverse', label: 'Loyverse', icon: Store, key: 'loyverse' as const },
   { href: '/admin/modificadores', label: 'Modificadores', icon: Sliders, key: 'modificadores' as const },
@@ -38,7 +37,7 @@ const NAV_ITEMS = [
 ]
 
 interface SidebarProps {
-  active: 'dashboard' | 'menu' | 'categorias' | 'ordenar' | 'orders' | 'qr' | 'loyverse' | 'notificaciones' | 'clientes' | 'configuracion' | 'modificadores' | 'caja' | 'analytics' | 'costs' | 'profitability' | 'reports' | 'inventory' | 'predictions' | 'invoice-scan' | 'bonus-reasons' | 'finanzas' | 'shopping-list'
+  active: 'dashboard' | 'menu' | 'categorias' | 'ordenar' | 'orders' | 'qr' | 'loyverse' | 'notificaciones' | 'clientes' | 'configuracion' | 'modificadores' | 'caja' | 'analytics' | 'costs' | 'profitability' | 'reports' | 'inventory' | 'predictions' | 'invoice-scan' | 'bonus-reasons' | 'finanzas'
   user: User | null
   onLogout: () => void
   collapsed: boolean
