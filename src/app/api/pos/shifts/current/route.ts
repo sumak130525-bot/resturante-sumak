@@ -15,11 +15,16 @@ export async function GET() {
   try {
     const supabase = getAdminClient()
 
-    const { data: shifts } = await supabase
+    const { data: shifts, error: queryErr } = await supabase
       .from('shifts')
       .select('*')
       .eq('status', 'open')
       .order('opened_at', { ascending: false })
+
+    if (queryErr) {
+      console.error('[shifts/current] query error:', queryErr.message)
+      return NextResponse.json({ shift: null, _debug: queryErr.message })
+    }
 
     // If multiple open shifts, close all except the most recent
     if (shifts && shifts.length > 1) {
@@ -58,7 +63,7 @@ export async function GET() {
       }
     }
 
-    return NextResponse.json({ shift: shift ?? null })
+    return NextResponse.json({ shift: shift ?? null, _count: shifts?.length ?? 0 })
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Error interno'
     return NextResponse.json({ error: message }, { status: 500 })
