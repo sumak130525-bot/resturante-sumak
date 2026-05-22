@@ -2,6 +2,7 @@
 
 import { useState, useCallback, useEffect, useRef } from 'react'
 import { useMenuRealtime } from '@/hooks/useMenuRealtime'
+import WhatsAppNotifier from '@/components/WhatsAppNotifier'
 import type { MenuItem } from '@/lib/types'
 import { useTranslation, getItemName, type Locale } from '@/lib/i18n'
 import { useLanguagesEnabled } from '@/hooks/useLanguagesEnabled'
@@ -4301,6 +4302,9 @@ export default function POSPage() {
       {showEmpPayModal && (
         <EmployeePOSModal onClose={() => setShowEmpPayModal(false)} />
       )}
+
+      {/* WhatsApp Notifications */}
+      <WhatsAppNotifier />
 
     </div>
   )

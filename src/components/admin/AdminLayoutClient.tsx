@@ -5,6 +5,7 @@ import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import { ChefHat, LayoutGrid, ShoppingBag, LogOut, Menu as MenuIcon, X, ChevronLeft, ChevronRight, QrCode, Store, Bell, Tag, ArrowUpDown, Users, Settings, Sliders, DollarSign, BarChart2, Calculator, TrendingUp, FileText, Package, Lightbulb, ScanLine, Star } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import WhatsAppNotifier from '@/components/WhatsAppNotifier'
 import type { User } from '@supabase/supabase-js'
 
 interface AdminLayoutClientProps {
@@ -193,6 +194,7 @@ export function AdminLayoutClient({ children, active }: AdminLayoutClientProps) 
           {children}
         </main>
       </div>
+      <WhatsAppNotifier />
     </div>
   )
 }

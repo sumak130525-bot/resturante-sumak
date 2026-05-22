@@ -169,6 +169,15 @@ export async function handleMessage(text: string, phone?: string): Promise<strin
 
   const t = text.trim();
 
+  // ── Notify admin of incoming message (non-blocking) ─────────────────────────
+  if (phone) {
+    fetch(`${config.restaurant.web}/api/admin/whatsapp-notify`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ phone, message: t, sender_name: phone }),
+    }).catch(() => {});
+  }
+
   // ── AI mode: AI handles ALL conversations including ordering ─────────────────
   if (!isAIAvailable()) {
     console.log('⚠️  Groq no configurado, usando respuestas estáticas');
