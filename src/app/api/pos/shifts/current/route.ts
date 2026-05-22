@@ -2,6 +2,8 @@ import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 
 export const dynamic = 'force-dynamic'
+export const fetchCache = 'force-no-store'
+export const revalidate = 0
 
 function getAdminClient() {
   return createClient(
@@ -22,13 +24,12 @@ export async function GET() {
       .order('opened_at', { ascending: false })
 
     if (queryErr) {
-      console.error('[shifts/current] query error:', queryErr.message)
-      return NextResponse.json({ shift: null, _debug: queryErr.message })
+      return NextResponse.json({ shift: null, _err: queryErr.message })
     }
 
     // If multiple open shifts, close all except the most recent
     if (shifts && shifts.length > 1) {
-      const staleIds = shifts.slice(1).map((s) => s.id)
+      const staleIds = shifts.slice(1).map((s: { id: string }) => s.id)
       await supabase
         .from('shifts')
         .update({ status: 'closed', closed_at: new Date().toISOString() })
@@ -47,7 +48,6 @@ export async function GET() {
         .single()
 
       if (!openCashShift) {
-        // Close any stale cash_shifts first, then create a new one synced to this shift
         await supabase
           .from('cash_shifts')
           .update({ status: 'closed', closed_at: new Date().toISOString() })
@@ -63,9 +63,9 @@ export async function GET() {
       }
     }
 
-    return NextResponse.json({ shift: shift ?? null, _count: shifts?.length ?? 0 })
+    return NextResponse.json({ shift: shift ?? null, _v: 2 })
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Error interno'
-    return NextResponse.json({ error: message }, { status: 500 })
+    return NextResponse.json({ shift: null, error: message }, { status: 500 })
   }
 }
