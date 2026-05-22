@@ -36,29 +36,39 @@ function argToUtcIso(argDate: Date): string {
   return new Date(argDate.getTime() - ARG_OFFSET_MS).toISOString()
 }
 
-function getPeriodRange(period: string): { from: string; to: string } {
+function getPeriodRange(period: string, customDate?: string | null): { from: string; to: string } {
   const argNow = nowInArgentina()
   const y = argNow.getUTCFullYear()
   const m = argNow.getUTCMonth()
   const d = argNow.getUTCDate()
 
   let argFrom: Date
+  let argTo: Date | null = null // null means "now"
 
   switch (period) {
     case 'today':
-      // Start of today 00:00:00 Argentina
       argFrom = new Date(Date.UTC(y, m, d, 0, 0, 0))
       break
+    case 'yesterday':
+      argFrom = new Date(Date.UTC(y, m, d - 1, 0, 0, 0))
+      argTo = new Date(Date.UTC(y, m, d, 0, 0, 0)) // end of yesterday = start of today
+      break
+    case 'custom':
+      if (customDate) {
+        const [cy, cm, cd] = customDate.split('-').map(Number)
+        argFrom = new Date(Date.UTC(cy, cm - 1, cd, 0, 0, 0))
+        argTo = new Date(Date.UTC(cy, cm - 1, cd + 1, 0, 0, 0))
+      } else {
+        argFrom = new Date(Date.UTC(y, m, d, 0, 0, 0))
+      }
+      break
     case 'week':
-      // Start of 6 days ago 00:00:00 Argentina
       argFrom = new Date(Date.UTC(y, m, d - 6, 0, 0, 0))
       break
     case 'month':
-      // Start of this month Argentina
       argFrom = new Date(Date.UTC(y, m, 1, 0, 0, 0))
       break
     case 'year':
-      // Start of this year Argentina
       argFrom = new Date(Date.UTC(y, 0, 1, 0, 0, 0))
       break
     default:
@@ -67,7 +77,7 @@ function getPeriodRange(period: string): { from: string; to: string } {
 
   return {
     from: argToUtcIso(argFrom),
-    to: new Date().toISOString(), // "now" in real UTC — upper bound is always current moment
+    to: argTo ? argToUtcIso(argTo) : new Date().toISOString(),
   }
 }
 
@@ -77,7 +87,8 @@ export async function GET(req: NextRequest) {
   if (!user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
 
   const period = req.nextUrl.searchParams.get('period') || 'today'
-  const { from, to } = getPeriodRange(period)
+  const customDate = req.nextUrl.searchParams.get('date') || null
+  const { from, to } = getPeriodRange(period, customDate)
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const sb = supabase as any

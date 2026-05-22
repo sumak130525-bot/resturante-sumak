@@ -25,7 +25,7 @@ import {
   ResponsiveContainer,
 } from 'recharts'
 
-type Period = 'today' | 'week' | 'month' | 'year'
+type Period = 'today' | 'yesterday' | 'week' | 'month' | 'year' | 'custom'
 
 interface AnalyticsData {
   totalSales: number
@@ -43,6 +43,7 @@ interface AnalyticsData {
 
 const PERIOD_OPTIONS: { label: string; value: Period }[] = [
   { label: 'Hoy', value: 'today' },
+  { label: 'Ayer', value: 'yesterday' },
   { label: 'Semana', value: 'week' },
   { label: 'Mes', value: 'month' },
   { label: 'Año', value: 'year' },
@@ -106,14 +107,17 @@ function CategoryPieTooltip({ active, payload }: any) {
 
 export default function AnalyticsPage() {
   const [period, setPeriod] = useState<Period>('today')
+  const [customDate, setCustomDate] = useState('')
   const [data, setData] = useState<AnalyticsData | null>(null)
   const [loading, setLoading] = useState(true)
   const [selectedCategory, setSelectedCategory] = useState<string>('all')
 
-  const fetchData = useCallback(async (p: Period) => {
+  const fetchData = useCallback(async (p: Period, date?: string) => {
     setLoading(true)
     try {
-      const res = await fetch(`/api/admin/analytics?period=${p}`)
+      let url = `/api/admin/analytics?period=${p}`
+      if (p === 'custom' && date) url += `&date=${date}`
+      const res = await fetch(url)
       if (res.ok) {
         const json = await res.json()
         setData(json)
@@ -124,8 +128,9 @@ export default function AnalyticsPage() {
   }, [])
 
   useEffect(() => {
-    fetchData(period)
-  }, [period, fetchData])
+    if (period === 'custom' && !customDate) return
+    fetchData(period, customDate)
+  }, [period, customDate, fetchData])
 
   const kpis = data
     ? [
@@ -197,7 +202,7 @@ export default function AnalyticsPage() {
           </div>
 
           {/* Period selector */}
-          <div className="flex gap-1 bg-gray-100 p-1 rounded-xl w-fit">
+          <div className="flex gap-1 bg-gray-100 p-1 rounded-xl w-fit flex-wrap">
             {PERIOD_OPTIONS.map(({ label, value }) => (
               <button
                 key={value}
@@ -211,6 +216,17 @@ export default function AnalyticsPage() {
                 {label}
               </button>
             ))}
+            <input
+              type="date"
+              value={customDate}
+              onChange={(e) => { setCustomDate(e.target.value); setPeriod('custom') }}
+              className={`px-3 py-2 rounded-lg text-sm font-medium transition-all border-0 bg-transparent cursor-pointer ${
+                period === 'custom'
+                  ? 'bg-white text-gray-900 shadow-sm'
+                  : 'text-gray-500 hover:text-gray-700'
+              }`}
+              title="Elegir fecha"
+            />
           </div>
         </div>
 
