@@ -169,35 +169,6 @@ export async function handleMessage(text: string, phone?: string): Promise<strin
 
   const t = text.trim();
 
-  // ── Shopping list handler (owner sends "compras: ..." or "lista: ...") ──────
-  const shoppingMatch = t.match(/^(?:compras|lista|comprar)[\s:]+(.+)/is);
-  if (shoppingMatch && phone) {
-    const rawItems = shoppingMatch[1]
-      .split(/[,\n]+/)
-      .map((s) => s.trim())
-      .filter((s) => s.length > 0);
-
-    if (rawItems.length > 0) {
-      try {
-        const res = await fetch(`${config.restaurant.web}/api/admin/shopping-list`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ items: rawItems, source: 'whatsapp', sender: phone }),
-        });
-        if (res.ok) {
-          return (
-            `✅ *Lista de compras guardada*\n\n` +
-            rawItems.map((item, i) => `${i + 1}. ${item}`).join('\n') +
-            `\n\n📋 Podés verla e imprimirla desde el admin.\n\n_Sumak Bot 🤖_`
-          );
-        }
-      } catch (err) {
-        console.error('[Shopping List] Error:', err);
-      }
-      return '❌ Error al guardar la lista. Intentá de nuevo.\n\n_Sumak Bot 🤖_';
-    }
-  }
-
   // ── AI mode: AI handles ALL conversations including ordering ─────────────────
   if (!isAIAvailable()) {
     console.log('⚠️  Groq no configurado, usando respuestas estáticas');
