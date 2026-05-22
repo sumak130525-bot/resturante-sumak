@@ -63,7 +63,7 @@ export async function GET() {
       }
     }
 
-    return NextResponse.json({ shift: shift ?? null, _v: 2 })
+    return NextResponse.json({ shift: shift ?? null })
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Error interno'
     return NextResponse.json({ shift: null, error: message }, { status: 500 })
