@@ -4,6 +4,7 @@ import { useEffect, useRef, useState, useCallback } from 'react'
 import Image from 'next/image'
 import { createClient } from '@/lib/supabase/client'
 import WalkieTalkie from '@/components/WalkieTalkie'
+import WhatsAppNotifier from '@/components/WhatsAppNotifier'
 
 // ─── LocalStorage helpers para dismissed IDs ─────────────────────────────────
 
@@ -1187,6 +1188,7 @@ export default function CocinaPage() {
           )
         )}
       </main>
+      <WhatsAppNotifier />
     </div>
   )
 }
