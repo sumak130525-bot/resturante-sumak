@@ -1005,9 +1005,9 @@ function CloseShiftModal({
       const data = await res.json()
       if (!res.ok) throw new Error(data.error ?? 'Error al cerrar turno')
 
-      // Navigate to print page
-      triggerShiftPrint(data.summary)
+      // Reset state FIRST, then print (in case print navigates away)
       onClosed()
+      triggerShiftPrint(data.summary)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error')
       setSubmitting(false)

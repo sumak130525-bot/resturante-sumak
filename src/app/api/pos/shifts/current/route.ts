@@ -37,18 +37,22 @@ export async function GET() {
       `
     }).then(() => {}, () => {})
 
-    const { data: shift, error } = await supabase
+    const { data: shifts } = await supabase
       .from('shifts')
       .select('*')
       .eq('status', 'open')
       .order('opened_at', { ascending: false })
-      .limit(1)
-      .single()
 
-    if (error && error.code !== 'PGRST116') {
-      // PGRST116 = no rows found, that's OK
-      return NextResponse.json({ shift: null })
+    // If multiple open shifts, close all except the most recent
+    if (shifts && shifts.length > 1) {
+      const staleIds = shifts.slice(1).map((s) => s.id)
+      await supabase
+        .from('shifts')
+        .update({ status: 'closed', closed_at: new Date().toISOString() })
+        .in('id', staleIds)
     }
+
+    const shift = shifts && shifts.length > 0 ? shifts[0] : null
 
     if (shift) {
       // Sync: if there is an open shift in 'shifts' but no open cash_shift, create one
