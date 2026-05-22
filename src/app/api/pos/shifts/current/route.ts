@@ -15,28 +15,6 @@ export async function GET() {
   try {
     const supabase = getAdminClient()
 
-    // Ensure shifts table exists
-    await supabase.rpc('exec_sql', {
-      query: `
-        CREATE TABLE IF NOT EXISTS shifts (
-          id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
-          opened_at timestamptz DEFAULT now() NOT NULL,
-          closed_at timestamptz,
-          opening_amount numeric NOT NULL DEFAULT 0,
-          closing_amount numeric,
-          expected_amount numeric,
-          difference numeric,
-          total_cash_sales numeric DEFAULT 0,
-          total_transfer_sales numeric DEFAULT 0,
-          total_mixed_sales numeric DEFAULT 0,
-          total_income numeric DEFAULT 0,
-          total_expense numeric DEFAULT 0,
-          notes text,
-          status text NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'closed'))
-        );
-      `
-    }).then(() => {}, () => {})
-
     const { data: shifts } = await supabase
       .from('shifts')
       .select('*')

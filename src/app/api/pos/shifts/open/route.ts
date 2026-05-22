@@ -23,29 +23,7 @@ export async function POST(request: NextRequest) {
 
     const supabase = getAdminClient()
 
-    // Ensure table exists
-    await supabase.rpc('exec_sql', {
-      query: `
-        CREATE TABLE IF NOT EXISTS shifts (
-          id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
-          opened_at timestamptz DEFAULT now() NOT NULL,
-          closed_at timestamptz,
-          opening_amount numeric NOT NULL DEFAULT 0,
-          closing_amount numeric,
-          expected_amount numeric,
-          difference numeric,
-          total_cash_sales numeric DEFAULT 0,
-          total_transfer_sales numeric DEFAULT 0,
-          total_mixed_sales numeric DEFAULT 0,
-          total_income numeric DEFAULT 0,
-          total_expense numeric DEFAULT 0,
-          notes text,
-          status text NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'closed'))
-        );
-      `
-    }).then(() => {}, () => {})
-
-    // Close any existing open shift first (shouldn't happen in normal flow)
+    // Close any existing open shift first
     await supabase
       .from('shifts')
       .update({ status: 'closed', closed_at: new Date().toISOString() })
