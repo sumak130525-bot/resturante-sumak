@@ -1521,31 +1521,16 @@ function paymentMethodLabel(pm: 'cash' | 'transfer' | 'mixed' | null): string {
 }
 
 function printViaIframe(html: string) {
-  const iframe = document.createElement('iframe')
-  iframe.style.position = 'fixed'
-  iframe.style.right = '0'
-  iframe.style.bottom = '0'
-  iframe.style.width = '0'
-  iframe.style.height = '0'
-  iframe.style.border = '0'
-  document.body.appendChild(iframe)
-  const doc = iframe.contentDocument || iframe.contentWindow?.document
-  if (!doc) { document.body.removeChild(iframe); return }
-  doc.open()
-  doc.write(html)
-  doc.close()
-  // Use setTimeout to ensure content is rendered before printing
+  // Open new window with receipt content and print from there
+  const w = window.open('', '_blank', 'width=350,height=500')
+  if (!w) { alert('Permití ventanas emergentes para imprimir'); return }
+  w.document.write(html)
+  w.document.close()
   setTimeout(() => {
-    try {
-      iframe.contentWindow?.focus()
-      iframe.contentWindow?.print()
-    } catch (e) {
-      // Fallback: open in new window
-      const w = window.open('', '_blank', 'width=300,height=400')
-      if (w) { w.document.write(html); w.document.close(); w.print(); w.close() }
-    }
-    setTimeout(() => document.body.removeChild(iframe), 1000)
-  }, 300)
+    w.focus()
+    w.print()
+    setTimeout(() => w.close(), 2000)
+  }, 400)
 }
 
 function printAdvanceReceipt(payment: EmployeePayment, empName: string, empRole: string) {
