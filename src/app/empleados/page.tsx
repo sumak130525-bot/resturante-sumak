@@ -1534,11 +1534,18 @@ function printViaIframe(html: string) {
   doc.open()
   doc.write(html)
   doc.close()
-  iframe.onload = () => {
-    iframe.contentWindow?.focus()
-    iframe.contentWindow?.print()
-    setTimeout(() => document.body.removeChild(iframe), 500)
-  }
+  // Use setTimeout to ensure content is rendered before printing
+  setTimeout(() => {
+    try {
+      iframe.contentWindow?.focus()
+      iframe.contentWindow?.print()
+    } catch (e) {
+      // Fallback: open in new window
+      const w = window.open('', '_blank', 'width=300,height=400')
+      if (w) { w.document.write(html); w.document.close(); w.print(); w.close() }
+    }
+    setTimeout(() => document.body.removeChild(iframe), 1000)
+  }, 300)
 }
 
 function printAdvanceReceipt(payment: EmployeePayment, empName: string, empRole: string) {
