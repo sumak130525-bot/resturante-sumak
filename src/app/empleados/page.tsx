@@ -1521,51 +1521,24 @@ function paymentMethodLabel(pm: 'cash' | 'transfer' | 'mixed' | null): string {
 }
 
 function printViaIframe(html: string) {
-  // Create a print container in the current page
-  let container = document.getElementById('print-receipt-container')
-  if (container) container.remove()
-  container = document.createElement('div')
-  container.id = 'print-receipt-container'
-  container.innerHTML = html.replace(/.*<body[^>]*>/s, '').replace(/<\/body>.*/s, '')
-  document.body.appendChild(container)
-
-  // Add print styles that hide everything except the receipt
-  let style = document.getElementById('print-receipt-style')
-  if (!style) {
-    style = document.createElement('style')
-    style.id = 'print-receipt-style'
-    style.textContent = `
-      @media print {
-        body > *:not(#print-receipt-container) { display: none !important; }
-        #print-receipt-container {
-          display: block !important;
-          position: absolute;
-          top: 0; left: 0;
-          width: 72mm;
-          font-family: 'Courier New', Courier, monospace;
-          font-size: 11px;
-          padding: 2mm;
-        }
-        #print-receipt-container .center { text-align: center; }
-        #print-receipt-container .bold { font-weight: bold; }
-        #print-receipt-container .separator { border-top: 1px dashed #000; margin: 3mm 0; }
-        #print-receipt-container .row { display: flex; justify-content: space-between; margin: 1mm 0; }
-        #print-receipt-container .title { font-size: 13px; font-weight: bold; margin-bottom: 2mm; }
-        #print-receipt-container .subtitle { font-size: 10px; margin-bottom: 1mm; }
-        #print-receipt-container .firma { margin-top: 10mm; border-top: 1px solid #000; padding-top: 2mm; width: 50mm; margin-left: auto; margin-right: auto; text-align: center; font-size: 10px; }
-        @page { margin: 0; size: 72mm auto; }
-      }
-    `
-    document.head.appendChild(style)
+  const iframe = document.createElement('iframe')
+  iframe.style.position = 'fixed'
+  iframe.style.right = '0'
+  iframe.style.bottom = '0'
+  iframe.style.width = '0'
+  iframe.style.height = '0'
+  iframe.style.border = '0'
+  document.body.appendChild(iframe)
+  const doc = iframe.contentDocument || iframe.contentWindow?.document
+  if (!doc) { document.body.removeChild(iframe); return }
+  doc.open()
+  doc.write(html)
+  doc.close()
+  iframe.onload = () => {
+    iframe.contentWindow?.focus()
+    iframe.contentWindow?.print()
+    setTimeout(() => document.body.removeChild(iframe), 500)
   }
-
-  // Hide container on screen
-  container.style.display = 'none'
-
-  setTimeout(() => {
-    window.print()
-    setTimeout(() => container?.remove(), 1000)
-  }, 200)
 }
 
 function printAdvanceReceipt(payment: EmployeePayment, empName: string, empRole: string) {
