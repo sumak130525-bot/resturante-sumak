@@ -111,6 +111,47 @@ type OrderItemRow = {
   subtotal: number
 }
 
+export type ClosureDay = {
+  id: string
+  start_date: string       // 'YYYY-MM-DD'
+  end_date: string | null
+  reason: string
+  created_at: string
+}
+
+export type KitchenStatus = {
+  id: string
+  is_closed: boolean
+  reason: string | null
+  schedule_start: string | null  // ISO timestamptz
+  schedule_end: string | null
+  manual: boolean
+  created_at: string
+}
+
+// Tipo enriquecido devuelto por la API (incluye estado efectivo calculado)
+export type KitchenStatusResponse = KitchenStatus & {
+  effective_closed: boolean
+}
+
+type ClosureDayRow = {
+  id: string
+  start_date: string
+  end_date: string | null
+  reason: string
+  created_at: string
+}
+
+type KitchenStatusRow = {
+  id: string
+  is_closed: boolean
+  reason: string | null
+  schedule_start: string | null
+  schedule_end: string | null
+  manual: boolean
+  created_at: string
+}
+
 export type Database = {
   public: {
     Tables: {
@@ -133,6 +174,16 @@ export type Database = {
         Row: OrderItemRow
         Insert: Omit<OrderItemRow, 'id' | 'subtotal'>
         Update: Partial<Omit<OrderItemRow, 'id' | 'subtotal'>>
+      }
+      closure_days: {
+        Row: ClosureDayRow
+        Insert: Omit<ClosureDayRow, 'id' | 'created_at'>
+        Update: Partial<Omit<ClosureDayRow, 'id' | 'created_at'>>
+      }
+      kitchen_status: {
+        Row: KitchenStatusRow
+        Insert: Omit<KitchenStatusRow, 'id' | 'created_at'>
+        Update: Partial<Omit<KitchenStatusRow, 'id' | 'created_at'>>
       }
     }
   }

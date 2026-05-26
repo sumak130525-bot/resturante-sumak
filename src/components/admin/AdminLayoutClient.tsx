@@ -3,14 +3,14 @@
 import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
-import { ChefHat, LayoutGrid, ShoppingBag, LogOut, Menu as MenuIcon, X, ChevronLeft, ChevronRight, QrCode, Store, Bell, Tag, ArrowUpDown, Users, Settings, Sliders, DollarSign, BarChart2, Calculator, TrendingUp, FileText, Package, Lightbulb, ScanLine, Star } from 'lucide-react'
+import { ChefHat, LayoutGrid, ShoppingBag, LogOut, Menu as MenuIcon, X, ChevronLeft, ChevronRight, QrCode, Store, Bell, Tag, ArrowUpDown, Users, Settings, Sliders, DollarSign, BarChart2, Calculator, TrendingUp, FileText, Package, Lightbulb, ScanLine, Star, Lock } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import WhatsAppNotifier from '@/components/WhatsAppNotifier'
 import type { User } from '@supabase/supabase-js'
 
 interface AdminLayoutClientProps {
   children: React.ReactNode
-  active: 'dashboard' | 'menu' | 'categorias' | 'ordenar' | 'orders' | 'qr' | 'loyverse' | 'notificaciones' | 'clientes' | 'configuracion' | 'modificadores' | 'caja' | 'analytics' | 'costs' | 'profitability' | 'reports' | 'inventory' | 'predictions' | 'invoice-scan' | 'bonus-reasons' | 'finanzas'
+  active: 'dashboard' | 'menu' | 'categorias' | 'ordenar' | 'orders' | 'qr' | 'loyverse' | 'notificaciones' | 'clientes' | 'configuracion' | 'modificadores' | 'caja' | 'analytics' | 'costs' | 'profitability' | 'reports' | 'inventory' | 'predictions' | 'invoice-scan' | 'bonus-reasons' | 'finanzas' | 'cierre'
 }
 
 const NAV_ITEMS = [
@@ -34,11 +34,12 @@ const NAV_ITEMS = [
   { href: '/admin/modificadores', label: 'Modificadores', icon: Sliders, key: 'modificadores' as const },
   { href: '/admin/bonus-reasons', label: 'Bonificaciones', icon: Star, key: 'bonus-reasons' as const },
   { href: '/admin/notificaciones', label: 'Notificaciones', icon: Bell, key: 'notificaciones' as const },
+  { href: '/admin/cierre', label: 'Cierre', icon: Lock, key: 'cierre' as const },
   { href: '/admin/configuracion', label: 'Configuración', icon: Settings, key: 'configuracion' as const },
 ]
 
 interface SidebarProps {
-  active: 'dashboard' | 'menu' | 'categorias' | 'ordenar' | 'orders' | 'qr' | 'loyverse' | 'notificaciones' | 'clientes' | 'configuracion' | 'modificadores' | 'caja' | 'analytics' | 'costs' | 'profitability' | 'reports' | 'inventory' | 'predictions' | 'invoice-scan' | 'bonus-reasons' | 'finanzas'
+  active: 'dashboard' | 'menu' | 'categorias' | 'ordenar' | 'orders' | 'qr' | 'loyverse' | 'notificaciones' | 'clientes' | 'configuracion' | 'modificadores' | 'caja' | 'analytics' | 'costs' | 'profitability' | 'reports' | 'inventory' | 'predictions' | 'invoice-scan' | 'bonus-reasons' | 'finanzas' | 'cierre'
   user: User | null
   onLogout: () => void
   collapsed: boolean

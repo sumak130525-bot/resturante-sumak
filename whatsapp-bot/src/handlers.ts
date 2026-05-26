@@ -5,11 +5,25 @@ import { getHistory, addTurn, clearSession } from './conversation';
 
 const { restaurant } = config;
 
+// ── Constantes ────────────────────────────────────────────────────────────────
+
+const TZ = 'America/Argentina/Mendoza';
+
+// Cache de estado de cierre (5 minutos)
+let _closureCache: {
+  dayClosed: boolean;
+  dayReason: string | null;
+  kitchenClosed: boolean;
+  kitchenReason: string | null;
+  fetchedAt: number;
+} | null = null;
+const CLOSURE_CACHE_TTL_MS = 5 * 60 * 1000;
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 export function isOpen(): boolean {
   const now = new Date();
-  const argentinaTime = new Date(now.toLocaleString('en-US', { timeZone: 'America/Argentina/Mendoza' }));
+  const argentinaTime = new Date(now.toLocaleString('en-US', { timeZone: TZ }));
   const day = argentinaTime.getDay();   // 0 = Sunday
   const hours = argentinaTime.getHours();
   const minutes = argentinaTime.getMinutes();
@@ -20,6 +34,82 @@ export function isOpen(): boolean {
   return totalMinutes >= 8 * 60 && totalMinutes < 22 * 60 + 30;
 }
 
+function getTodayMendoza(): string {
+  return new Date().toLocaleDateString('en-CA', { timeZone: TZ }); // YYYY-MM-DD
+}
+
+function isDateInRange(today: string, start: string, end: string | null): boolean {
+  if (end) return today >= start && today <= end;
+  return today === start;
+}
+
+/**
+ * Obtiene el estado de cierre del restaurante desde las APIs web.
+ * Usa cache de 5 minutos para evitar exceso de llamadas.
+ */
+async function getRestaurantClosureStatus(): Promise<{
+  dayClosed: boolean;
+  dayReason: string | null;
+  kitchenClosed: boolean;
+  kitchenReason: string | null;
+}> {
+  const now = Date.now();
+
+  // Devolver desde cache si es reciente
+  if (_closureCache && now - _closureCache.fetchedAt < CLOSURE_CACHE_TTL_MS) {
+    return _closureCache;
+  }
+
+  const defaultResult = { dayClosed: false, dayReason: null, kitchenClosed: false, kitchenReason: null };
+
+  try {
+    const baseUrl = restaurant.web;
+
+    const [daysRes, kitchenRes] = await Promise.allSettled([
+      fetch(`${baseUrl}/api/admin/closure-days`, { signal: AbortSignal.timeout(5000) }),
+      fetch(`${baseUrl}/api/admin/kitchen-status`, { signal: AbortSignal.timeout(5000) }),
+    ]);
+
+    let dayClosed = false;
+    let dayReason: string | null = null;
+    let kitchenClosed = false;
+    let kitchenReason: string | null = null;
+
+    // Verificar días de cierre
+    if (daysRes.status === 'fulfilled' && daysRes.value.ok) {
+      const days = await daysRes.value.json() as Array<{
+        start_date: string;
+        end_date: string | null;
+        reason: string;
+      }>;
+      const today = getTodayMendoza();
+      const active = days.find((d) => isDateInRange(today, d.start_date, d.end_date));
+      if (active) {
+        dayClosed = true;
+        dayReason = active.reason;
+      }
+    }
+
+    // Verificar estado de cocina
+    if (kitchenRes.status === 'fulfilled' && kitchenRes.value.ok) {
+      const kitchen = await kitchenRes.value.json() as {
+        effective_closed: boolean;
+        reason: string | null;
+      };
+      kitchenClosed = kitchen.effective_closed ?? false;
+      kitchenReason = kitchen.reason ?? null;
+    }
+
+    const result = { dayClosed, dayReason, kitchenClosed, kitchenReason };
+    _closureCache = { ...result, fetchedAt: now };
+    return result;
+
+  } catch (err) {
+    console.error('[Closure] Error al obtener estado de cierre:', err);
+    return defaultResult;
+  }
+}
+
 export function getClosedMessage(): string {
   return (
     'Hola! 👋 En este momento Restaurante Sumak se encuentra *cerrado*.\n\n' +
@@ -27,6 +117,23 @@ export function getClosedMessage(): string {
     '📅 Lunes a Sábado de 8:00 a 22:30\n\n' +
     'Te esperamos! 🌿\n\n' +
     '_Sumak Bot 🤖_'
+  );
+}
+
+function getDayClosedMessage(reason: string): string {
+  return (
+    'Hola! 👋 Hoy *Restaurante Sumak* se encuentra *cerrado*.\n\n' +
+    `📋 Motivo: ${reason}\n\n` +
+    'Te esperamos muy pronto! 🌿\n\n' +
+    '_Sumak Bot 🤖_'
+  );
+}
+
+function getKitchenClosedNotice(reason?: string | null): string {
+  return (
+    `\n\n⚠️ *Aviso:* La cocina está temporalmente cerrada` +
+    (reason ? ` (${reason})` : '') +
+    '. Por favor consultá nuevamente más tarde.'
   );
 }
 
@@ -121,6 +228,12 @@ export function getDefaultMessage(): string {
 // ── Fallback estático (respuestas por keyword matching) ───────────────────────
 
 export async function handleMessageFallback(text: string): Promise<string> {
+  // Verificar cierre especial del día (días cerrados)
+  const closure = await getRestaurantClosureStatus();
+  if (closure.dayClosed) {
+    return getDayClosedMessage(closure.dayReason ?? 'Día de cierre especial');
+  }
+
   if (!isOpen()) return getClosedMessage();
 
   const t = text.trim();
@@ -139,7 +252,9 @@ export async function handleMessageFallback(text: string): Promise<string> {
 
   if (containsAny(t, ['menu', 'carta', 'platos', 'que tienen', 'que hay', 'comida'])) {
     try {
-      return await formatMenuText();
+      let response = await formatMenuText();
+      if (closure.kitchenClosed) response += getKitchenClosedNotice(closure.kitchenReason);
+      return response;
     } catch {
       return getStaticMenu();
     }
@@ -165,6 +280,12 @@ export async function handleMessageFallback(text: string): Promise<string> {
 // ── Router principal con IA ───────────────────────────────────────────────────
 
 export async function handleMessage(text: string, phone?: string): Promise<string> {
+  // Verificar cierre especial del día primero (prioridad máxima)
+  const closure = await getRestaurantClosureStatus();
+  if (closure.dayClosed) {
+    return getDayClosedMessage(closure.dayReason ?? 'Día de cierre especial');
+  }
+
   if (!isOpen()) return getClosedMessage();
 
   const t = text.trim();
@@ -193,8 +314,13 @@ export async function handleMessage(text: string, phone?: string): Promise<strin
       menuData = getStaticMenu();
     }
 
+    // Agregar contexto de cocina cerrada al sistema si aplica
+    const kitchenContext = closure.kitchenClosed
+      ? `\n\n[CONTEXTO IMPORTANTE: La cocina está temporalmente cerrada${closure.kitchenReason ? ` (${closure.kitchenReason})` : ''}. Informá al cliente que no se pueden tomar pedidos en este momento.]`
+      : '';
+
     const history = phone ? getHistory(phone) : [];
-    const aiResponse = await generateResponse(t, menuData, history, phone);
+    const aiResponse = await generateResponse(t, menuData + kitchenContext, history, phone);
 
     if (phone) {
       addTurn(phone, t, aiResponse.text);
@@ -214,6 +340,15 @@ export async function handleMessage(text: string, phone?: string): Promise<strin
       const { getCartSession, upsertCartSession, createSupabaseOrder } = await import('./order');
       const session = getCartSession(phone);
       if (session && session.cart.length > 0) {
+        // Bloquear pedidos si la cocina está cerrada
+        if (closure.kitchenClosed) {
+          return (
+            '⚠️ Lo sentimos, la cocina está temporalmente cerrada' +
+            (closure.kitchenReason ? ` (${closure.kitchenReason})` : '') +
+            '. No podemos procesar tu pedido en este momento. Por favor intentá más tarde.'
+          );
+        }
+
         const trimmed = text.trim();
         // User gave a name (short text, only letters/spaces, starts with common patterns)
         const looksLikeName = trimmed.length < 30 && /^(de |soy |me llamo )?[A-ZÁÉÍÓÚÑa-záéíóúñ\s]+$/i.test(trimmed);

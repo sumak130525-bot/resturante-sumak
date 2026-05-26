@@ -9,6 +9,8 @@ import { CartDrawer } from '@/components/public/CartDrawer'
 import { PublicHeader } from '@/components/public/PublicHeader'
 import { WhatsAppFAB } from '@/components/public/WhatsAppFAB'
 import { WhatsAppBanner } from '@/components/public/WhatsAppBanner'
+import { ClosureBanner } from '@/components/public/ClosureBanner'
+import { KitchenClosedBanner } from '@/components/public/KitchenClosedBanner'
 import { PushPrompt } from '@/components/public/PushPrompt'
 import { NotificationButton } from '@/components/public/NotificationButton'
 import { useTranslation } from '@/lib/i18n'
@@ -71,6 +73,12 @@ function HomeContent() {
           WHATSAPP BANNER
           ════════════════════════════════════════ */}
       <WhatsAppBanner />
+
+      {/* ════════════════════════════════════════
+          BANNERS DE CIERRE
+          ════════════════════════════════════════ */}
+      <ClosureBanner />
+      <KitchenClosedBanner />
 
       {/* ════════════════════════════════════════
           MESA BADGE (si viene con ?mesa=N)
