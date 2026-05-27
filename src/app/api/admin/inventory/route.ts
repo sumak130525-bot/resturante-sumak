@@ -78,6 +78,19 @@ export async function GET() {
     .select('ingredient_id, type, quantity, created_at')
     .order('created_at', { ascending: false })
 
+  // Traer min_stock por categoría desde settings
+  const { data: categoryMinStockSettings } = await db
+    .from('settings')
+    .select('key, value')
+    .like('key', 'min_stock_category_%')
+
+  const categoryMinStockMap = new Map<string, number>()
+  for (const row of (categoryMinStockSettings ?? [])) {
+    const categoryId = (row.key as string).replace('min_stock_category_', '')
+    const val = parseFloat(row.value)
+    if (!isNaN(val)) categoryMinStockMap.set(categoryId, val)
+  }
+
   const inventoryMap = new Map<string, Record<string, unknown>>()
   for (const row of (inventoryRows ?? [])) {
     inventoryMap.set(row.ingredient_id, row)
@@ -93,7 +106,10 @@ export async function GET() {
   const result = (ingredients ?? []).map((ing: { id: string; name: string; unit: string; category_id?: string; ingredient_categories?: { id: string; name: string }; recipe_items?: { menu_item_id: string }[] }) => {
     const inv = inventoryMap.get(ing.id)
     const stock = inv ? Number(inv.stock) : 0
-    const min_stock = inv ? Number(inv.min_stock) : 5
+    const ingredientMinStock = inv ? Number(inv.min_stock) : 5
+    // Si la categoría tiene un min_stock configurado, usar ese; si no, el del ingrediente
+    const categoryMin = ing.category_id ? categoryMinStockMap.get(ing.category_id) : undefined
+    const min_stock = categoryMin !== undefined ? categoryMin : ingredientMinStock
     const lastMov = lastMovementMap.get(ing.id) ?? null
     const linked_menu_item_id = ing.recipe_items && ing.recipe_items.length > 0
       ? ing.recipe_items[0].menu_item_id
@@ -109,6 +125,7 @@ export async function GET() {
       unit: ing.unit,
       category_id: ing.category_id ?? null,
       category: ing.ingredient_categories?.name ?? null,
+      ingredient_categories: ing.ingredient_categories ?? null,
       linked_menu_item_id,
       stock,
       min_stock,

@@ -46,15 +46,17 @@ async function requireAuth() {
   return user
 }
 
-// GET: obtener settings (opcionalmente filtrar por key)
+// GET: obtener settings (opcionalmente filtrar por key exacto o por prefijo)
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url)
   const key = searchParams.get('key')
+  const prefix = searchParams.get('prefix')
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const admin = await getClient(true) as any
   let query = admin.from('settings').select('*')
   if (key) query = query.eq('key', key)
+  else if (prefix) query = query.like('key', `${prefix}%`)
 
   const { data, error } = await query
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })

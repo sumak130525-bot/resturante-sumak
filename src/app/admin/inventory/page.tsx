@@ -920,6 +920,187 @@ function ManageCategoriesModal({
 }
 
 // ──────────────────────────────────────────────
+// Category Min Stock Modal
+// ──────────────────────────────────────────────
+function CategoryMinStockModal({
+  categories,
+  onClose,
+  onSaved,
+}: {
+  categories: IngredientCategory[]
+  onClose: () => void
+  onSaved: () => void
+}) {
+  const [values, setValues] = useState<Record<string, string>>({})
+  const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [savedKeys, setSavedKeys] = useState<Set<string>>(new Set())
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    async function load() {
+      setLoading(true)
+      try {
+        const res = await fetch('/api/admin/settings?prefix=min_stock_category_')
+        if (res.ok) {
+          const data: { key: string; value: string }[] = await res.json()
+          const map: Record<string, string> = {}
+          for (const row of data) {
+            const catId = row.key.replace('min_stock_category_', '')
+            map[catId] = row.value
+          }
+          setValues(map)
+        }
+      } finally {
+        setLoading(false)
+      }
+    }
+    load()
+  }, [])
+
+  const handleSave = async (categoryId: string) => {
+    const raw = values[categoryId] ?? ''
+    const num = parseFloat(raw)
+    if (raw === '' || isNaN(num) || num < 0) {
+      setError(`Valor inválido para la categoría`)
+      return
+    }
+    setSaving(true)
+    setError(null)
+    try {
+      const res = await fetch('/api/admin/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key: `min_stock_category_${categoryId}`, value: String(num) }),
+      })
+      if (!res.ok) {
+        const d = await res.json()
+        setError(d.error ?? 'Error al guardar')
+        return
+      }
+      setSavedKeys((prev) => { const s = new Set(prev); s.add(categoryId); return s })
+      setTimeout(() => setSavedKeys((prev) => { const s = new Set(prev); s.delete(categoryId); return s }), 1500)
+      onSaved()
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleDelete = async (categoryId: string) => {
+    setSaving(true)
+    setError(null)
+    try {
+      const res = await fetch('/api/admin/settings', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key: `min_stock_category_${categoryId}` }),
+      })
+      if (!res.ok) {
+        const d = await res.json()
+        setError(d.error ?? 'Error al eliminar')
+        return
+      }
+      setValues((prev) => { const next = { ...prev }; delete next[categoryId]; return next })
+      onSaved()
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[80vh] flex flex-col">
+        <div className="flex items-center justify-between p-5 border-b border-gray-100 flex-shrink-0">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 bg-amber-100 rounded-lg flex items-center justify-center">
+              <AlertTriangle size={15} className="text-amber-600" />
+            </div>
+            <div>
+              <h2 className="font-semibold text-gray-900">Stock mínimo por categoría</h2>
+              <p className="text-xs text-gray-400">Sobrescribe el default de cada ingrediente</p>
+            </div>
+          </div>
+          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-lg transition-colors">
+            <X size={16} />
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-5 space-y-3">
+          {error && (
+            <div className="bg-red-50 text-red-700 text-sm px-3 py-2 rounded-lg border border-red-100">
+              {error}
+            </div>
+          )}
+
+          {loading ? (
+            <p className="text-sm text-gray-400 text-center py-6">Cargando...</p>
+          ) : categories.length === 0 ? (
+            <p className="text-sm text-gray-400 text-center py-6">No hay categorías creadas todavía.</p>
+          ) : (
+            <>
+              <p className="text-xs text-gray-400 bg-gray-50 rounded-lg px-3 py-2">
+                Dejá el campo vacío para usar el min_stock individual de cada ingrediente (default: 5).
+              </p>
+              <div className="divide-y divide-gray-50 border border-gray-100 rounded-xl overflow-hidden">
+                {categories.map((cat) => {
+                  const val = values[cat.id] ?? ''
+                  const isSaved = savedKeys.has(cat.id)
+                  const hasValue = val !== ''
+                  return (
+                    <div key={cat.id} className="flex items-center gap-3 p-3 hover:bg-gray-50 transition-colors">
+                      <span className="flex-1 text-sm text-gray-800 font-medium">{cat.name}</span>
+                      <div className="flex items-center gap-1.5">
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.5"
+                          className="w-20 border border-gray-200 rounded-lg px-2.5 py-1.5 text-sm text-center focus:outline-none focus:ring-2 focus:ring-amber-400"
+                          placeholder="— "
+                          value={val}
+                          onChange={(e) => setValues((prev) => ({ ...prev, [cat.id]: e.target.value }))}
+                          onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleSave(cat.id) } }}
+                        />
+                        <button
+                          onClick={() => handleSave(cat.id)}
+                          disabled={saving || val === ''}
+                          className="p-1.5 bg-amber-500 hover:bg-amber-600 text-white rounded-lg transition-colors disabled:opacity-40"
+                          title="Guardar"
+                        >
+                          {isSaved ? <Check size={13} /> : <Save size={13} />}
+                        </button>
+                        {hasValue && (
+                          <button
+                            onClick={() => handleDelete(cat.id)}
+                            disabled={saving}
+                            className="p-1.5 text-gray-400 hover:bg-red-50 hover:text-red-500 rounded-lg transition-colors"
+                            title="Quitar configuración"
+                          >
+                            <X size={13} />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </>
+          )}
+        </div>
+
+        <div className="p-4 border-t border-gray-100 flex-shrink-0">
+          <button
+            onClick={onClose}
+            className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm font-medium text-gray-600 hover:bg-gray-50 transition-colors"
+          >
+            Cerrar
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ──────────────────────────────────────────────
 // Main Page
 // ──────────────────────────────────────────────
 export default function InventoryPage() {
@@ -932,6 +1113,7 @@ export default function InventoryPage() {
   const [historyItem, setHistoryItem] = useState<InventoryItem | null>(null)
   const [showManageCategories, setShowManageCategories] = useState(false)
   const [showManualPurchase, setShowManualPurchase] = useState(false)
+  const [showCategoryMinStock, setShowCategoryMinStock] = useState(false)
 
   // Ingredient categories
   const [categories, setCategories] = useState<IngredientCategory[]>([])
@@ -1182,6 +1364,13 @@ export default function InventoryPage() {
             >
               <Tag size={15} />
               Categorías
+            </button>
+            <button
+              onClick={() => setShowCategoryMinStock(true)}
+              className="flex items-center gap-2 px-4 py-2.5 bg-white border border-amber-200 hover:bg-amber-50 text-amber-700 rounded-xl text-sm font-medium transition-colors shadow-sm"
+            >
+              <AlertTriangle size={15} />
+              Stock mín. categoría
             </button>
             <button
               onClick={() => setShowManualPurchase(true)}
@@ -1625,6 +1814,15 @@ export default function InventoryPage() {
           categories={categories}
           onClose={() => setShowManageCategories(false)}
           onChanged={fetchCategories}
+        />
+      )}
+
+      {/* Category min stock modal */}
+      {showCategoryMinStock && (
+        <CategoryMinStockModal
+          categories={categories}
+          onClose={() => setShowCategoryMinStock(false)}
+          onSaved={fetchInventory}
         />
       )}
     </AdminLayoutClient>
