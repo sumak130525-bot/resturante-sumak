@@ -61,6 +61,7 @@ interface Movement {
   ingredient_id: string
   type: 'purchase' | 'consumption' | 'adjustment'
   quantity: number
+  total_cost: number | null
   notes: string | null
   created_at: string
   ingredients: { name: string; unit: string } | null
@@ -641,20 +642,77 @@ function StockModal({
 function HistoryPanel({
   item,
   onClose,
+  onMovementSaved,
 }: {
   item: InventoryItem
   onClose: () => void
+  onMovementSaved?: () => void
 }) {
   const [movements, setMovements] = useState<Movement[]>([])
   const [loading, setLoading] = useState(true)
 
-  useEffect(() => {
+  // Inline edit state
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [editQty, setEditQty] = useState('')
+  const [editCost, setEditCost] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [saveError, setSaveError] = useState<string | null>(null)
+
+  const loadMovements = () => {
     setLoading(true)
     fetch(`/api/admin/inventory/movements?ingredient_id=${item.ingredient_id}&limit=100`)
       .then((r) => r.json())
       .then((d) => setMovements(Array.isArray(d) ? d : []))
       .finally(() => setLoading(false))
+  }
+
+  useEffect(() => {
+    loadMovements()
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [item.ingredient_id])
+
+  const startEdit = (mov: Movement) => {
+    setEditingId(mov.id)
+    setEditQty(String(mov.quantity))
+    setEditCost(mov.total_cost != null ? String(mov.total_cost) : '')
+    setSaveError(null)
+  }
+
+  const cancelEdit = () => {
+    setEditingId(null)
+    setSaveError(null)
+  }
+
+  const handleSave = async (movId: string) => {
+    const qty = parseFloat(editQty)
+    if (isNaN(qty) || qty < 0) {
+      setSaveError('Cantidad inválida')
+      return
+    }
+    setSaving(true)
+    setSaveError(null)
+    try {
+      const res = await fetch('/api/admin/inventory', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          movement_id: movId,
+          quantity: qty,
+          total_cost: editCost !== '' ? parseFloat(editCost) : 0,
+        }),
+      })
+      if (!res.ok) {
+        const d = await res.json()
+        setSaveError(d.error ?? 'Error al guardar')
+        return
+      }
+      setEditingId(null)
+      loadMovements()
+      onMovementSaved?.()
+    } finally {
+      setSaving(false)
+    }
+  }
 
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 p-0 sm:p-4">
@@ -692,24 +750,105 @@ function HistoryPanel({
             </div>
           ) : (
             <div className="divide-y divide-gray-50">
+              {saveError && (
+                <div className="bg-red-50 text-red-700 text-xs px-5 py-2 border-b border-red-100">
+                  {saveError}
+                </div>
+              )}
               {movements.map((mov) => {
                 const { label, cls } = movementTypeLabel(mov.type)
                 const sign = mov.type === 'consumption' ? '-' : mov.type === 'purchase' ? '+' : '='
                 const signColor = mov.type === 'consumption' ? 'text-red-500' : mov.type === 'purchase' ? 'text-emerald-600' : 'text-purple-600'
+                const isEditing = editingId === mov.id
+
                 return (
-                  <div key={mov.id} className="flex items-start gap-3 px-5 py-3.5 hover:bg-gray-50 transition-colors">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${cls}`}>{label}</span>
-                        {mov.notes && (
-                          <span className="text-xs text-gray-400 truncate">{mov.notes}</span>
-                        )}
+                  <div key={mov.id} className={`px-5 py-3.5 transition-colors ${isEditing ? 'bg-amber-50' : 'hover:bg-gray-50'}`}>
+                    {isEditing ? (
+                      /* ── Inline edit row ── */
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${cls}`}>{label}</span>
+                          <p className="text-xs text-gray-400">{fmtDate(mov.created_at)}</p>
+                        </div>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <div className="flex flex-col gap-0.5">
+                            <label className="text-xs text-gray-400">Cantidad</label>
+                            <input
+                              type="number"
+                              min="0"
+                              step="0.001"
+                              autoFocus
+                              value={editQty}
+                              onChange={(e) => setEditQty(e.target.value)}
+                              className="w-28 border border-amber-300 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400 bg-white"
+                              placeholder="0"
+                            />
+                          </div>
+                          <div className="flex flex-col gap-0.5">
+                            <label className="text-xs text-gray-400">Precio total ($)</label>
+                            <input
+                              type="number"
+                              min="0"
+                              step="0.01"
+                              value={editCost}
+                              onChange={(e) => setEditCost(e.target.value)}
+                              className="w-28 border border-amber-300 rounded-lg px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400 bg-white"
+                              placeholder="0.00"
+                            />
+                          </div>
+                          <div className="flex items-end gap-1.5 pb-0.5 ml-auto">
+                            <button
+                              onClick={() => handleSave(mov.id)}
+                              disabled={saving}
+                              className="flex items-center gap-1 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-medium transition-colors disabled:opacity-60"
+                            >
+                              <Save size={12} />
+                              {saving ? 'Guardando...' : 'Guardar'}
+                            </button>
+                            <button
+                              onClick={cancelEdit}
+                              disabled={saving}
+                              className="flex items-center gap-1 px-3 py-1.5 border border-gray-200 text-gray-600 hover:bg-gray-100 rounded-lg text-xs font-medium transition-colors"
+                            >
+                              <X size={12} />
+                              Cancelar
+                            </button>
+                          </div>
+                        </div>
                       </div>
-                      <p className="text-xs text-gray-400 mt-0.5">{fmtDate(mov.created_at)}</p>
-                    </div>
-                    <p className={`text-sm font-bold flex-shrink-0 ${signColor}`}>
-                      {sign}{mov.quantity} {item.unit}
-                    </p>
+                    ) : (
+                      /* ── Normal row ── */
+                      <div className="flex items-start gap-3">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${cls}`}>{label}</span>
+                            {mov.notes && (
+                              <span className="text-xs text-gray-400 truncate">{mov.notes}</span>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-3 mt-0.5">
+                            <p className="text-xs text-gray-400">{fmtDate(mov.created_at)}</p>
+                            {mov.total_cost != null && mov.total_cost > 0 && (
+                              <p className="text-xs text-gray-400">
+                                ${mov.total_cost.toLocaleString('es-AR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2 flex-shrink-0">
+                          <p className={`text-sm font-bold ${signColor}`}>
+                            {sign}{mov.quantity} {item.unit}
+                          </p>
+                          <button
+                            onClick={() => startEdit(mov)}
+                            className="p-1.5 text-gray-300 hover:text-amber-500 hover:bg-amber-50 rounded-lg transition-colors"
+                            title="Editar movimiento"
+                          >
+                            <Pencil size={13} />
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 )
               })}
@@ -1805,6 +1944,7 @@ export default function InventoryPage() {
         <HistoryPanel
           item={historyItem}
           onClose={() => setHistoryItem(null)}
+          onMovementSaved={fetchInventory}
         />
       )}
 

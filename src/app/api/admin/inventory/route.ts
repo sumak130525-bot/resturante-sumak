@@ -213,7 +213,7 @@ export async function POST(request: NextRequest) {
   return NextResponse.json({ success: true, stock: newStock }, { status: 201 })
 }
 
-// PATCH: actualizar min_stock
+// PATCH: actualizar min_stock O editar un movimiento de stock
 export async function PATCH(request: NextRequest) {
   const supabase = await getClient()
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -221,6 +221,96 @@ export async function PATCH(request: NextRequest) {
   if (!user) return NextResponse.json({ error: 'No autorizado' }, { status: 401 })
 
   const body = await request.json()
+
+  // --- Editar movimiento ---
+  if (body.movement_id !== undefined) {
+    const { movement_id, quantity, total_cost } = body
+
+    if (!movement_id || quantity === undefined) {
+      return NextResponse.json({ error: 'Faltan campos: movement_id y quantity son requeridos' }, { status: 400 })
+    }
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const admin = await getClient(true) as any
+
+    // Obtener el movimiento para saber el ingredient_id
+    const { data: mov, error: movError } = await admin
+      .from('inventory_movements')
+      .select('ingredient_id')
+      .eq('id', movement_id)
+      .single()
+
+    if (movError || !mov) {
+      return NextResponse.json({ error: 'Movimiento no encontrado' }, { status: 404 })
+    }
+
+    // Actualizar el movimiento
+    const { error: updateError } = await admin
+      .from('inventory_movements')
+      .update({
+        quantity: Number(quantity),
+        total_cost: total_cost !== undefined ? Number(total_cost) : 0,
+      })
+      .eq('id', movement_id)
+
+    if (updateError) {
+      return NextResponse.json({ error: updateError.message }, { status: 500 })
+    }
+
+    // Recalcular current_stock sumando todos los movimientos del ingrediente
+    const { data: allMovements, error: allError } = await admin
+      .from('inventory_movements')
+      .select('type, quantity')
+      .eq('ingredient_id', mov.ingredient_id)
+
+    if (allError) {
+      return NextResponse.json({ error: allError.message }, { status: 500 })
+    }
+
+    let newStock = 0
+    for (const m of (allMovements ?? [])) {
+      if (m.type === 'purchase') newStock += Number(m.quantity)
+      else if (m.type === 'consumption') newStock -= Number(m.quantity)
+      else if (m.type === 'adjustment') newStock = Number(m.quantity) // el último ajuste pisa el stock
+    }
+
+    // Para adjustments, recalcular correctamente respetando el orden cronológico
+    // (la lógica simple anterior no garantiza orden; hacemos una segunda pasada ordenada)
+    const { data: orderedMovements } = await admin
+      .from('inventory_movements')
+      .select('type, quantity')
+      .eq('ingredient_id', mov.ingredient_id)
+      .order('created_at', { ascending: true })
+
+    let recalcStock = 0
+    for (const m of (orderedMovements ?? [])) {
+      if (m.type === 'purchase') recalcStock += Number(m.quantity)
+      else if (m.type === 'consumption') recalcStock -= Number(m.quantity)
+      else if (m.type === 'adjustment') recalcStock = Number(m.quantity)
+    }
+
+    // Actualizar inventory con el stock recalculado
+    const { data: invRow } = await admin
+      .from('inventory')
+      .select('id')
+      .eq('ingredient_id', mov.ingredient_id)
+      .single()
+
+    if (invRow) {
+      await admin
+        .from('inventory')
+        .update({ stock: recalcStock, updated_at: new Date().toISOString() })
+        .eq('ingredient_id', mov.ingredient_id)
+    } else {
+      await admin
+        .from('inventory')
+        .insert({ ingredient_id: mov.ingredient_id, stock: recalcStock, min_stock: 5 })
+    }
+
+    return NextResponse.json({ success: true, new_stock: recalcStock })
+  }
+
+  // --- Actualizar min_stock ---
   const { ingredient_id, min_stock } = body
 
   if (!ingredient_id || min_stock === undefined) {
