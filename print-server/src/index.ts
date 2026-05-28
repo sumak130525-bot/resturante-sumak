@@ -91,10 +91,11 @@ function normalizeText(text: string): string {
 // Supported inline markers (case-insensitive):
 //   [CENTER]  ... [/CENTER]  → ESC a 1 / ESC a 0
 //   [BOLD]    ... [/BOLD]    → ESC E 1 / ESC E 0
-//   [LOGO]                   → print logoText in double-size then restore (no closing tag needed)
-//   [SEP:<char>:<width>]     → print a separator line using <char> repeated <width> times
+//   [LOGO]                   → print cfg.logoText in double-size (no closing tag; includes newline)
+//   [SEP:<char>:<width>]     → print a separator line using <char> repeated <width> times (includes newline)
 //
-// Markers are stripped from output; surrounding text is printed as-is.
+// Note: [LOGO] and [SEP] embed their own trailing newline; the outer line loop will not
+// add a second newline when these are the sole content on a line.
 //
 function buildEscPosBuffer(text: string, cut = true, feedLines = 4, cfg: PrintConfig = {}): Buffer {
   const safeFeedLines = Math.max(0, Math.min(8, feedLines))
@@ -105,18 +106,6 @@ function buildEscPosBuffer(text: string, cut = true, feedLines = 4, cfg: PrintCo
   chunks.push(CMD_INIT)
   chunks.push(CMD_CODEPAGE)
   chunks.push(CMD_ALIGN_LEFT)
-
-  // Logo (double-size text) if requested before processing lines
-  if (cfg.showLogo) {
-    const logoText = cfg.logoText ?? 'SUMAK'
-    chunks.push(CMD_ALIGN_CENTER)
-    chunks.push(CMD_DOUBLE_SIZE)
-    if (cfg.headerBold) chunks.push(CMD_BOLD_ON)
-    chunks.push(Buffer.from(logoText + '\n', 'latin1'))
-    if (cfg.headerBold) chunks.push(CMD_BOLD_OFF)
-    chunks.push(CMD_NORMAL_SIZE)
-    chunks.push(CMD_ALIGN_LEFT)
-  }
 
   // Parse the text line by line, interpreting inline markers
   const lines = normalized.split('\n')
@@ -182,6 +171,9 @@ function buildEscPosBuffer(text: string, cut = true, feedLines = 4, cfg: PrintCo
     // Check if this line has any actual text content (besides markers)
     const hasTextContent = segments.some((s) => s.text !== undefined && s.text.length > 0)
 
+    // Tags like [LOGO] and [SEP] embed their own trailing \n; track so we don't double it
+    let selfNewlineEmitted = false
+
     // Emit segments
     for (const seg of segments) {
       if (seg.tag) {
@@ -193,7 +185,7 @@ function buildEscPosBuffer(text: string, cut = true, feedLines = 4, cfg: PrintCo
             setBold(!seg.close)
             break
           case 'LOGO': {
-            // Inline [LOGO] tag — emit logo in double-size
+            // Inline [LOGO] tag — emit logo in double-size (includes its own \n)
             const logoText = cfg.logoText ?? 'SUMAK'
             chunks.push(CMD_ALIGN_CENTER)
             chunks.push(CMD_DOUBLE_SIZE)
@@ -202,14 +194,16 @@ function buildEscPosBuffer(text: string, cut = true, feedLines = 4, cfg: PrintCo
             if (cfg.headerBold) chunks.push(CMD_BOLD_OFF)
             chunks.push(CMD_NORMAL_SIZE)
             chunks.push(isCentered ? CMD_ALIGN_CENTER : CMD_ALIGN_LEFT)
+            selfNewlineEmitted = true
             break
           }
           case 'SEP': {
-            // Inline [SEP:char:width]
+            // Inline [SEP:char:width] — includes its own \n
             const sepChar = seg.arg ? seg.arg.split(':')[0] : '-'
             const sepWidthStr = seg.arg ? seg.arg.split(':')[1] : undefined
             const sepWidth = sepWidthStr ? parseInt(sepWidthStr, 10) : (cfg.width ?? 32)
             chunks.push(Buffer.from(sepChar.repeat(sepWidth) + '\n', 'latin1'))
+            selfNewlineEmitted = true
             break
           }
         }
@@ -218,13 +212,16 @@ function buildEscPosBuffer(text: string, cut = true, feedLines = 4, cfg: PrintCo
       }
     }
 
-    // Newline at end of line (only if there was actual content or markers)
-    if (hasTextContent || segments.some((s) => s.tag)) {
+    // Emit trailing newline for this line, unless a self-newline tag already did it
+    // and there is no additional text content on the same line
+    if (hasTextContent) {
+      // Always add \n when there is real text content
       chunks.push(Buffer.from('\n', 'latin1'))
-    } else if (!hasTextContent && segments.every((s) => !s.tag)) {
-      // Empty line → just a newline
+    } else if (!selfNewlineEmitted) {
+      // No self-newline tag: emit \n (empty line or formatting-only tags)
       chunks.push(Buffer.from('\n', 'latin1'))
     }
+    // If selfNewlineEmitted && !hasTextContent: newline already included — skip
   }
 
   // Reset formatting before cut

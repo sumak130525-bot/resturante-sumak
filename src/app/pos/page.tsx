@@ -78,8 +78,11 @@ function buildTicketText(
   const marginRight = cfg.marginRight ?? 0
   const leftPad = ' '.repeat(marginLeft)
 
-  // Separator line for print-server: [SEP:-:W] or plain dashes for HTML fallback
-  const SEP_ESC = `[SEP:-:${W}]`
+  // Separator line for print-server: [SEP:<char>:W] or plain dashes for HTML fallback
+  const sepChar = cfg.separator ?? '-'
+  const SEP_ESC = cfg.separatorDouble
+    ? `[SEP:${sepChar}:${W}]\n[SEP:${sepChar}:${W}]`
+    : `[SEP:${sepChar}:${W}]`
   // Separator markers — rendered as full-width HTML elements in ticket/page.tsx
   const SEP_HTML = '---SEP---'
   const LINES = forPrintServer ? SEP_ESC : SEP_HTML
