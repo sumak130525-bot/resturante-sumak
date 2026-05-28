@@ -2545,8 +2545,6 @@ function MixedPaymentModal({
 
 // ─── Ticket Panel ─────────────────────────────────────────────────────────────────────────────
 
-const TABLE_NUMBERS = Array.from({ length: 20 }, (_, i) => i + 1)
-
 function TicketPanel({
   items,
   diningOption,
@@ -2635,8 +2633,8 @@ function TicketPanel({
         )}
       </div>
 
-      {/* Fixed top: options (dining, table, payment, persons, customer, note) */}
-      <div className="shrink-0 border-b border-gray-200">
+      {/* Single scrollable area: options + items + total + button */}
+      <div className="flex-1 overflow-y-auto" style={{ minHeight: 0 }}>
 
         {/* Dining option toggle */}
         <div className="px-3 pt-2.5 pb-2 border-b border-gray-100">
@@ -2660,27 +2658,24 @@ function TicketPanel({
           </div>
         </div>
 
-        {/* Mesa 1-20 -- solo si Comer dentro */}
+        {/* Mesa (input simple) -- solo si Comer dentro */}
         {diningOption === 'Comer dentro' && (
           <div className="px-3 pt-2 pb-2 border-b border-gray-100">
-            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wide mb-1.5">Mesa</p>
-            <div className="grid grid-cols-5 gap-1">
-              {TABLE_NUMBERS.map((n) => (
-                <button
-                  key={n}
-                  onClick={() => onTableChange(tableNumber === String(n) ? '' : String(n))}
-                  className={`py-1.5 rounded-lg font-bold text-sm transition-all active:scale-[0.97] ${
-                    tableNumber === String(n)
-                      ? 'bg-teal-600 text-white shadow-sm ring-2 ring-teal-300'
-                      : 'bg-gray-100 text-gray-700 hover:bg-teal-50'
-                  }`}
-                >
-                  {n}
-                </button>
-              ))}
-            </div>
+            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wide mb-1">Mesa</p>
+            <input
+              type="number"
+              inputMode="numeric"
+              min={1}
+              max={99}
+              value={tableNumber}
+              onChange={(e) => onTableChange(e.target.value)}
+              placeholder="Nº de mesa"
+              className={`w-full rounded-xl border px-3 py-2 text-sm font-bold text-gray-900 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-teal-400 tabular-nums ${
+                !tableNumber ? 'border-amber-300' : 'border-gray-200'
+              }`}
+            />
             {!tableNumber && (
-              <p className="text-[10px] text-amber-600 font-semibold mt-1.5">Selección una mesa</p>
+              <p className="text-[10px] text-amber-600 font-semibold mt-1">Ingresá el número de mesa</p>
             )}
           </div>
         )}
@@ -2750,7 +2745,7 @@ function TicketPanel({
         </div>
 
         {/* Nota */}
-        <div className="px-3 pt-2 pb-2">
+        <div className="px-3 pt-2 pb-2 border-b border-gray-100">
           <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wide mb-1">Nota</p>
           <input
             type="text"
@@ -2760,10 +2755,8 @@ function TicketPanel({
             className="w-full rounded-xl border border-gray-200 px-3 py-2 text-xs font-semibold text-gray-900 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-teal-400"
           />
         </div>
-      </div>
 
-      {/* Scrollable center: items list */}
-      <div className="flex-1 overflow-y-auto" style={{ minHeight: 0 }}>
+        {/* Items list */}
         <div className="px-3 py-2">
           {isEmpty ? (
             <div className="flex flex-col items-center justify-center py-8 text-gray-400 gap-2">
@@ -2820,33 +2813,34 @@ function TicketPanel({
             </ul>
           )}
         </div>
-      </div>
 
-      {/* Bottom bar: total + COBRAR E IMPRIMIR */}
-      <div className="px-3 pb-3 pt-2.5 border-t border-gray-200 shrink-0 bg-white">
-        <div className="flex items-center justify-between mb-2.5 px-1">
-          <span className="text-gray-500 text-sm font-semibold">Total</span>
-          <span className="text-gray-900 font-black text-2xl tabular-nums">{formatARS(total)}</span>
+        {/* Total + COBRAR E IMPRIMIR */}
+        <div className="px-3 pb-3 pt-2.5 border-t border-gray-200">
+          <div className="flex items-center justify-between mb-2.5 px-1">
+            <span className="text-gray-500 text-sm font-semibold">Total</span>
+            <span className="text-gray-900 font-black text-2xl tabular-nums">{formatARS(total)}</span>
+          </div>
+          <button
+            onClick={onDirectSubmit}
+            disabled={isEmpty || submitting}
+            className={`w-full py-4 rounded-2xl font-black text-lg tracking-wide transition-all active:scale-95 shadow-md ${
+              isEmpty || submitting
+                ? 'bg-gray-300 text-gray-400 cursor-not-allowed'
+                : canDirectSubmit
+                  ? 'bg-green-500 hover:bg-green-600 text-white cursor-pointer'
+                  : paymentMethod === 'Mixto'
+                    ? 'bg-purple-600 hover:bg-purple-700 text-white cursor-pointer'
+                    : 'bg-amber-500 hover:bg-amber-600 text-white cursor-pointer'
+            }`}
+            style={{ minHeight: 56 }}
+          >
+            {submitting ? 'Cobrando...' : '🖨️ COBRAR E IMPRIMIR'}
+          </button>
+          {!isEmpty && needsTable && (
+            <p className="text-center text-[10px] text-amber-600 font-semibold mt-1.5">Ingresá una mesa para cobrar</p>
+          )}
         </div>
-        <button
-          onClick={onDirectSubmit}
-          disabled={isEmpty || submitting}
-          className={`w-full py-4 rounded-2xl font-black text-lg tracking-wide transition-all active:scale-95 shadow-md ${
-            isEmpty || submitting
-              ? 'bg-gray-300 text-gray-400 cursor-not-allowed'
-              : canDirectSubmit
-                ? 'bg-green-500 hover:bg-green-600 text-white cursor-pointer'
-                : paymentMethod === 'Mixto'
-                  ? 'bg-purple-600 hover:bg-purple-700 text-white cursor-pointer'
-                  : 'bg-amber-500 hover:bg-amber-600 text-white cursor-pointer'
-          }`}
-          style={{ minHeight: 56 }}
-        >
-          {submitting ? 'Cobrando...' : '🖨️ COBRAR E IMPRIMIR'}
-        </button>
-        {!isEmpty && needsTable && (
-          <p className="text-center text-[10px] text-amber-600 font-semibold mt-1.5">Selección una mesa para cobrar</p>
-        )}
+
       </div>
     </div>
   )
