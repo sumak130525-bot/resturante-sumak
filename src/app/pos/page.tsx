@@ -2451,31 +2451,30 @@ function TicketItemRow({
   )
 }
 
-// ─── Mixto Modal (solo para pago mixto) ──────────────────────────────────────
+// ─── Mixed Payment Modal (solo para pago mixto) ───────────────────────────────────────
 
-function MixtoModal({
+function MixedPaymentModal({
   total,
   cashAmount,
   transferAmount,
-  onCashChange,
-  onTransferChange,
-  onConfirm,
-  onCancel,
+  onCashAmountChange,
+  onTransferAmountChange,
   submitting,
+  onCancel,
+  onConfirm,
 }: {
   total: number
   cashAmount: string
   transferAmount: string
-  onCashChange: (v: string) => void
-  onTransferChange: (v: string) => void
-  onConfirm: () => void
-  onCancel: () => void
+  onCashAmountChange: (v: string) => void
+  onTransferAmountChange: (v: string) => void
   submitting: boolean
+  onCancel: () => void
+  onConfirm: () => void
 }) {
   const ca = parseFloat(cashAmount.replace(',', '.') || '0')
   const ta = parseFloat(transferAmount.replace(',', '.') || '0')
-  const diff = ca + ta - total
-  const valid = Math.abs(diff) < 1
+  const mixedValid = Math.abs(ca + ta - total) < 1
 
   return (
     <div
@@ -2484,41 +2483,39 @@ function MixtoModal({
     >
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-xs mx-4 flex flex-col overflow-hidden">
         <div className="px-5 py-4 bg-teal-600">
-          <h3 className="text-white font-black text-lg leading-none">Pago mixto</h3>
+          <h3 className="text-white font-black text-lg leading-none">Pago Mixto</h3>
           <p className="text-teal-100 text-xs mt-0.5">Total: {formatARS(total)}</p>
         </div>
         <div className="px-5 py-4 flex flex-col gap-3">
           <div>
-            <p className="text-xs font-bold text-gray-500 mb-1">Efectivo</p>
+            <p className="text-xs font-bold text-gray-500 mb-1">Monto efectivo</p>
             <input
               type="number"
               inputMode="decimal"
               min={0}
               value={cashAmount}
-              onChange={(e) => onCashChange(e.target.value)}
+              onChange={(e) => onCashAmountChange(e.target.value)}
               placeholder="$ 0"
               autoFocus
               className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-lg font-bold text-gray-900 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-teal-400 tabular-nums"
             />
           </div>
           <div>
-            <p className="text-xs font-bold text-gray-500 mb-1">Transferencia</p>
+            <p className="text-xs font-bold text-gray-500 mb-1">Monto transferencia</p>
             <input
               type="number"
               inputMode="decimal"
               min={0}
               value={transferAmount}
-              onChange={(e) => onTransferChange(e.target.value)}
+              onChange={(e) => onTransferAmountChange(e.target.value)}
               placeholder="$ 0"
               className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-lg font-bold text-gray-900 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-teal-400 tabular-nums"
             />
           </div>
-          {valid ? (
-            <p className="text-xs text-green-600 font-semibold">✓ Suma correcta</p>
-          ) : (
-            <p className="text-xs text-red-500 font-semibold">
-              Debe sumar {formatARS(total)}{ca + ta > 0 ? ` (faltan ${formatARS(Math.abs(diff))})` : ''}
-            </p>
+          {(ca > 0 || ta > 0) && (
+            mixedValid
+              ? <p className="text-xs text-green-600 font-semibold">✓ Suma correcta</p>
+              : <p className="text-xs text-red-500 font-semibold">La suma debe ser {formatARS(total)} (falta {formatARS(Math.abs(ca + ta - total))})</p>
           )}
         </div>
         <div className="px-5 pb-5 flex gap-3">
@@ -2531,14 +2528,14 @@ function MixtoModal({
           </button>
           <button
             onClick={onConfirm}
-            disabled={submitting || !valid}
-            className={`flex-1 py-4 rounded-xl font-black text-base transition-all active:scale-95 shadow-md ${
-              submitting || !valid
+            disabled={submitting || !mixedValid}
+            className={`flex-1 py-3 rounded-xl font-bold text-sm transition-all active:scale-95 shadow-md ${
+              submitting || !mixedValid
                 ? 'bg-gray-300 text-gray-400 cursor-not-allowed'
-                : 'bg-green-500 hover:bg-green-600 text-white'
+                : 'bg-green-500 hover:bg-green-600 text-white cursor-pointer'
             }`}
           >
-            {submitting ? 'Cobrando...' : 'COBRAR E IMPRIMIR'}
+            {submitting ? 'Cobrando...' : 'Cobrar e Imprimir'}
           </button>
         </div>
       </div>
@@ -2546,64 +2543,64 @@ function MixtoModal({
   )
 }
 
-// ─── Ticket Panel ─────────────────────────────────────────────────────────────
+// ─── Ticket Panel ─────────────────────────────────────────────────────────────────────────────
+
+const TABLE_NUMBERS = Array.from({ length: 20 }, (_, i) => i + 1)
 
 function TicketPanel({
   items,
   diningOption,
+  persons,
+  activePerson,
   tableNumber,
   paymentMethod,
   cashAmount,
   transferAmount,
   customerName,
   orderNotes,
-  customers,
-  persons,
-  activePerson,
   submitting,
+  customers,
   onUpdateQty,
   onRemove,
   onUpdateNote,
   onDiningChange,
+  onPersonsChange,
+  onActivePersonChange,
   onTableChange,
   onPaymentChange,
   onCashAmountChange,
   onTransferAmountChange,
   onCustomerChange,
   onNotesChange,
-  onPersonsChange,
-  onActivePersonChange,
-  onChargeAndPrint,
-  onOpenMixtoModal,
+  onDirectSubmit,
   onBonusClick,
   onUnbonus,
 }: {
   items: TicketItem[]
   diningOption: DiningOption
+  persons: number
+  activePerson: number
   tableNumber: string
   paymentMethod: PaymentMethod
   cashAmount: string
   transferAmount: string
   customerName: string
   orderNotes: string
-  customers: FrequentCustomer[]
-  persons: number
-  activePerson: number
   submitting: boolean
+  customers: FrequentCustomer[]
   onUpdateQty: (uid: string, delta: number) => void
   onRemove: (uid: string) => void
   onUpdateNote: (uid: string, note: string) => void
   onDiningChange: (v: DiningOption) => void
+  onPersonsChange: (v: number) => void
+  onActivePersonChange: (v: number) => void
   onTableChange: (v: string) => void
   onPaymentChange: (v: PaymentMethod) => void
   onCashAmountChange: (v: string) => void
   onTransferAmountChange: (v: string) => void
   onCustomerChange: (v: string) => void
   onNotesChange: (v: string) => void
-  onPersonsChange: (v: number) => void
-  onActivePersonChange: (v: number) => void
-  onChargeAndPrint: () => void
-  onOpenMixtoModal: () => void
+  onDirectSubmit: () => void
   onBonusClick?: (uid: string) => void
   onUnbonus?: (uid: string) => void
 }) {
@@ -2617,265 +2614,243 @@ function TicketPanel({
   const itemCount = items.reduce((s, i) => s + i.quantity, 0)
   const multiPerson = persons > 1
 
-  const handleChargeClick = () => {
-    if (paymentMethod === 'Mixto') {
-      onOpenMixtoModal()
-    } else {
-      onChargeAndPrint()
-    }
-  }
+  const needsTable = diningOption === 'Comer dentro' && !tableNumber
+  const canDirectSubmit = !isEmpty && !needsTable && paymentMethod !== 'Mixto'
 
-  // Mesa chips 1-20
-  const TABLE_CHIPS = Array.from({ length: 20 }, (_, i) => String(i + 1))
+  const PM_OPTIONS: { value: PaymentMethod; label: string; icon: string; activeClass: string }[] = [
+    { value: 'Efectivo',      label: 'Efectivo', icon: '💵', activeClass: 'bg-green-500 text-white shadow-sm'  },
+    { value: 'Transferencia', label: 'Transfer', icon: '📲', activeClass: 'bg-blue-500 text-white shadow-sm'   },
+    { value: 'Mixto',         label: 'Mixto',    icon: '💰', activeClass: 'bg-purple-600 text-white shadow-sm' },
+  ]
 
   return (
     <div className="flex flex-col h-full bg-white" style={{ minHeight: 0 }}>
       {/* Header */}
-      <div className="px-4 py-3 bg-teal-600 shrink-0">
-        <h2 className="text-white font-black text-lg leading-none">Ticket</h2>
+      <div className="px-4 py-2.5 bg-teal-700 shrink-0">
+        <h2 className="text-white font-black text-base leading-none">Ticket</h2>
         {!isEmpty && (
           <p className="text-teal-100 text-xs mt-0.5">
-            {itemCount} items{bonusCount > 0 && ` · ${bonusCount} bonificado${bonusCount !== 1 ? 's' : ''}`}
+            {itemCount} items{bonusCount > 0 && ` · ${bonusCount} bonif.`}
           </p>
         )}
       </div>
 
-      {/* ── Configuración del pedido (tipo Loyverse) ── */}
-      <div className="px-3 pt-2.5 pb-2 shrink-0 border-b border-gray-100 flex flex-col gap-2">
+      {/* Fixed top: options (dining, table, payment, persons, customer, note) */}
+      <div className="shrink-0 border-b border-gray-200">
 
-        {/* Toggle Para llevar / Comer aquí */}
-        <div className="grid grid-cols-2 gap-1 bg-gray-100 rounded-xl p-1">
-          {(['Comer dentro', 'Para llevar'] as DiningOption[]).map((opt) => (
-            <button
-              key={opt}
-              onClick={() => onDiningChange(opt)}
-              className={`py-2 rounded-lg font-bold text-xs transition-all active:scale-95 ${
-                diningOption === opt
-                  ? opt === 'Comer dentro' ? 'bg-teal-600 text-white shadow-sm' : 'bg-orange-500 text-white shadow-sm'
-                  : 'text-gray-600 hover:bg-gray-200'
-              }`}
-            >
-              {opt === 'Comer dentro' ? '🪑 Comer aquí' : '🛍️ Para llevar'}
-            </button>
-          ))}
+        {/* Dining option toggle */}
+        <div className="px-3 pt-2.5 pb-2 border-b border-gray-100">
+          <div className="grid grid-cols-2 gap-1.5 bg-gray-100 rounded-xl p-1">
+            {([
+              { value: 'Comer dentro' as DiningOption, label: 'Aquí', icon: '🪱' },
+              { value: 'Para llevar' as DiningOption, label: 'Llevar', icon: '🛍️' },
+            ]).map((opt) => (
+              <button
+                key={opt.value}
+                onClick={() => onDiningChange(opt.value)}
+                className={`py-2 rounded-lg font-bold text-sm transition-all active:scale-[0.98] ${
+                  diningOption === opt.value
+                    ? 'bg-teal-600 text-white shadow-sm'
+                    : 'text-gray-600 hover:bg-gray-200'
+                }`}
+              >
+                {opt.icon} {opt.label}
+              </button>
+            ))}
+          </div>
         </div>
 
-        {/* Selector mesa (chips 1-20, solo Comer dentro) */}
+        {/* Mesa 1-20 -- solo si Comer dentro */}
         {diningOption === 'Comer dentro' && (
-          <div>
-            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wide mb-1">Mesa</p>
-            <div
-              className="flex gap-1 overflow-x-auto pb-0.5"
-              style={{ scrollbarWidth: 'none' }}
-            >
-              {TABLE_CHIPS.map((n) => (
+          <div className="px-3 pt-2 pb-2 border-b border-gray-100">
+            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wide mb-1.5">Mesa</p>
+            <div className="grid grid-cols-5 gap-1">
+              {TABLE_NUMBERS.map((n) => (
                 <button
                   key={n}
-                  onClick={() => onTableChange(tableNumber === n ? '' : n)}
-                  className={`shrink-0 w-8 h-8 rounded-lg font-bold text-xs transition-all active:scale-90 ${
-                    tableNumber === n
-                      ? 'bg-teal-600 text-white shadow-sm'
-                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  onClick={() => onTableChange(tableNumber === String(n) ? '' : String(n))}
+                  className={`py-1.5 rounded-lg font-bold text-sm transition-all active:scale-[0.97] ${
+                    tableNumber === String(n)
+                      ? 'bg-teal-600 text-white shadow-sm ring-2 ring-teal-300'
+                      : 'bg-gray-100 text-gray-700 hover:bg-teal-50'
                   }`}
                 >
                   {n}
                 </button>
               ))}
             </div>
+            {!tableNumber && (
+              <p className="text-[10px] text-amber-600 font-semibold mt-1.5">Selección una mesa</p>
+            )}
           </div>
         )}
 
         {/* Método de pago */}
-        <div>
-          <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wide mb-1">Pago</p>
-          <div className="grid grid-cols-3 gap-1">
-            {(['Efectivo', 'Transferencia', 'Mixto'] as PaymentMethod[]).map((pm) => (
+        <div className="px-3 pt-2 pb-2 border-b border-gray-100">
+          <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wide mb-1.5">Pago</p>
+          <div className="grid grid-cols-3 gap-1.5">
+            {PM_OPTIONS.map((pm) => (
               <button
-                key={pm}
-                onClick={() => onPaymentChange(pm)}
-                className={`py-2.5 rounded-xl font-bold text-xs transition-all active:scale-95 ${
-                  paymentMethod === pm
-                    ? pm === 'Efectivo'
-                      ? 'bg-green-500 text-white shadow-sm'
-                      : pm === 'Transferencia'
-                        ? 'bg-blue-500 text-white shadow-sm'
-                        : 'bg-purple-500 text-white shadow-sm'
+                key={pm.value}
+                onClick={() => onPaymentChange(pm.value)}
+                className={`py-2 rounded-xl font-bold text-xs transition-all active:scale-[0.97] ${
+                  paymentMethod === pm.value
+                    ? pm.activeClass
                     : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                 }`}
               >
-                {pm === 'Efectivo' ? '💵 Efectivo' : pm === 'Transferencia' ? '📲 Transfer' : '💰 Mixto'}
+                {pm.icon} {pm.label}
               </button>
             ))}
           </div>
         </div>
 
-        {/* Nota rápida */}
-        <div>
-          <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wide mb-1">Nota del pedido</p>
+        {/* Personas */}
+        <div className="px-3 pt-2 pb-2 border-b border-gray-100">
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wide whitespace-nowrap">Personas:</span>
+            <button
+              onClick={() => {
+                const next = Math.max(1, persons - 1)
+                onPersonsChange(next)
+                if (activePerson > next) onActivePersonChange(next)
+              }}
+              className="w-6 h-6 rounded-md bg-gray-200 hover:bg-gray-300 active:scale-90 flex items-center justify-center font-black text-gray-700 text-sm transition-all"
+            >−</button>
+            <span className="w-5 text-center font-black text-gray-900 tabular-nums text-sm">{persons}</span>
+            <button
+              onClick={() => onPersonsChange(Math.min(9, persons + 1))}
+              className="w-6 h-6 rounded-md bg-teal-100 hover:bg-teal-200 active:scale-90 flex items-center justify-center font-black text-teal-700 text-sm transition-all"
+            >+</button>
+            {multiPerson && (
+              <div className="flex gap-1 ml-1 flex-wrap">
+                {Array.from({ length: persons }, (_, i) => i + 1).map((p) => (
+                  <button
+                    key={p}
+                    onClick={() => onActivePersonChange(p)}
+                    className={`px-2 py-0.5 rounded-full text-xs font-bold transition-all active:scale-95 ${
+                      activePerson === p ? 'bg-teal-600 text-white shadow-sm' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                    }`}
+                  >
+                    P{p}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+          {multiPerson && (
+            <p className="text-[10px] text-teal-600 font-semibold mt-1 leading-none">Agregando para Persona {activePerson}</p>
+          )}
+        </div>
+
+        {/* Cliente */}
+        <div className="px-3 pt-2 pb-2 border-b border-gray-100">
+          <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wide mb-1">Cliente</p>
+          <CustomerCombobox value={customerName} onChange={onCustomerChange} customers={customers} />
+        </div>
+
+        {/* Nota */}
+        <div className="px-3 pt-2 pb-2">
+          <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wide mb-1">Nota</p>
           <input
             type="text"
             value={orderNotes}
             onChange={(e) => onNotesChange(e.target.value)}
-            placeholder="Ej: sin picante, alergia..."
+            placeholder="Nota del pedido..."
             className="w-full rounded-xl border border-gray-200 px-3 py-2 text-xs font-semibold text-gray-900 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-teal-400"
           />
         </div>
-
-        {/* Cliente opcional */}
-        <div>
-          <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wide mb-1">Cliente (opcional)</p>
-          <CustomerCombobox
-            value={customerName}
-            onChange={onCustomerChange}
-            customers={customers}
-          />
-        </div>
       </div>
 
-      {/* Persons selector */}
-      <div className="px-3 pt-2 pb-1.5 shrink-0 border-b border-gray-100">
-        <div className="flex items-center gap-2">
-          <span className="text-xs font-bold text-gray-500 whitespace-nowrap">Personas:</span>
-          <button
-            onClick={() => {
-              const next = Math.max(1, persons - 1)
-              onPersonsChange(next)
-              if (activePerson > next) onActivePersonChange(next)
-            }}
-            className="w-6 h-6 rounded-md bg-gray-200 hover:bg-gray-300 active:scale-90 flex items-center justify-center font-black text-gray-700 text-sm transition-all"
-            aria-label="Menos personas"
-          >
-            −
-          </button>
-          <span className="w-5 text-center font-black text-gray-900 tabular-nums text-sm">{persons}</span>
-          <button
-            onClick={() => onPersonsChange(Math.min(9, persons + 1))}
-            className="w-6 h-6 rounded-md bg-teal-100 hover:bg-teal-200 active:scale-90 flex items-center justify-center font-black text-teal-700 text-sm transition-all"
-            aria-label="Más personas"
-          >
-            +
-          </button>
-          {/* Person tabs (only when > 1) */}
-          {multiPerson && (
-            <div className="flex gap-1 ml-1 flex-wrap">
-              {Array.from({ length: persons }, (_, i) => i + 1).map((p) => (
-                <button
-                  key={p}
-                  onClick={() => onActivePersonChange(p)}
-                  className={`px-2 py-0.5 rounded-full text-xs font-bold transition-all active:scale-95 ${
-                    activePerson === p
-                      ? 'bg-teal-600 text-white shadow-sm'
-                      : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                  }`}
-                >
-                  P{p}
-                </button>
-              ))}
+      {/* Scrollable center: items list */}
+      <div className="flex-1 overflow-y-auto" style={{ minHeight: 0 }}>
+        <div className="px-3 py-2">
+          {isEmpty ? (
+            <div className="flex flex-col items-center justify-center py-8 text-gray-400 gap-2">
+              <span className="text-4xl">🛒</span>
+              <p className="text-sm font-semibold">Sin items</p>
+              <p className="text-xs">Tocá un plato para agregar</p>
             </div>
+          ) : multiPerson ? (
+            <div className="flex flex-col gap-2">
+              {Array.from({ length: persons }, (_, i) => i + 1).map((p) => {
+                const personItems = items.filter((it) => it.person_number === p)
+                if (personItems.length === 0) return null
+                const personTotal = personItems.reduce((s, it) => {
+                  if (it.is_bonus) return s
+                  const modExtra = (it.modifiers ?? []).reduce((ms, m) => ms + m.price, 0)
+                  return s + (it.price + modExtra) * it.quantity
+                }, 0)
+                return (
+                  <div key={p}>
+                    <div className="flex items-center justify-between px-1 mb-1">
+                      <span className="text-xs font-black text-teal-700 uppercase tracking-wide">P{p}:</span>
+                      <span className="text-xs font-bold text-gray-500 tabular-nums">{formatARS(personTotal)}</span>
+                    </div>
+                    <ul className="flex flex-col gap-1">
+                      {personItems.map((item) => (
+                        <TicketItemRow
+                          key={item.uid}
+                          item={item}
+                          onUpdateQty={onUpdateQty}
+                          onRemove={onRemove}
+                          onUpdateNote={onUpdateNote}
+                          onBonusClick={onBonusClick}
+                          onUnbonus={onUnbonus}
+                        />
+                      ))}
+                    </ul>
+                  </div>
+                )
+              })}
+            </div>
+          ) : (
+            <ul className="flex flex-col gap-1">
+              {items.map((item) => (
+                <TicketItemRow
+                  key={item.uid}
+                  item={item}
+                  onUpdateQty={onUpdateQty}
+                  onRemove={onRemove}
+                  onUpdateNote={onUpdateNote}
+                  onBonusClick={onBonusClick}
+                  onUnbonus={onUnbonus}
+                />
+              ))}
+            </ul>
           )}
         </div>
-        {multiPerson && (
-          <p className="text-[10px] text-teal-600 font-semibold mt-1 leading-none">
-            Agregando para Persona {activePerson}
-          </p>
-        )}
       </div>
 
-      {/* Items list — flex-1, scrollable */}
-      <div className="flex-1 overflow-y-auto px-3 py-2" style={{ minHeight: 0 }}>
-        {isEmpty ? (
-          <div className="flex flex-col items-center justify-center h-full text-gray-400 gap-2 py-8">
-            <span className="text-4xl">🛒</span>
-            <p className="text-sm font-semibold">Sin items</p>
-            <p className="text-xs">Tocá un plato para agregar</p>
-          </div>
-        ) : multiPerson ? (
-          // Multi-person view: grouped by person
-          <div className="flex flex-col gap-2">
-            {Array.from({ length: persons }, (_, i) => i + 1).map((p) => {
-              const personItems = items.filter((it) => it.person_number === p)
-              if (personItems.length === 0) return null
-              const personTotal = personItems.reduce((s, it) => {
-                if (it.is_bonus) return s
-                const modExtra = (it.modifiers ?? []).reduce((ms, m) => ms + m.price, 0)
-                return s + (it.price + modExtra) * it.quantity
-              }, 0)
-              return (
-                <div key={p}>
-                  <div className="flex items-center justify-between px-1 mb-1">
-                    <span className="text-xs font-black text-teal-700 uppercase tracking-wide">P{p}:</span>
-                    <span className="text-xs font-bold text-gray-500 tabular-nums">{formatARS(personTotal)}</span>
-                  </div>
-                  <ul className="flex flex-col gap-1">
-                    {personItems.map((item) => (
-                      <TicketItemRow
-                        key={item.uid}
-                        item={item}
-                        onUpdateQty={onUpdateQty}
-                        onRemove={onRemove}
-                        onUpdateNote={onUpdateNote}
-                        onBonusClick={onBonusClick}
-                        onUnbonus={onUnbonus}
-                      />
-                    ))}
-                  </ul>
-                </div>
-              )
-            })}
-          </div>
-        ) : (
-          // Single-person view: flat list (unchanged)
-          <ul className="flex flex-col gap-1">
-            {items.map((item) => (
-              <TicketItemRow
-                key={item.uid}
-                item={item}
-                onUpdateQty={onUpdateQty}
-                onRemove={onRemove}
-                onUpdateNote={onUpdateNote}
-                onBonusClick={onBonusClick}
-                onUnbonus={onUnbonus}
-              />
-            ))}
-          </ul>
-        )}
-      </div>
-
-      {/* Bottom fixed bar */}
-      <div className="px-3 pb-3 pt-3 border-t border-gray-200 shrink-0 bg-white">
-        <div className="flex items-center justify-between mb-2 px-1">
+      {/* Bottom bar: total + COBRAR E IMPRIMIR */}
+      <div className="px-3 pb-3 pt-2.5 border-t border-gray-200 shrink-0 bg-white">
+        <div className="flex items-center justify-between mb-2.5 px-1">
           <span className="text-gray-500 text-sm font-semibold">Total</span>
           <span className="text-gray-900 font-black text-2xl tabular-nums">{formatARS(total)}</span>
         </div>
-        {/* Primary: COBRAR E IMPRIMIR (directo, sin modal) */}
         <button
-          onClick={handleChargeClick}
+          onClick={onDirectSubmit}
           disabled={isEmpty || submitting}
-          className={`w-full py-4 rounded-2xl font-black text-base tracking-wide transition-all active:scale-95 shadow-md ${
+          className={`w-full py-4 rounded-2xl font-black text-lg tracking-wide transition-all active:scale-95 shadow-md ${
             isEmpty || submitting
               ? 'bg-gray-300 text-gray-400 cursor-not-allowed'
-              : 'bg-green-600 hover:bg-green-700 text-white cursor-pointer'
+              : canDirectSubmit
+                ? 'bg-green-500 hover:bg-green-600 text-white cursor-pointer'
+                : paymentMethod === 'Mixto'
+                  ? 'bg-purple-600 hover:bg-purple-700 text-white cursor-pointer'
+                  : 'bg-amber-500 hover:bg-amber-600 text-white cursor-pointer'
           }`}
           style={{ minHeight: 56 }}
-          aria-label="Cobrar e imprimir ticket"
         >
-          {submitting ? 'Procesando...' : '🖨️ COBRAR E IMPRIMIR'}
+          {submitting ? 'Cobrando...' : '🖨️ COBRAR E IMPRIMIR'}
         </button>
-        {/* Secondary: Opciones avanzadas */}
-        {!isEmpty && (
-          <button
-            onClick={onOpenMixtoModal}
-            disabled={submitting}
-            className="w-full mt-1.5 py-2 rounded-xl font-semibold text-xs text-gray-400 hover:text-gray-600 hover:bg-gray-50 transition-all active:scale-95"
-          >
-            ··· Opciones avanzadas
-          </button>
+        {!isEmpty && needsTable && (
+          <p className="text-center text-[10px] text-amber-600 font-semibold mt-1.5">Selección una mesa para cobrar</p>
         )}
       </div>
     </div>
   )
 }
-
 // ─── Employee POS Modal ───────────────────────────────────────────────────────
 
 const ADMIN_PIN = '1590'
@@ -3480,6 +3455,7 @@ export default function POSPage() {
   const [toast, setToast] = useState<string | null>(null)
   const [showPrintBtn, setShowPrintBtn] = useState(false)
   const [showConfirmModal, setShowConfirmModal] = useState(false)
+  const [showMixedModal, setShowMixedModal] = useState(false)
   const [showMixtoModal, setShowMixtoModal] = useState(false)
   const [showCashModal, setShowCashModal] = useState(false)
   const [cashModalPrefill, setCashModalPrefill] = useState<PrefillEgreso | undefined>(undefined)
@@ -3962,7 +3938,10 @@ export default function POSPage() {
       setShowMixtoModal(false)
       setPersons(1)
       setActivePerson(1)
-      setToast('Cobro registrado · Imprimiendo...')
+      const toastMsg = diningOption === 'Comer dentro' && tableNumber
+        ? `Mesa ${tableNumber} — cobrado`
+        : 'Pedido cobrado'
+      setToast(toastMsg)
 
       // Print ticket directly (print-server + fallback)
       const ticketText = buildTicketText(snapshot, ticketCfg)
@@ -3988,6 +3967,16 @@ export default function POSPage() {
       setSubmitting(false)
     }
   }, [ticketItems, diningOption, tableNumber, paymentMethod, cashAmount, transferAmount, customerName, orderNotes, persons, ticketCfg, printServerUrl])
+
+  // Direct submit: goes straight if no modal needed; opens mixed modal for Mixto
+  const handleDirectSubmit = useCallback(() => {
+    if (ticketItems.length === 0) return
+    if (paymentMethod === 'Mixto') {
+      setShowMixedModal(true)
+      return
+    }
+    void handleSubmit()
+  }, [ticketItems, paymentMethod, handleSubmit])
 
   const ticketCount = ticketItems.reduce((s, i) => s + i.quantity, 0)
 
@@ -4324,34 +4313,33 @@ export default function POSPage() {
           }`}
           style={{ minHeight: 0 }}
         >
-          {ticketOpen && (
+                    {ticketOpen && (
             <TicketPanel
               items={ticketItems}
               diningOption={diningOption}
+              persons={persons}
+              activePerson={activePerson}
               tableNumber={tableNumber}
               paymentMethod={paymentMethod}
               cashAmount={cashAmount}
               transferAmount={transferAmount}
               customerName={customerName}
               orderNotes={orderNotes}
-              customers={customers}
-              persons={persons}
-              activePerson={activePerson}
               submitting={submitting}
+              customers={customers}
               onUpdateQty={handleUpdateQty}
               onRemove={handleRemove}
               onUpdateNote={handleUpdateNote}
               onDiningChange={setDiningOption}
+              onPersonsChange={setPersons}
+              onActivePersonChange={setActivePerson}
               onTableChange={setTableNumber}
               onPaymentChange={setPaymentMethod}
               onCashAmountChange={setCashAmount}
               onTransferAmountChange={setTransferAmount}
               onCustomerChange={setCustomerName}
               onNotesChange={setOrderNotes}
-              onPersonsChange={setPersons}
-              onActivePersonChange={setActivePerson}
-              onChargeAndPrint={handleSubmit}
-              onOpenMixtoModal={() => setShowMixtoModal(true)}
+              onDirectSubmit={handleDirectSubmit}
               onBonusClick={handleBonusClick}
               onUnbonus={handleUnbonus}
             />
@@ -4379,33 +4367,11 @@ export default function POSPage() {
         />
       )}
 
-      {/* ── Confirm Modal (Opciones avanzadas) ── */}
-      {showConfirmModal && (
-        <ConfirmModal
-          diningOption={diningOption}
-          tableNumber={tableNumber}
-          paymentMethod={paymentMethod}
-          cashAmount={cashAmount}
-          transferAmount={transferAmount}
-          customerName={customerName}
-          orderNotes={orderNotes}
-          customers={customers}
-          submitting={submitting}
-          total={ticketItems.reduce((s, i) => s + (i.price + (i.modifiers ?? []).reduce((ms, m) => ms + m.price, 0)) * i.quantity, 0)}
-          onTableChange={setTableNumber}
-          onPaymentChange={setPaymentMethod}
-          onCashAmountChange={setCashAmount}
-          onTransferAmountChange={setTransferAmount}
-          onCustomerChange={setCustomerName}
-          onNotesChange={setOrderNotes}
-          onCancel={() => setShowConfirmModal(false)}
-          onConfirm={handleSubmit}
-        />
-      )}
+      {/* ── Confirm Modal (legacy, replaced by direct submit + MixedPaymentModal) ── */}
 
-      {/* ── Mixto Modal ── */}
-      {showMixtoModal && (
-        <MixtoModal
+      {/* ── Mixed Payment Modal ── */}
+      {showMixedModal && (
+        <MixedPaymentModal
           total={ticketItems.reduce((s, i) => {
             if (i.is_bonus) return s
             const modExtra = (i.modifiers ?? []).reduce((ms, m) => ms + m.price, 0)
@@ -4413,11 +4379,11 @@ export default function POSPage() {
           }, 0)}
           cashAmount={cashAmount}
           transferAmount={transferAmount}
-          onCashChange={setCashAmount}
-          onTransferChange={setTransferAmount}
-          onConfirm={handleSubmit}
-          onCancel={() => setShowMixtoModal(false)}
+          onCashAmountChange={setCashAmount}
+          onTransferAmountChange={setTransferAmount}
           submitting={submitting}
+          onCancel={() => setShowMixedModal(false)}
+          onConfirm={() => { setShowMixedModal(false); void handleSubmit() }}
         />
       )}
 
