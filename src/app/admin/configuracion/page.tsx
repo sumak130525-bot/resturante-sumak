@@ -19,6 +19,13 @@ export default function AdminConfiguracionPage() {
   const [langLoading, setLangLoading] = useState(true)
   const [langSaving, setLangSaving] = useState(false)
 
+  // ── Print server URL ───────────────────────────────────────────────────────
+  const [printServerUrl, setPrintServerUrl] = useState('http://192.168.100.77:4000')
+  const [printServerLoading, setPrintServerLoading] = useState(true)
+  const [printServerSaving, setPrintServerSaving] = useState(false)
+  const [printServerTesting, setPrintServerTesting] = useState(false)
+  const [printServerStatus, setPrintServerStatus] = useState<'unknown' | 'ok' | 'error'>('unknown')
+
   // ── Grid settings ──────────────────────────────────────────────────────────
   const [gridCols, setGridCols] = useState(6)
   const [gridRows, setGridRows] = useState(16)
@@ -51,6 +58,17 @@ export default function AdminConfiguracionPage() {
         setLangLoading(false)
       })
       .catch(() => setLangLoading(false))
+  }, [])
+
+  // Fetch print_server_url on mount
+  useEffect(() => {
+    fetch('/api/admin/settings?key=print_server_url')
+      .then((r) => r.ok ? r.json() : [])
+      .then((d: { key: string; value: string }[]) => {
+        if (d[0]?.value) setPrintServerUrl(d[0].value)
+        setPrintServerLoading(false)
+      })
+      .catch(() => setPrintServerLoading(false))
   }, [])
 
   // Fetch ticket config on mount
@@ -104,6 +122,36 @@ export default function AdminConfiguracionPage() {
       setError('Error al guardar configuración de grilla')
     }
     setGridSaving(false)
+  }
+
+  const handleSavePrintServer = async () => {
+    setPrintServerSaving(true)
+    setError(null)
+    try {
+      await fetch('/api/admin/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key: 'print_server_url', value: printServerUrl.trim() }),
+      })
+      showSuccess('URL del servidor de impresión guardada')
+      setPrintServerStatus('unknown')
+    } catch {
+      setError('Error al guardar URL del servidor de impresión')
+    }
+    setPrintServerSaving(false)
+  }
+
+  const handleTestPrintServer = async () => {
+    setPrintServerTesting(true)
+    setPrintServerStatus('unknown')
+    try {
+      const url = printServerUrl.trim().replace(/\/$/, '')
+      const res = await fetch(`${url}/health`, { signal: AbortSignal.timeout(5000) })
+      setPrintServerStatus(res.ok ? 'ok' : 'error')
+    } catch {
+      setPrintServerStatus('error')
+    }
+    setPrintServerTesting(false)
   }
 
   const handleToggleLanguages = async (value: boolean) => {
@@ -282,6 +330,56 @@ export default function AdminConfiguracionPage() {
                 />
               </button>
             </div>
+          </div>
+        </section>
+
+        {/* Sección: Servidor de impresión */}
+        <section>
+          <h2 className="text-base font-semibold text-gray-700 mb-3">Servidor de impresión local</h2>
+          <div className="bg-white rounded-2xl shadow-sm p-6 space-y-4">
+            {printServerLoading ? (
+              <div className="h-9 rounded-xl bg-gray-100 animate-pulse" />
+            ) : (
+              <>
+                <p className="text-xs text-gray-500">
+                  URL del print-server corriendo en la PC local. El POS intentará imprimir directo; si no está disponible, usará el flujo habitual (ventana del navegador).
+                </p>
+                <div className="flex flex-col sm:flex-row gap-3 items-start">
+                  <div className="flex-1">
+                    <label className={labelClass}>URL del print-server</label>
+                    <input
+                      type="text"
+                      className={inputClass}
+                      value={printServerUrl}
+                      onChange={(e) => setPrintServerUrl(e.target.value)}
+                      placeholder="http://192.168.100.77:4000"
+                    />
+                  </div>
+                </div>
+                {printServerStatus === 'ok' && (
+                  <p className="text-xs text-green-600 font-semibold">✓ Servidor disponible</p>
+                )}
+                {printServerStatus === 'error' && (
+                  <p className="text-xs text-red-500 font-semibold">✕ No se pudo conectar al servidor</p>
+                )}
+                <div className="flex flex-wrap gap-3">
+                  <button
+                    onClick={handleSavePrintServer}
+                    disabled={printServerSaving}
+                    className="flex items-center gap-2 bg-sumak-brown text-white text-sm font-medium px-5 py-2.5 rounded-xl hover:bg-sumak-brown/90 disabled:opacity-50 transition-colors"
+                  >
+                    {printServerSaving ? 'Guardando...' : 'Guardar URL'}
+                  </button>
+                  <button
+                    onClick={handleTestPrintServer}
+                    disabled={printServerTesting}
+                    className="flex items-center gap-2 border border-gray-200 text-gray-700 text-sm font-medium px-5 py-2.5 rounded-xl hover:bg-gray-50 disabled:opacity-50 transition-colors"
+                  >
+                    {printServerTesting ? 'Probando...' : 'Probar conexión'}
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </section>
 
@@ -720,6 +818,54 @@ export default function AdminConfiguracionPage() {
                 >
                   {ticketConfigSaving ? 'Guardando...' : 'Guardar configuración de ticket'}
                 </button>
+              </>
+            )}
+          </div>
+        </section>
+
+        {/* Sección: Servidor de impresión local */}
+        <section>
+          <h2 className="text-base font-semibold text-gray-700 mb-3">Servidor de impresión local</h2>
+          <div className="bg-white rounded-2xl shadow-sm p-6 space-y-5">
+            {printServerLoading ? (
+              <div className="h-9 rounded-xl bg-gray-100 animate-pulse" />
+            ) : (
+              <>
+                <p className="text-xs text-gray-500">
+                  URL del servidor de impresión local (print-server). El POS intentará imprimir directo; si no responde, usa el flujo normal por navegador.
+                </p>
+                <div>
+                  <label className={labelClass}>URL del servidor de impresión</label>
+                  <input
+                    type="url"
+                    className={inputClass}
+                    value={printServerUrl}
+                    onChange={(e) => { setPrintServerUrl(e.target.value); setPrintServerStatus('unknown') }}
+                    placeholder="http://192.168.100.77:4000"
+                  />
+                </div>
+                {printServerStatus === 'ok' && (
+                  <p className="text-xs text-green-600 font-semibold">✓ Servidor respondió correctamente</p>
+                )}
+                {printServerStatus === 'error' && (
+                  <p className="text-xs text-red-600 font-semibold">✕ No se pudo conectar al servidor</p>
+                )}
+                <div className="flex flex-wrap gap-3">
+                  <button
+                    onClick={handleSavePrintServer}
+                    disabled={printServerSaving}
+                    className="flex items-center gap-2 bg-sumak-brown text-white text-sm font-medium px-5 py-2.5 rounded-xl hover:bg-sumak-brown/90 disabled:opacity-50 transition-colors"
+                  >
+                    {printServerSaving ? 'Guardando...' : 'Guardar URL'}
+                  </button>
+                  <button
+                    onClick={handleTestPrintServer}
+                    disabled={printServerTesting}
+                    className="flex items-center gap-2 border border-gray-200 text-gray-700 text-sm font-medium px-5 py-2.5 rounded-xl hover:bg-gray-50 disabled:opacity-50 transition-colors"
+                  >
+                    {printServerTesting ? 'Probando...' : 'Probar conexión'}
+                  </button>
+                </div>
               </>
             )}
           </div>

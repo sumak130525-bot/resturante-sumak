@@ -195,7 +195,41 @@ function buildTicketText(data: PrintData, cfg: TicketConfig = DEFAULT_TICKET_CON
   ].filter((l) => l !== '').join('\n')
 }
 
-function triggerPrint(ticketText: string, logoUrl?: string | null, cfg?: TicketConfig): void {
+async function tryPrintServer(ticketText: string, printServerUrl: string): Promise<boolean> {
+  try {
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 3000)
+    const res = await fetch(`${printServerUrl}/print`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text: ticketText, cut: true, feedLines: 4 }),
+      signal: controller.signal,
+    })
+    clearTimeout(timeoutId)
+    if (!res.ok) return false
+    const data = await res.json()
+    return data.ok === true
+  } catch {
+    return false
+  }
+}
+
+async function tryOpenDrawer(printServerUrl: string): Promise<void> {
+  try {
+    const controller = new AbortController()
+    setTimeout(() => controller.abort(), 3000)
+    await fetch(`${printServerUrl}/open-drawer`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({}),
+      signal: controller.signal,
+    })
+  } catch {
+    // silently ignore — drawer open is best-effort
+  }
+}
+
+function triggerPrintFallback(ticketText: string, logoUrl?: string | null, cfg?: TicketConfig): void {
   const c = { ...DEFAULT_TICKET_CONFIG, ...(cfg ?? {}) }
   sessionStorage.setItem('pos_ticket', ticketText)
   if (logoUrl && c.showLogo) {
@@ -217,10 +251,38 @@ function triggerPrint(ticketText: string, logoUrl?: string | null, cfg?: TicketC
   window.location.href = '/pos/ticket'
 }
 
-function printTicketPopup(data: PrintData, cfg: TicketConfig = DEFAULT_TICKET_CONFIG): void {
+async function triggerPrint(
+  ticketText: string,
+  logoUrl?: string | null,
+  cfg?: TicketConfig,
+  printServerUrl?: string | null,
+  onPrinted?: () => void,
+): Promise<void> {
+  if (printServerUrl) {
+    const ok = await tryPrintServer(ticketText, printServerUrl)
+    if (ok) {
+      onPrinted?.()
+      return
+    }
+  }
+  triggerPrintFallback(ticketText, logoUrl, cfg)
+}
+
+async function printTicketPopup(
+  data: PrintData,
+  cfg: TicketConfig = DEFAULT_TICKET_CONFIG,
+  printServerUrl?: string | null,
+  onPrinted?: () => void,
+): Promise<void> {
   const ticketText = buildTicketText(data, cfg)
   // Save ticket text globally so the print button can use it
   ;(window as any).__pendingTicket = ticketText
+  if (printServerUrl) {
+    const ok = await tryPrintServer(ticketText, printServerUrl)
+    if (ok) {
+      onPrinted?.()
+    }
+  }
 }
 
 // ─── Frequent Customer type ───────────────────────────────────────────────────
@@ -632,7 +694,7 @@ type CashMovement = {
 
 type PrefillEgreso = { amount: number; description: string }
 
-function CashMovementsModal({ onClose, prefillEgreso }: { onClose: () => void; prefillEgreso?: PrefillEgreso }) {
+function CashMovementsModal({ onClose, prefillEgreso, printServerUrl }: { onClose: () => void; prefillEgreso?: PrefillEgreso; printServerUrl?: string | null }) {
   const [tab, setTab] = useState<'ingreso' | 'egreso'>(prefillEgreso ? 'egreso' : 'ingreso')
   const [amount, setAmount] = useState(prefillEgreso ? String(prefillEgreso.amount) : '')
   const [description, setDescription] = useState(prefillEgreso ? prefillEgreso.description : '')
@@ -689,9 +751,17 @@ function CashMovementsModal({ onClose, prefillEgreso }: { onClose: () => void; p
       setAmount('')
       setDescription('')
       setSuccess(`${tab === 'ingreso' ? 'Ingreso' : 'Egreso'} registrado`)
-      setTimeout(() => {
+      setTimeout(async () => {
         setSuccess(null)
-        // Navigate to ticket page to print and open drawer
+        // Try print-server first; fallback to ticket page
+        if (printServerUrl) {
+          const printed = await tryPrintServer(receiptText, printServerUrl)
+          if (printed) {
+            // Also open drawer for cash inflows/outflows
+            void tryOpenDrawer(printServerUrl)
+            return
+          }
+        }
         window.location.href = '/pos/ticket'
       }, 500)
       loadMovements()
@@ -941,10 +1011,12 @@ function CloseShiftModal({
   shift,
   onClose,
   onClosed,
+  printServerUrl,
 }: {
   shift: Shift
   onClose: () => void
   onClosed: () => void
+  printServerUrl?: string | null
 }) {
   const [summary, setSummary] = useState<ShiftSummary | null>(null)
   const [loadingSummary, setLoadingSummary] = useState(true)
@@ -1008,7 +1080,7 @@ function CloseShiftModal({
 
       // Reset state FIRST, then print (in case print navigates away)
       onClosed()
-      triggerShiftPrint(data.summary)
+      void triggerShiftPrint(data.summary, printServerUrl)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error')
       setSubmitting(false)
@@ -1203,8 +1275,12 @@ function buildShiftCloseTicket(summary: ShiftSummary): string {
   ].filter((l) => l !== null && l !== undefined).join('\n')
 }
 
-function triggerShiftPrint(summary: ShiftSummary): void {
+async function triggerShiftPrint(summary: ShiftSummary, printServerUrl?: string | null): Promise<void> {
   const text = buildShiftCloseTicket(summary)
+  if (printServerUrl) {
+    const ok = await tryPrintServer(text, printServerUrl)
+    if (ok) return
+  }
   sessionStorage.setItem('pos_ticket', text)
   sessionStorage.removeItem('pos_ticket_logo')
   sessionStorage.setItem('pos_ticket_fontsize', '12px')
@@ -3099,6 +3175,18 @@ export default function POSPage() {
       .catch(() => {})
   }, [])
 
+  // Print server URL (fetched once on load)
+  const [printServerUrl, setPrintServerUrl] = useState<string | null>(null)
+  useEffect(() => {
+    fetch('/api/admin/settings?key=print_server_url')
+      .then((r) => r.ok ? r.json() : null)
+      .then((data) => {
+        const val = Array.isArray(data) && data[0]?.value ? data[0].value as string : null
+        setPrintServerUrl(val)
+      })
+      .catch(() => {})
+  }, [])
+
   // Grid settings (fetched once on load)
   const [gridCols, setGridCols] = useState(DEFAULT_GRID_COLS)
   const [gridSize, setGridSize] = useState(DEFAULT_GRID_SIZE)
@@ -3643,7 +3731,14 @@ export default function POSPage() {
       setToast('Pedido enviado a cocina')
 
       // Print ticket via popup window
-      printTicketPopup(snapshot, ticketCfg)
+      void printTicketPopup(snapshot, ticketCfg, printServerUrl, () => {
+        setToast('Ticket impreso')
+        setShowPrintBtn(false)
+      })
+      // Open cash drawer for cash or mixed payments
+      if (printServerUrl && (paymentMethod === 'Efectivo' || paymentMethod === 'Mixto')) {
+        void tryOpenDrawer(printServerUrl)
+      }
       setShowPrintBtn(true)
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Error al enviar pedido'
@@ -3651,7 +3746,7 @@ export default function POSPage() {
     } finally {
       setSubmitting(false)
     }
-  }, [ticketItems, diningOption, tableNumber, paymentMethod, cashAmount, transferAmount, customerName, orderNotes, persons])
+  }, [ticketItems, diningOption, tableNumber, paymentMethod, cashAmount, transferAmount, customerName, orderNotes, persons, ticketCfg, printServerUrl])
 
   const ticketCount = ticketItems.reduce((s, i) => s + i.quantity, 0)
 
@@ -4057,6 +4152,7 @@ export default function POSPage() {
         <CashMovementsModal
           onClose={() => { setShowCashModal(false); setCashModalPrefill(undefined) }}
           prefillEgreso={cashModalPrefill}
+          printServerUrl={printServerUrl}
         />
       )}
 
@@ -4245,7 +4341,9 @@ export default function POSPage() {
               onClick={() => {
                 const ticket = (window as any).__pendingTicket
                 if (ticket) {
-                  triggerPrint(ticket, ticketLogo, ticketCfg)
+                  void triggerPrint(ticket, ticketLogo, ticketCfg, printServerUrl, () => {
+                    setToast('Ticket impreso')
+                  })
                 }
                 setShowPrintBtn(false)
               }}
@@ -4295,6 +4393,7 @@ export default function POSPage() {
             setCurrentShift(null)
             setShowOpenShiftModal(true)
           }}
+          printServerUrl={printServerUrl}
         />
       )}
 
