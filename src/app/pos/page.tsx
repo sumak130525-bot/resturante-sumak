@@ -62,28 +62,40 @@ type PrintData = {
   customerName: string
 }
 
-function buildTicketText(data: PrintData, cfg: TicketConfig = DEFAULT_TICKET_CONFIG): string {
+// ─── ESC/POS marker helpers ───────────────────────────────────────────────────
+// Wrap text with inline markers that the print-server interprets as ESC/POS commands.
+// Used only when sending to the print-server (not for the HTML ticket fallback).
+function escCenter(s: string) { return `[CENTER]${s}[/CENTER]` }
+function escBold(s: string)   { return `[BOLD]${s}[/BOLD]` }
+
+function buildTicketText(
+  data: PrintData,
+  cfg: TicketConfig = DEFAULT_TICKET_CONFIG,
+  forPrintServer = false,
+): string {
   const W = cfg.width
   const marginLeft = cfg.marginLeft ?? 0
   const marginRight = cfg.marginRight ?? 0
   const leftPad = ' '.repeat(marginLeft)
 
+  // Separator line for print-server: [SEP:-:W] or plain dashes for HTML fallback
+  const SEP_ESC = `[SEP:-:${W}]`
   // Separator markers — rendered as full-width HTML elements in ticket/page.tsx
-  const SEP = '---SEP---'
-  const LINES = SEP
+  const SEP_HTML = '---SEP---'
+  const LINES = forPrintServer ? SEP_ESC : SEP_HTML
 
   const total = formatTicketMoney(data.total)
 
-  // Section gap: at most 1 blank line between header/footer and separators
-  const sectionSpacingVal = cfg.sectionSpacing ?? 4
-  const sectionGap = sectionSpacingVal > 0 ? '\n' : ''
   // Extra blank lines between items based on itemSpacing
   const itemGap = cfg.itemSpacing && cfg.itemSpacing > 0 ? '\n'.repeat(Math.floor(cfg.itemSpacing / 2)) : ''
 
   const alignText = (s: string, align: 'center' | 'left') => {
-    if (align === 'left') return leftPad + s
-    // center alignment: return plain string; CSS text-align:center handles it in ticket/page.tsx
-    return s
+    if (!forPrintServer) {
+      // HTML fallback: CSS handles centering; just apply margin for left
+      return align === 'left' ? leftPad + s : s
+    }
+    // ESC/POS: wrap with [CENTER] marker
+    return align === 'center' ? escCenter(s) : leftPad + s
   }
 
   const addMargin = (s: string) => leftPad + s
@@ -145,7 +157,12 @@ function buildTicketText(data: PrintData, cfg: TicketConfig = DEFAULT_TICKET_CON
   // Note: data doesn't carry a top-level note field yet, so this is a placeholder
   // showOrderNote controls whether a note line is shown when available
 
-  const totalLine = addMargin(`TOTAL: ${total}`)
+  // TOTAL line: bold when forPrintServer and cfg.totalBold
+  const rawTotalLine = addMargin(`TOTAL: ${total}`)
+  const totalLine = (forPrintServer && (cfg.totalBold ?? true))
+    ? escBold(rawTotalLine)
+    : rawTotalLine
+
   let payLine = ''
   if (cfg.showPaymentMethod ?? true) {
     const parts = [addMargin(`Pago: ${paymentLabel}`)]
@@ -171,15 +188,28 @@ function buildTicketText(data: PrintData, cfg: TicketConfig = DEFAULT_TICKET_CON
     itemSection = buildItemLines(data.items)
   }
 
-  // Feed lines before cut
-  const feedLines = '\n'.repeat(Math.max(0, cfg.feedLinesBeforeCut ?? 3))
+  // Feed lines before cut (only for HTML fallback; print-server uses feedLinesBeforeCut from config)
+  const feedLines = forPrintServer ? '' : '\n'.repeat(Math.max(0, cfg.feedLinesBeforeCut ?? 3))
 
   const headerAlign = cfg.headerAlign ?? 'center'
   const footerAlign = cfg.footerAlign ?? 'center'
 
+  // Header lines: apply bold if forPrintServer and cfg.headerBold
+  const applyHeaderStyle = (s: string) =>
+    (forPrintServer && (cfg.headerBold ?? true)) ? escBold(s) : s
+
+  const header1Raw = cfg.header1 ? alignText(cfg.header1, headerAlign) : ''
+  const header2Raw = cfg.header2 ? alignText(cfg.header2, headerAlign) : ''
+  const footer1Raw = cfg.footer1 ? alignText(cfg.footer1, footerAlign) : ''
+  const footer2Raw = cfg.footer2 ? alignText(cfg.footer2, footerAlign) : ''
+
+  // Logo line for print-server (replaces header1 when showLogo is true)
+  const logoLine = (forPrintServer && (cfg.showLogo ?? true)) ? '[LOGO]' : ''
+
   return [
-    cfg.header1 ? alignText(cfg.header1, headerAlign) : '',
-    cfg.header2 ? alignText(cfg.header2, headerAlign) : '',
+    logoLine,
+    logoLine ? '' : applyHeaderStyle(header1Raw),   // skip header1 if logo shown
+    applyHeaderStyle(header2Raw),
     LINES,
     ...infoLines,
     LINES,
@@ -189,20 +219,37 @@ function buildTicketText(data: PrintData, cfg: TicketConfig = DEFAULT_TICKET_CON
     payLine,
     clienteLine,
     LINES,
-    cfg.footer1 ? alignText(cfg.footer1, footerAlign) : '',
-    cfg.footer2 ? alignText(cfg.footer2, footerAlign) : '',
+    footer1Raw,
+    footer2Raw,
     feedLines,
   ].filter((l) => l !== '').join('\n')
 }
 
-async function tryPrintServer(ticketText: string, printServerUrl: string): Promise<boolean> {
+async function tryPrintServer(
+  ticketText: string,
+  printServerUrl: string,
+  cfg?: TicketConfig,
+): Promise<boolean> {
   try {
     const controller = new AbortController()
     const timeoutId = setTimeout(() => controller.abort(), 3000)
+    const printConfig = cfg
+      ? {
+          headerAlign: cfg.headerAlign,
+          footerAlign: cfg.footerAlign,
+          headerBold: cfg.headerBold,
+          totalBold: cfg.totalBold,
+          width: cfg.width,
+          feedLinesBeforeCut: cfg.feedLinesBeforeCut,
+          autoCut: cfg.autoCut,
+          showLogo: cfg.showLogo,
+          logoText: cfg.header1 ?? 'SUMAK',
+        }
+      : undefined
     const res = await fetch(`${printServerUrl}/print`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text: ticketText, cut: true, feedLines: 4 }),
+      body: JSON.stringify({ text: ticketText, cut: true, feedLines: 4, config: printConfig }),
       signal: controller.signal,
     })
     clearTimeout(timeoutId)
@@ -259,7 +306,7 @@ async function triggerPrint(
   onPrinted?: () => void,
 ): Promise<void> {
   if (printServerUrl) {
-    const ok = await tryPrintServer(ticketText, printServerUrl)
+    const ok = await tryPrintServer(ticketText, printServerUrl, cfg)
     if (ok) {
       onPrinted?.()
       return
@@ -274,11 +321,11 @@ async function printTicketPopup(
   printServerUrl?: string | null,
   onPrinted?: () => void,
 ): Promise<void> {
-  const ticketText = buildTicketText(data, cfg)
+  const ticketText = buildTicketText(data, cfg, !!printServerUrl)
   // Save ticket text globally so the print button can use it
   ;(window as any).__pendingTicket = ticketText
   if (printServerUrl) {
-    const ok = await tryPrintServer(ticketText, printServerUrl)
+    const ok = await tryPrintServer(ticketText, printServerUrl, cfg)
     if (ok) {
       onPrinted?.()
     }
@@ -3941,10 +3988,10 @@ export default function POSPage() {
       setToast(toastMsg)
 
       // Print ticket directly (print-server + fallback)
-      const ticketText = buildTicketText(snapshot, ticketCfg)
+      const ticketText = buildTicketText(snapshot, ticketCfg, !!printServerUrl)
       let printed = false
       if (printServerUrl) {
-        printed = await tryPrintServer(ticketText, printServerUrl)
+        printed = await tryPrintServer(ticketText, printServerUrl, ticketCfg)
         if (printed) {
           // Open cash drawer for cash or mixed
           if (paymentMethod === 'Efectivo' || paymentMethod === 'Mixto') {
