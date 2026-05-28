@@ -2658,24 +2658,27 @@ function TicketPanel({
           </div>
         </div>
 
-        {/* Mesa (input simple) -- solo si Comer dentro */}
+        {/* Mesa (chips 1-20) -- solo si Comer dentro */}
         {diningOption === 'Comer dentro' && (
           <div className="px-3 pt-2 pb-2 border-b border-gray-100">
-            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wide mb-1">Mesa</p>
-            <input
-              type="number"
-              inputMode="numeric"
-              min={1}
-              max={99}
-              value={tableNumber}
-              onChange={(e) => onTableChange(e.target.value)}
-              placeholder="Nº de mesa"
-              className={`w-full rounded-xl border px-3 py-2 text-sm font-bold text-gray-900 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-teal-400 tabular-nums ${
-                !tableNumber ? 'border-amber-300' : 'border-gray-200'
-              }`}
-            />
+            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wide mb-1.5">Mesa</p>
+            <div className="flex flex-nowrap gap-1 overflow-x-auto scrollbar-hide">
+              {Array.from({ length: 20 }, (_, i) => String(i + 1)).map((n) => (
+                <button
+                  key={n}
+                  onClick={() => onTableChange(tableNumber === n ? '' : n)}
+                  className={`flex-shrink-0 w-7 h-7 rounded-lg text-xs font-bold transition-all active:scale-95 ${
+                    tableNumber === n
+                      ? 'bg-teal-600 text-white shadow-sm'
+                      : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                  }`}
+                >
+                  {n}
+                </button>
+              ))}
+            </div>
             {!tableNumber && (
-              <p className="text-[10px] text-amber-600 font-semibold mt-1">Ingresá el número de mesa</p>
+              <p className="text-[10px] text-amber-600 font-semibold mt-1">Seleccioná la mesa</p>
             )}
           </div>
         )}
