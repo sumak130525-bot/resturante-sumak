@@ -361,9 +361,14 @@ function buildLineNote(modifiers: SelectedModifier[]): string | null {
 // ─── Toast ────────────────────────────────────────────────────────────────────
 
 function Toast({ message, onDone }: { message: string; onDone: () => void }) {
+  useEffect(() => {
+    const id = setTimeout(onDone, 2000)
+    return () => clearTimeout(id)
+  }, [onDone])
+
   return (
     <div
-      className="fixed bottom-8 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 px-6 py-4 rounded-2xl shadow-2xl bg-teal-600 text-white font-bold text-lg select-none animate-bounce-in"
+      className="fixed bottom-8 left-1/2 -translate-x-1/2 z-50 flex items-center gap-3 px-6 py-4 rounded-2xl shadow-2xl bg-green-600 text-white font-bold text-lg select-none animate-bounce-in"
       style={{ minWidth: 280, maxWidth: '90vw' }}
     >
       <span className="text-2xl">✓</span>
@@ -2446,47 +2451,182 @@ function TicketItemRow({
   )
 }
 
+// ─── Mixto Modal (solo para pago mixto) ──────────────────────────────────────
+
+function MixtoModal({
+  total,
+  cashAmount,
+  transferAmount,
+  onCashChange,
+  onTransferChange,
+  onConfirm,
+  onCancel,
+  submitting,
+}: {
+  total: number
+  cashAmount: string
+  transferAmount: string
+  onCashChange: (v: string) => void
+  onTransferChange: (v: string) => void
+  onConfirm: () => void
+  onCancel: () => void
+  submitting: boolean
+}) {
+  const ca = parseFloat(cashAmount.replace(',', '.') || '0')
+  const ta = parseFloat(transferAmount.replace(',', '.') || '0')
+  const diff = ca + ta - total
+  const valid = Math.abs(diff) < 1
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+      onClick={(e) => { if (e.target === e.currentTarget) onCancel() }}
+    >
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-xs mx-4 flex flex-col overflow-hidden">
+        <div className="px-5 py-4 bg-teal-600">
+          <h3 className="text-white font-black text-lg leading-none">Pago mixto</h3>
+          <p className="text-teal-100 text-xs mt-0.5">Total: {formatARS(total)}</p>
+        </div>
+        <div className="px-5 py-4 flex flex-col gap-3">
+          <div>
+            <p className="text-xs font-bold text-gray-500 mb-1">Efectivo</p>
+            <input
+              type="number"
+              inputMode="decimal"
+              min={0}
+              value={cashAmount}
+              onChange={(e) => onCashChange(e.target.value)}
+              placeholder="$ 0"
+              autoFocus
+              className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-lg font-bold text-gray-900 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-teal-400 tabular-nums"
+            />
+          </div>
+          <div>
+            <p className="text-xs font-bold text-gray-500 mb-1">Transferencia</p>
+            <input
+              type="number"
+              inputMode="decimal"
+              min={0}
+              value={transferAmount}
+              onChange={(e) => onTransferChange(e.target.value)}
+              placeholder="$ 0"
+              className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-lg font-bold text-gray-900 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-teal-400 tabular-nums"
+            />
+          </div>
+          {valid ? (
+            <p className="text-xs text-green-600 font-semibold">✓ Suma correcta</p>
+          ) : (
+            <p className="text-xs text-red-500 font-semibold">
+              Debe sumar {formatARS(total)}{ca + ta > 0 ? ` (faltan ${formatARS(Math.abs(diff))})` : ''}
+            </p>
+          )}
+        </div>
+        <div className="px-5 pb-5 flex gap-3">
+          <button
+            onClick={onCancel}
+            disabled={submitting}
+            className="flex-1 py-3 rounded-xl font-bold text-sm bg-gray-100 text-gray-700 hover:bg-gray-200 active:scale-95 transition-all"
+          >
+            Cancelar
+          </button>
+          <button
+            onClick={onConfirm}
+            disabled={submitting || !valid}
+            className={`flex-1 py-4 rounded-xl font-black text-base transition-all active:scale-95 shadow-md ${
+              submitting || !valid
+                ? 'bg-gray-300 text-gray-400 cursor-not-allowed'
+                : 'bg-green-500 hover:bg-green-600 text-white'
+            }`}
+          >
+            {submitting ? 'Cobrando...' : 'COBRAR E IMPRIMIR'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ─── Ticket Panel ─────────────────────────────────────────────────────────────
 
 function TicketPanel({
   items,
   diningOption,
+  tableNumber,
+  paymentMethod,
+  cashAmount,
+  transferAmount,
+  customerName,
+  orderNotes,
+  customers,
   persons,
   activePerson,
+  submitting,
   onUpdateQty,
   onRemove,
   onUpdateNote,
   onDiningChange,
+  onTableChange,
+  onPaymentChange,
+  onCashAmountChange,
+  onTransferAmountChange,
+  onCustomerChange,
+  onNotesChange,
   onPersonsChange,
   onActivePersonChange,
-  onOpenConfirm,
+  onChargeAndPrint,
+  onOpenMixtoModal,
   onBonusClick,
   onUnbonus,
 }: {
   items: TicketItem[]
   diningOption: DiningOption
+  tableNumber: string
+  paymentMethod: PaymentMethod
+  cashAmount: string
+  transferAmount: string
+  customerName: string
+  orderNotes: string
+  customers: FrequentCustomer[]
   persons: number
   activePerson: number
+  submitting: boolean
   onUpdateQty: (uid: string, delta: number) => void
   onRemove: (uid: string) => void
   onUpdateNote: (uid: string, note: string) => void
   onDiningChange: (v: DiningOption) => void
+  onTableChange: (v: string) => void
+  onPaymentChange: (v: PaymentMethod) => void
+  onCashAmountChange: (v: string) => void
+  onTransferAmountChange: (v: string) => void
+  onCustomerChange: (v: string) => void
+  onNotesChange: (v: string) => void
   onPersonsChange: (v: number) => void
   onActivePersonChange: (v: number) => void
-  onOpenConfirm: () => void
+  onChargeAndPrint: () => void
+  onOpenMixtoModal: () => void
   onBonusClick?: (uid: string) => void
   onUnbonus?: (uid: string) => void
 }) {
   const total = items.reduce((s, i) => {
-    if (i.is_bonus) return s   // bonificados no suman
+    if (i.is_bonus) return s
     const modExtra = (i.modifiers ?? []).reduce((ms, m) => ms + m.price, 0)
     return s + (i.price + modExtra) * i.quantity
   }, 0)
   const bonusCount = items.filter((i) => i.is_bonus).length
   const isEmpty = items.length === 0
   const itemCount = items.reduce((s, i) => s + i.quantity, 0)
-
   const multiPerson = persons > 1
+
+  const handleChargeClick = () => {
+    if (paymentMethod === 'Mixto') {
+      onOpenMixtoModal()
+    } else {
+      onChargeAndPrint()
+    }
+  }
+
+  // Mesa chips 1-20
+  const TABLE_CHIPS = Array.from({ length: 20 }, (_, i) => String(i + 1))
 
   return (
     <div className="flex flex-col h-full bg-white" style={{ minHeight: 0 }}>
@@ -2500,16 +2640,96 @@ function TicketPanel({
         )}
       </div>
 
-      {/* Dining option — compact select */}
-      <div className="px-3 pt-2.5 pb-1.5 shrink-0 border-b border-gray-100">
-        <select
-          value={diningOption}
-          onChange={(e) => onDiningChange(e.target.value as DiningOption)}
-          className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm font-semibold text-gray-900 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-teal-400 cursor-pointer"
-        >
-          <option value="Comer dentro">🪑 Comer dentro</option>
-          <option value="Para llevar">🛍️ Para llevar</option>
-        </select>
+      {/* ── Configuración del pedido (tipo Loyverse) ── */}
+      <div className="px-3 pt-2.5 pb-2 shrink-0 border-b border-gray-100 flex flex-col gap-2">
+
+        {/* Toggle Para llevar / Comer aquí */}
+        <div className="grid grid-cols-2 gap-1 bg-gray-100 rounded-xl p-1">
+          {(['Comer dentro', 'Para llevar'] as DiningOption[]).map((opt) => (
+            <button
+              key={opt}
+              onClick={() => onDiningChange(opt)}
+              className={`py-2 rounded-lg font-bold text-xs transition-all active:scale-95 ${
+                diningOption === opt
+                  ? opt === 'Comer dentro' ? 'bg-teal-600 text-white shadow-sm' : 'bg-orange-500 text-white shadow-sm'
+                  : 'text-gray-600 hover:bg-gray-200'
+              }`}
+            >
+              {opt === 'Comer dentro' ? '🪑 Comer aquí' : '🛍️ Para llevar'}
+            </button>
+          ))}
+        </div>
+
+        {/* Selector mesa (chips 1-20, solo Comer dentro) */}
+        {diningOption === 'Comer dentro' && (
+          <div>
+            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wide mb-1">Mesa</p>
+            <div
+              className="flex gap-1 overflow-x-auto pb-0.5"
+              style={{ scrollbarWidth: 'none' }}
+            >
+              {TABLE_CHIPS.map((n) => (
+                <button
+                  key={n}
+                  onClick={() => onTableChange(tableNumber === n ? '' : n)}
+                  className={`shrink-0 w-8 h-8 rounded-lg font-bold text-xs transition-all active:scale-90 ${
+                    tableNumber === n
+                      ? 'bg-teal-600 text-white shadow-sm'
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  }`}
+                >
+                  {n}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Método de pago */}
+        <div>
+          <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wide mb-1">Pago</p>
+          <div className="grid grid-cols-3 gap-1">
+            {(['Efectivo', 'Transferencia', 'Mixto'] as PaymentMethod[]).map((pm) => (
+              <button
+                key={pm}
+                onClick={() => onPaymentChange(pm)}
+                className={`py-2.5 rounded-xl font-bold text-xs transition-all active:scale-95 ${
+                  paymentMethod === pm
+                    ? pm === 'Efectivo'
+                      ? 'bg-green-500 text-white shadow-sm'
+                      : pm === 'Transferencia'
+                        ? 'bg-blue-500 text-white shadow-sm'
+                        : 'bg-purple-500 text-white shadow-sm'
+                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                }`}
+              >
+                {pm === 'Efectivo' ? '💵 Efectivo' : pm === 'Transferencia' ? '📲 Transfer' : '💰 Mixto'}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Nota rápida */}
+        <div>
+          <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wide mb-1">Nota del pedido</p>
+          <input
+            type="text"
+            value={orderNotes}
+            onChange={(e) => onNotesChange(e.target.value)}
+            placeholder="Ej: sin picante, alergia..."
+            className="w-full rounded-xl border border-gray-200 px-3 py-2 text-xs font-semibold text-gray-900 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-teal-400"
+          />
+        </div>
+
+        {/* Cliente opcional */}
+        <div>
+          <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wide mb-1">Cliente (opcional)</p>
+          <CustomerCombobox
+            value={customerName}
+            onChange={onCustomerChange}
+            customers={customers}
+          />
+        </div>
       </div>
 
       {/* Persons selector */}
@@ -2623,22 +2843,34 @@ function TicketPanel({
 
       {/* Bottom fixed bar */}
       <div className="px-3 pb-3 pt-3 border-t border-gray-200 shrink-0 bg-white">
-        <div className="flex items-center justify-between mb-3 px-1">
+        <div className="flex items-center justify-between mb-2 px-1">
           <span className="text-gray-500 text-sm font-semibold">Total</span>
           <span className="text-gray-900 font-black text-2xl tabular-nums">{formatARS(total)}</span>
         </div>
+        {/* Primary: COBRAR E IMPRIMIR (directo, sin modal) */}
         <button
-          onClick={onOpenConfirm}
-          disabled={isEmpty}
-          className={`w-full py-4 rounded-2xl font-black text-lg tracking-wide transition-all active:scale-95 shadow-md ${
-            isEmpty
+          onClick={handleChargeClick}
+          disabled={isEmpty || submitting}
+          className={`w-full py-4 rounded-2xl font-black text-base tracking-wide transition-all active:scale-95 shadow-md ${
+            isEmpty || submitting
               ? 'bg-gray-300 text-gray-400 cursor-not-allowed'
-              : 'bg-green-500 hover:bg-green-600 text-white cursor-pointer'
+              : 'bg-green-600 hover:bg-green-700 text-white cursor-pointer'
           }`}
           style={{ minHeight: 56 }}
+          aria-label="Cobrar e imprimir ticket"
         >
-          ENVIAR PEDIDO
+          {submitting ? 'Procesando...' : '🖨️ COBRAR E IMPRIMIR'}
         </button>
+        {/* Secondary: Opciones avanzadas */}
+        {!isEmpty && (
+          <button
+            onClick={onOpenMixtoModal}
+            disabled={submitting}
+            className="w-full mt-1.5 py-2 rounded-xl font-semibold text-xs text-gray-400 hover:text-gray-600 hover:bg-gray-50 transition-all active:scale-95"
+          >
+            ··· Opciones avanzadas
+          </button>
+        )}
       </div>
     </div>
   )
@@ -3248,6 +3480,7 @@ export default function POSPage() {
   const [toast, setToast] = useState<string | null>(null)
   const [showPrintBtn, setShowPrintBtn] = useState(false)
   const [showConfirmModal, setShowConfirmModal] = useState(false)
+  const [showMixtoModal, setShowMixtoModal] = useState(false)
   const [showCashModal, setShowCashModal] = useState(false)
   const [cashModalPrefill, setCashModalPrefill] = useState<PrefillEgreso | undefined>(undefined)
 
@@ -3726,20 +3959,28 @@ export default function POSPage() {
       setTransferAmount('')
       setTicketOpen(false)
       setShowConfirmModal(false)
+      setShowMixtoModal(false)
       setPersons(1)
       setActivePerson(1)
-      setToast('Pedido enviado a cocina')
+      setToast('Cobro registrado · Imprimiendo...')
 
-      // Print ticket via popup window
-      void printTicketPopup(snapshot, ticketCfg, printServerUrl, () => {
-        setToast('Ticket impreso')
-        setShowPrintBtn(false)
-      })
-      // Open cash drawer for cash or mixed payments
-      if (printServerUrl && (paymentMethod === 'Efectivo' || paymentMethod === 'Mixto')) {
-        void tryOpenDrawer(printServerUrl)
+      // Print ticket directly (print-server + fallback)
+      const ticketText = buildTicketText(snapshot, ticketCfg)
+      let printed = false
+      if (printServerUrl) {
+        printed = await tryPrintServer(ticketText, printServerUrl)
+        if (printed) {
+          // Open cash drawer for cash or mixed
+          if (paymentMethod === 'Efectivo' || paymentMethod === 'Mixto') {
+            void tryOpenDrawer(printServerUrl)
+          }
+          setToast('Pedido enviado · Ticket impreso')
+        }
       }
-      setShowPrintBtn(true)
+      if (!printed) {
+        triggerPrintFallback(ticketText, ticketLogo, ticketCfg)
+      }
+      setShowPrintBtn(false)
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Error al enviar pedido'
       setToast(`Error: ${msg}`)
@@ -4087,15 +4328,30 @@ export default function POSPage() {
             <TicketPanel
               items={ticketItems}
               diningOption={diningOption}
+              tableNumber={tableNumber}
+              paymentMethod={paymentMethod}
+              cashAmount={cashAmount}
+              transferAmount={transferAmount}
+              customerName={customerName}
+              orderNotes={orderNotes}
+              customers={customers}
               persons={persons}
               activePerson={activePerson}
+              submitting={submitting}
               onUpdateQty={handleUpdateQty}
               onRemove={handleRemove}
               onUpdateNote={handleUpdateNote}
               onDiningChange={setDiningOption}
+              onTableChange={setTableNumber}
+              onPaymentChange={setPaymentMethod}
+              onCashAmountChange={setCashAmount}
+              onTransferAmountChange={setTransferAmount}
+              onCustomerChange={setCustomerName}
+              onNotesChange={setOrderNotes}
               onPersonsChange={setPersons}
               onActivePersonChange={setActivePerson}
-              onOpenConfirm={() => setShowConfirmModal(true)}
+              onChargeAndPrint={handleSubmit}
+              onOpenMixtoModal={() => setShowMixtoModal(true)}
               onBonusClick={handleBonusClick}
               onUnbonus={handleUnbonus}
             />
@@ -4123,7 +4379,7 @@ export default function POSPage() {
         />
       )}
 
-      {/* ── Confirm Modal ── */}
+      {/* ── Confirm Modal (Opciones avanzadas) ── */}
       {showConfirmModal && (
         <ConfirmModal
           diningOption={diningOption}
@@ -4144,6 +4400,24 @@ export default function POSPage() {
           onNotesChange={setOrderNotes}
           onCancel={() => setShowConfirmModal(false)}
           onConfirm={handleSubmit}
+        />
+      )}
+
+      {/* ── Mixto Modal ── */}
+      {showMixtoModal && (
+        <MixtoModal
+          total={ticketItems.reduce((s, i) => {
+            if (i.is_bonus) return s
+            const modExtra = (i.modifiers ?? []).reduce((ms, m) => ms + m.price, 0)
+            return s + (i.price + modExtra) * i.quantity
+          }, 0)}
+          cashAmount={cashAmount}
+          transferAmount={transferAmount}
+          onCashChange={setCashAmount}
+          onTransferChange={setTransferAmount}
+          onConfirm={handleSubmit}
+          onCancel={() => setShowMixtoModal(false)}
+          submitting={submitting}
         />
       )}
 
@@ -4330,35 +4604,6 @@ export default function POSPage() {
       {/* ── Toast ── */}
       {toast && (
         <Toast message={toast} onDone={() => setToast(null)} />
-      )}
-
-      {/* ── PRINT BUTTON (shown after order sent) ── */}
-      {showPrintBtn && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-          <div className="bg-white rounded-2xl p-8 flex flex-col items-center gap-4 shadow-2xl">
-            <p className="text-lg font-bold text-green-600">✅ Pedido enviado</p>
-            <button
-              onClick={() => {
-                const ticket = (window as any).__pendingTicket
-                if (ticket) {
-                  void triggerPrint(ticket, ticketLogo, ticketCfg, printServerUrl, () => {
-                    setToast('Ticket impreso')
-                  })
-                }
-                setShowPrintBtn(false)
-              }}
-              className="px-8 py-4 bg-green-500 text-white text-2xl font-bold rounded-xl shadow-lg active:scale-95"
-            >
-              🖨️ IMPRIMIR TICKET
-            </button>
-            <button
-              onClick={() => setShowPrintBtn(false)}
-              className="px-6 py-2 text-gray-500 text-base underline"
-            >
-              Omitir
-            </button>
-          </div>
-        </div>
       )}
 
       {/* ── Floating ticket button (mobile fallback, shown when panel closed and has items) ── */}
