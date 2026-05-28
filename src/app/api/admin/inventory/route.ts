@@ -289,6 +289,15 @@ export async function PATCH(request: NextRequest) {
       else if (m.type === 'adjustment') recalcStock = Number(m.quantity)
     }
 
+    // Actualizar price_per_unit en ingredients si hay total_cost y quantity
+    if (total_cost && Number(quantity) > 0) {
+      const newPricePerUnit = Number(total_cost) / Number(quantity)
+      await admin
+        .from('ingredients')
+        .update({ price_per_unit: newPricePerUnit })
+        .eq('id', mov.ingredient_id)
+    }
+
     // Actualizar inventory con el stock recalculado
     const { data: invRow } = await admin
       .from('inventory')
