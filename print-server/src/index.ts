@@ -111,6 +111,12 @@ const MAX_LOGO_WIDTH_DOTS = 384
  * Download an image from a URL and return raw bytes.
  */
 function downloadImage(url: string): Promise<Buffer> {
+  // Handle data URIs (base64)
+  if (url.startsWith('data:')) {
+    const match = url.match(/^data:[^;]+;base64,(.+)$/)
+    if (match) return Promise.resolve(Buffer.from(match[1], 'base64'))
+    return Promise.reject(new Error('Invalid data URI'))
+  }
   return new Promise((resolve, reject) => {
     const parsedUrl = new URL(url)
     const isHttps = parsedUrl.protocol === 'https:'
@@ -488,20 +494,20 @@ async function handleTestPrint(res: http.ServerResponse) {
   const ticket = [
     '[LOGO]',
     `[CENTER]Restaurante[/CENTER]`,
-    `[SEP:-:${W}]`,
+    `[SEP:.:${W}]`,
     `Prueba impresion directa`,
     `Fecha: ${now}`,
     `Impresora: 3nStar 80mm (${W} chars)`,
-    `[SEP:-:${W}]`,
+    `[SEP:.:${W}]`,
     `1x Ticket de prueba`,
     `[RIGHT]$0[/RIGHT]`,
-    `[SEP:-:${W}]`,
+    `[SEP:.:${W}]`,
     `[BOLD]TOTAL: $0[/BOLD]`,
-    `[SEP:-:${W}]`,
+    `[SEP:.:${W}]`,
     `[CENTER]Servidor local OK[/CENTER]`,
   ].join('\n')
 
-  const buffer = await buildEscPosBuffer(ticket, true, 3, {
+  const buffer = await buildEscPosBuffer(ticket, true, 6, {
     showLogo: false,   // logo handled inline via [LOGO] marker
     headerBold: true,
     width: W,
