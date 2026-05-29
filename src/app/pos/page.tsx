@@ -262,16 +262,17 @@ async function tryPrintServer(
           autoCut: cfg.autoCut,
           showLogo: cfg.showLogo,
           logoText: cfg.header1 ?? 'SUMAK',
-          logoUrl: logoUrl ?? undefined,
+          logoUrl: (cfg.showLogo && logoUrl) ? logoUrl : undefined,
           sectionSpacing: cfg.sectionSpacing,
           separatorChar: cfg.separator,
           separatorDouble: cfg.separatorDouble,
         }
       : undefined
+    const feedLinesBody = cfg?.feedLinesBeforeCut ?? 3
     const res = await fetch(`${printServerUrl}/print`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text: ticketText, cut: true, feedLines: cfg?.feedLinesBeforeCut ?? 8, config: printConfig }),
+      body: JSON.stringify({ text: ticketText, cut: true, feedLines: feedLinesBody, config: printConfig }),
       signal: controller.signal,
     })
     clearTimeout(timeoutId)
@@ -3435,22 +3436,42 @@ export default function POSPage() {
     if (!languagesEnabled && locale !== 'es') setLocale('es')
   }, [languagesEnabled, locale, setLocale])
 
-  // Logo (fetched once on load)
-  const [ticketLogo, setTicketLogo] = useState<string | null>(null)
-  useEffect(() => {
-    fetch('/api/admin/settings?key=ticket_logo')
-      .then((r) => r.ok ? r.json() : null)
-      .then((data) => { if (Array.isArray(data) && data[0]?.value) setTicketLogo(data[0].value) })
-      .catch(() => {})
-  }, [])
+  // Logo and ticket config are NOT cached at mount — fetched fresh on each print (see fetchFreshPrintConfig)
+  // We keep these refs to avoid passing stale closures into handleSubmit
+  const ticketCfgRef = useRef<TicketConfig>(DEFAULT_TICKET_CONFIG)
+  const ticketLogoRef = useRef<string | null>(null)
 
-  // Ticket config (fetched once on load)
-  const [ticketCfg, setTicketCfg] = useState<TicketConfig>(DEFAULT_TICKET_CONFIG)
-  useEffect(() => {
-    fetch('/api/settings/ticket-config')
-      .then((r) => r.ok ? r.json() : null)
-      .then((data) => { if (data) setTicketCfg({ ...DEFAULT_TICKET_CONFIG, ...data }) })
-      .catch(() => {})
+  /**
+   * Fetch fresh ticket config + logo from DB right before printing.
+   * Returns the latest cfg and logoUrl so each print uses current admin settings.
+   */
+  const fetchFreshPrintConfig = useCallback(async (): Promise<{ cfg: TicketConfig; logoUrl: string | null }> => {
+    try {
+      const [cfgRes, logoRes] = await Promise.all([
+        fetch('/api/admin/settings?key=ticket_config'),
+        fetch('/api/admin/settings?key=ticket_logo'),
+      ])
+      const cfgData = cfgRes.ok ? await cfgRes.json() : null
+      const logoData = logoRes.ok ? await logoRes.json() : null
+
+      let cfg: TicketConfig = DEFAULT_TICKET_CONFIG
+      if (Array.isArray(cfgData) && cfgData[0]?.value) {
+        try {
+          const parsed = typeof cfgData[0].value === 'string' ? JSON.parse(cfgData[0].value) : cfgData[0].value
+          cfg = { ...DEFAULT_TICKET_CONFIG, ...parsed }
+        } catch { /* use default */ }
+      }
+
+      const logoUrl: string | null = (Array.isArray(logoData) && logoData[0]?.value) ? logoData[0].value : null
+
+      // Update refs so they are available in other callbacks
+      ticketCfgRef.current = cfg
+      ticketLogoRef.current = logoUrl
+
+      return { cfg, logoUrl }
+    } catch {
+      return { cfg: ticketCfgRef.current, logoUrl: ticketLogoRef.current }
+    }
   }, [])
 
   // Print server URL (fetched once on load)
@@ -4015,10 +4036,12 @@ export default function POSPage() {
       setToast(toastMsg)
 
       // Print ticket directly (print-server + fallback)
-      const ticketText = buildTicketText(snapshot, ticketCfg, !!printServerUrl)
+      // Fetch fresh config so admin changes are applied immediately — no cache
+      const { cfg: freshCfg, logoUrl: freshLogoUrl } = await fetchFreshPrintConfig()
+      const ticketText = buildTicketText(snapshot, freshCfg, !!printServerUrl)
       let printed = false
       if (printServerUrl) {
-        printed = await tryPrintServer(ticketText, printServerUrl, ticketCfg, ticketLogo)
+        printed = await tryPrintServer(ticketText, printServerUrl, freshCfg, freshLogoUrl)
         if (printed) {
           // Open cash drawer for cash or mixed
           if (paymentMethod === 'Efectivo' || paymentMethod === 'Mixto') {
@@ -4028,7 +4051,7 @@ export default function POSPage() {
         }
       }
       if (!printed) {
-        triggerPrintFallback(ticketText, ticketLogo, ticketCfg)
+        triggerPrintFallback(ticketText, freshLogoUrl, freshCfg)
       }
       setShowPrintBtn(false)
     } catch (err) {
@@ -4037,7 +4060,7 @@ export default function POSPage() {
     } finally {
       setSubmitting(false)
     }
-  }, [ticketItems, diningOption, tableNumber, paymentMethod, cashAmount, transferAmount, customerName, orderNotes, persons, ticketCfg, printServerUrl])
+  }, [ticketItems, diningOption, tableNumber, paymentMethod, cashAmount, transferAmount, customerName, orderNotes, persons, fetchFreshPrintConfig, printServerUrl])
 
   // Direct submit: goes straight if no modal needed; opens mixed modal for Mixto
   const handleDirectSubmit = useCallback(() => {

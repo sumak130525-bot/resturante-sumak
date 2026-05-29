@@ -249,7 +249,7 @@ async function buildEscPosBuffer(
   logoBitmapBuffer?: Buffer | null,
 ): Promise<Buffer> {
   const paperWidth  = cfg.width ?? PAPER_WIDTH_CHARS
-  const safeFeedLines = Math.max(0, Math.min(8, feedLines))
+  const safeFeedLines = Math.max(0, Math.min(20, feedLines))
   const normalized  = normalizeText(text)
   const chunks: Buffer[] = []
 
@@ -478,7 +478,9 @@ async function handlePrint(req: http.IncomingMessage, res: http.ServerResponse) 
 
   const cfg = payload.config ?? {}
   const cut = cfg.autoCut !== undefined ? cfg.autoCut : payload.cut !== false
-  const feedLines = cfg.feedLinesBeforeCut ?? payload.feedLines ?? 12
+  // Use EXACTLY the value from config (set by POS from DB). Fall back to payload.feedLines if config omits it.
+  // No server-side default override — the POS is the source of truth for feedLinesBeforeCut.
+  const feedLines = cfg.feedLinesBeforeCut !== undefined ? cfg.feedLinesBeforeCut : (payload.feedLines ?? 3)
 
   // Pre-download logo bitmap (may be null if not configured or error)
   const logoBitmap = await prepareLogoBitmap(cfg)
@@ -514,7 +516,7 @@ async function handleTestPrint(res: http.ServerResponse) {
     `[CENTER]Servidor local OK[/CENTER]`,
   ].join('\n')
 
-  const buffer = await buildEscPosBuffer(ticket, true, 6, {
+  const buffer = await buildEscPosBuffer(ticket, true, 12, {
     showLogo: false,   // logo handled inline via [LOGO] marker
     headerBold: true,
     width: W,
