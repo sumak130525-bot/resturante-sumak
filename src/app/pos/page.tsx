@@ -216,7 +216,7 @@ function buildTicketText(
   const footer1Raw = cfg.footer1 ? alignText(cfg.footer1, footerAlign) : ''
   const footer2Raw = cfg.footer2 ? alignText(cfg.footer2, footerAlign) : ''
 
-  // Logo line for print-server (replaces header1 when showLogo is true)
+  // Logo line for print-server — shows image, then header texts below
   const logoLine = (forPrintServer && (cfg.showLogo ?? true)) ? '[LOGO]' : ''
 
   return [
@@ -4713,3 +4713,5 @@ export default function POSPage() {
     </div>
   )
 }
+/ /   r e d e p l o y   2 0 2 6 - 0 5 - 2 9   1 2 : 4 6  
+ 
