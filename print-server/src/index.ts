@@ -464,6 +464,13 @@ async function handlePrint(req: http.IncomingMessage, res: http.ServerResponse) 
   const body = await readBody(req)
   const payload = JSON.parse(body || '{}') as PrintPayload
 
+  // DEBUG: log what POS sends
+  console.log('=== PRINT REQUEST ===')
+  console.log('feedLines:', payload.feedLines, '| config.feedLinesBeforeCut:', payload.config?.feedLinesBeforeCut)
+  console.log('config:', JSON.stringify(payload.config || {}, null, 2))
+  console.log('text (first 200):', payload.text?.substring(0, 200))
+  console.log('=== END ===')
+
   if (!payload.text || typeof payload.text !== 'string') {
     sendJson(res, 400, { ok: false, error: 'Falta el campo text' })
     return

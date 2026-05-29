@@ -1,0 +1,53 @@
+Servidor de impresion Sumak escuchando en http://0.0.0.0:4000
+Impresora configurada en 192.168.100.55:9100
+Ancho papel: 48 chars (80mm Font A 12x24)
+=== PRINT REQUEST ===
+feedLines: 4 | config.feedLinesBeforeCut: 3
+config: {
+  "headerAlign": "center",
+  "footerAlign": "center",
+  "headerBold": true,
+  "totalBold": true,
+  "width": 32,
+  "feedLinesBeforeCut": 3,
+  "autoCut": true,
+  "showLogo": true,
+  "logoText": "SUMAK"
+}
+text (first 200): [LOGO]
+[BOLD][CENTER]Restaurante[/CENTER][/BOLD]
+[SEP:.:32]
+28/05/26  23:17
+Pedido: P-943
+Modalidad: Comer dentro
+[SEP:.:32]
+1x ★ Vaso de jugo
+                          GRATIS
+  (Combo almuerzo)
+[SEP:
+=== END ===
+=== PRINT REQUEST ===
+feedLines: 4 | config.feedLinesBeforeCut: 3
+config: {
+  "headerAlign": "center",
+  "footerAlign": "center",
+  "headerBold": true,
+  "totalBold": true,
+  "width": 32,
+  "feedLinesBeforeCut": 3,
+  "autoCut": true,
+  "showLogo": true,
+  "logoText": "SUMAK"
+}
+text (first 200): [LOGO]
+[BOLD][CENTER]Restaurante[/CENTER][/BOLD]
+[SEP:.:32]
+28/05/26  23:18
+Pedido: P-681
+Modalidad: Comer dentro
+[SEP:.:32]
+1x ★ Vaso de jugo
+                          GRATIS
+  (Combo almuerzo)
+[SEP:
+=== END ===
