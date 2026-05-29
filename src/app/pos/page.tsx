@@ -271,7 +271,7 @@ async function tryPrintServer(
     const res = await fetch(`${printServerUrl}/print`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text: ticketText, cut: true, feedLines: cfg?.feedLinesBeforeCut ?? 6, config: printConfig }),
+      body: JSON.stringify({ text: ticketText, cut: true, feedLines: cfg?.feedLinesBeforeCut ?? 8, config: printConfig }),
       signal: controller.signal,
     })
     clearTimeout(timeoutId)
