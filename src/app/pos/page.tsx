@@ -4051,7 +4051,9 @@ export default function POSPage() {
         }
       }
       if (!printed) {
-        triggerPrintFallback(ticketText, freshLogoUrl, freshCfg)
+        // Regenerate text WITHOUT print-server markers for HTML fallback
+        const fallbackText = buildTicketText(snapshot, freshCfg, false)
+        triggerPrintFallback(fallbackText, freshLogoUrl, freshCfg)
       }
       setShowPrintBtn(false)
     } catch (err) {
