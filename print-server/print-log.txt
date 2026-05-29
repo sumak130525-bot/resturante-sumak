@@ -115,3 +115,131 @@ Prueba con logo
 [SEP:.:48]
 [CENTER]Gracias![/CENTER]
 === END ===
+=== PRINT REQUEST ===
+feedLines: 4 | config.feedLinesBeforeCut: 12
+config: {
+  "headerAlign": "center",
+  "footerAlign": "center",
+  "headerBold": true,
+  "totalBold": true,
+  "width": 48,
+  "feedLinesBeforeCut": 12,
+  "autoCut": true,
+  "showLogo": true,
+  "logoText": "SUMAK"
+}
+text (first 200): [LOGO]
+[BOLD][CENTER]Restaurante[/CENTER][/BOLD]
+[SEP:.:48]
+29/05/26  10:16
+Pedido: P-192
+Modalidad: Comer dentro
+[SEP:.:48]
+1x Cortado
+                                          $1.500
+
+
+2x Tortita Ra
+=== END ===
+=== PRINT REQUEST ===
+feedLines: 4 | config.feedLinesBeforeCut: 12
+config: {
+  "headerAlign": "center",
+  "footerAlign": "center",
+  "headerBold": true,
+  "totalBold": true,
+  "width": 48,
+  "feedLinesBeforeCut": 12,
+  "autoCut": true,
+  "showLogo": true,
+  "logoText": "SUMAK"
+}
+text (first 200): [LOGO]
+[BOLD][CENTER]Restaurante[/CENTER][/BOLD]
+[SEP:.:48]
+29/05/26  10:21
+Pedido: P-034
+Modalidad: Comer dentro
+[SEP:.:48]
+1x ★ Vaso de jugo
+                                          GRATIS
+  (Combo
+=== END ===
+=== PRINT REQUEST ===
+feedLines: 4 | config.feedLinesBeforeCut: 12
+config: {
+  "headerAlign": "center",
+  "footerAlign": "center",
+  "headerBold": true,
+  "totalBold": true,
+  "width": 48,
+  "feedLinesBeforeCut": 12,
+  "autoCut": true,
+  "showLogo": true,
+  "logoText": "SUMAK"
+}
+text (first 200): [LOGO]
+[BOLD][CENTER]Restaurante[/CENTER][/BOLD]
+[SEP:.:48]
+29/05/26  10:28
+Pedido: P-190
+Mesa: 1
+Modalidad: Comer dentro
+[SEP:.:48]
+1x Capuchino
+                                          $1.500
+
+
+1x 
+=== END ===
+=== PRINT REQUEST ===
+feedLines: 4 | config.feedLinesBeforeCut: 12
+config: {
+  "headerAlign": "center",
+  "footerAlign": "center",
+  "headerBold": true,
+  "totalBold": true,
+  "width": 48,
+  "feedLinesBeforeCut": 12,
+  "autoCut": true,
+  "showLogo": true,
+  "logoText": "SUMAK"
+}
+text (first 200): [LOGO]
+[BOLD][CENTER]Restaurante[/CENTER][/BOLD]
+[SEP:.:48]
+29/05/26  10:29
+Pedido: P-940
+Modalidad: Comer dentro
+[SEP:.:48]
+1x Lagrima
+                                          $1.500
+
+
+2x Tortita de
+=== END ===
+=== PRINT REQUEST ===
+feedLines: 4 | config.feedLinesBeforeCut: 12
+config: {
+  "headerAlign": "center",
+  "footerAlign": "center",
+  "headerBold": true,
+  "totalBold": true,
+  "width": 48,
+  "feedLinesBeforeCut": 12,
+  "autoCut": true,
+  "showLogo": true,
+  "logoText": "SUMAK"
+}
+text (first 200): [LOGO]
+[BOLD][CENTER]Restaurante[/CENTER][/BOLD]
+[SEP:.:48]
+29/05/26  10:35
+Pedido: P-524
+Mesa: 2
+Modalidad: Comer dentro
+[SEP:.:48]
+1x Sopa de Maní
+                                          $5.000
+[S
+=== END ===

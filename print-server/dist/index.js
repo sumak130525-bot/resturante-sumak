@@ -415,6 +415,17 @@ async function handlePrint(req, res) {
     // Use EXACTLY the value from config (set by POS from DB). Fall back to payload.feedLines if config omits it.
     // No server-side default override — the POS is the source of truth for feedLinesBeforeCut.
     const feedLines = cfg.feedLinesBeforeCut !== undefined ? cfg.feedLinesBeforeCut : (payload.feedLines ?? 3);
+    // If showLogo is true but logoUrl not provided, fetch it directly from the API
+    if (cfg.showLogo && !cfg.logoUrl) {
+        try {
+            const logoRes = await fetch('https://restaurante-sumak.vercel.app/api/admin/settings?key=ticket_logo');
+            const logoData = await logoRes.json();
+            if (Array.isArray(logoData) && logoData[0]?.value) {
+                cfg.logoUrl = logoData[0].value;
+            }
+        }
+        catch { /* ignore — print without logo */ }
+    }
     // Pre-download logo bitmap (may be null if not configured or error)
     const logoBitmap = await prepareLogoBitmap(cfg);
     const buffer = await buildEscPosBuffer(payload.text, cut, feedLines, cfg, logoBitmap);
