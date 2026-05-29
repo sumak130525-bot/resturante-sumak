@@ -3462,7 +3462,7 @@ export default function POSPage() {
         } catch { /* use default */ }
       }
 
-      const logoUrl: string | null = (Array.isArray(logoData) && logoData[0]?.value) ? logoData[0].value : null
+      const logoUrl: string | null = (Array.isArray(logoData) && logoData[0]?.value) ? String(logoData[0].value) : null
 
       // Update refs so they are available in other callbacks
       ticketCfgRef.current = cfg

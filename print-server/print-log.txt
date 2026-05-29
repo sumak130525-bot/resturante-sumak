@@ -2,81 +2,14 @@ Servidor de impresion Sumak escuchando en http://0.0.0.0:4000
 Impresora configurada en 192.168.100.55:9100
 Ancho papel: 48 chars (80mm Font A 12x24)
 === PRINT REQUEST ===
-feedLines: 4 | config.feedLinesBeforeCut: 3
-config: {
-  "headerAlign": "center",
-  "footerAlign": "center",
-  "headerBold": true,
-  "totalBold": true,
-  "width": 32,
-  "feedLinesBeforeCut": 3,
-  "autoCut": true,
-  "showLogo": true,
-  "logoText": "SUMAK"
-}
-text (first 200): [LOGO]
-[BOLD][CENTER]Restaurante[/CENTER][/BOLD]
-[SEP:.:32]
-28/05/26  23:17
-Pedido: P-943
-Modalidad: Comer dentro
-[SEP:.:32]
-1x ★ Vaso de jugo
-                          GRATIS
-  (Combo almuerzo)
-[SEP:
-=== END ===
-=== PRINT REQUEST ===
-feedLines: 4 | config.feedLinesBeforeCut: 3
-config: {
-  "headerAlign": "center",
-  "footerAlign": "center",
-  "headerBold": true,
-  "totalBold": true,
-  "width": 32,
-  "feedLinesBeforeCut": 3,
-  "autoCut": true,
-  "showLogo": true,
-  "logoText": "SUMAK"
-}
-text (first 200): [LOGO]
-[BOLD][CENTER]Restaurante[/CENTER][/BOLD]
-[SEP:.:32]
-28/05/26  23:18
-Pedido: P-681
-Modalidad: Comer dentro
-[SEP:.:32]
-1x ★ Vaso de jugo
-                          GRATIS
-  (Combo almuerzo)
-[SEP:
-=== END ===
-=== PRINT REQUEST ===
-feedLines: 4 | config.feedLinesBeforeCut: undefined
-config: {}
-text (first 200): CIERRE DE CAJA
----SEP---
-29/05/2026
-Turno: 08:20 - 07:34
----SEP---
-VENTAS
-Efectivo:     $423.500
-Transfer:     $147.000
-Mixto:        $6.500
-Total ventas: $577.000
----SEP---
-Ingresos:     $0
-Egresos: 
-=== END ===
-=== PRINT REQUEST ===
-feedLines: 4 | config.feedLinesBeforeCut: 8
+feedLines: 4 | config.feedLinesBeforeCut: 12
 config: {
   "headerAlign": "center",
   "footerAlign": "center",
   "headerBold": true,
   "totalBold": true,
   "width": 48,
-  "feedLinesBeforeCut": 8,
+  "feedLinesBeforeCut": 12,
   "autoCut": true,
   "showLogo": true,
   "logoText": "SUMAK"
@@ -84,8 +17,8 @@ config: {
 text (first 200): [LOGO]
 [BOLD][CENTER]Restaurante[/CENTER][/BOLD]
 [SEP:.:48]
-29/05/26  08:15
-Pedido: P-601
+29/05/26  09:48
+Pedido: P-065
 Modalidad: Comer dentro
 [SEP:.:48]
 1x ★ Vaso de jugo
@@ -108,11 +41,77 @@ config: {
 text (first 200): [LOGO]
 [BOLD][CENTER]Restaurante[/CENTER][/BOLD]
 [SEP:.:48]
-29/05/26  08:37
-Pedido: P-232
+29/05/26  09:53
+Pedido: P-950
 Modalidad: Comer dentro
 [SEP:.:48]
 1x ★ Vaso de jugo
                                           GRATIS
   (Combo
+=== END ===
+=== PRINT REQUEST ===
+feedLines: 4 | config.feedLinesBeforeCut: 12
+config: {
+  "headerAlign": "center",
+  "footerAlign": "center",
+  "headerBold": true,
+  "totalBold": true,
+  "width": 48,
+  "feedLinesBeforeCut": 12,
+  "autoCut": true,
+  "showLogo": true,
+  "logoText": "SUMAK"
+}
+text (first 200): [LOGO]
+[BOLD][CENTER]Restaurante[/CENTER][/BOLD]
+[SEP:.:48]
+29/05/26  09:54
+Pedido: P-898
+Modalidad: Comer dentro
+[SEP:.:48]
+1x Cerveza Quilmes 1lts
+                                          $5.000
+[S
+=== END ===
+=== PRINT REQUEST ===
+feedLines: 4 | config.feedLinesBeforeCut: 12
+config: {
+  "headerAlign": "center",
+  "footerAlign": "center",
+  "headerBold": true,
+  "totalBold": true,
+  "width": 48,
+  "feedLinesBeforeCut": 12,
+  "autoCut": true,
+  "showLogo": true,
+  "logoText": "SUMAK"
+}
+text (first 200): [LOGO]
+[BOLD][CENTER]Restaurante[/CENTER][/BOLD]
+[SEP:.:48]
+29/05/26  09:57
+Pedido: P-111
+Modalidad: Comer dentro
+[SEP:.:48]
+1x Coca de 500 ml
+                                          $2.500
+[SEP:.:4
+=== END ===
+=== PRINT REQUEST ===
+feedLines: 12 | config.feedLinesBeforeCut: 12
+config: {
+  "showLogo": true,
+  "logoUrl": "data:image/gif;base64,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",
+  "logoText": "SUMAK",
+  "width": 48,
+  "feedLinesBeforeCut": 12
+}
+text (first 200): [LOGO]
+[CENTER]Restaurante[/CENTER]
+[SEP:.:48]
+Prueba con logo
+[SEP:.:48]
+[BOLD]TOTAL: [/BOLD]
+[SEP:.:48]
+[CENTER]Gracias![/CENTER]
 === END ===
