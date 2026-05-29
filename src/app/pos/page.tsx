@@ -1155,6 +1155,10 @@ function CloseShiftModal({
 
       // Reset state FIRST, then print (in case print navigates away)
       onClosed()
+      // Open cash drawer for counting
+      if (printServerUrl) {
+        fetch(`${printServerUrl}/open-drawer`, { method: 'POST' }).catch(() => {})
+      }
       void triggerShiftPrint(data.summary, printServerUrl)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error')

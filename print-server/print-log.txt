@@ -51,3 +51,68 @@ Modalidad: Comer dentro
   (Combo almuerzo)
 [SEP:
 === END ===
+=== PRINT REQUEST ===
+feedLines: 4 | config.feedLinesBeforeCut: undefined
+config: {}
+text (first 200): CIERRE DE CAJA
+---SEP---
+29/05/2026
+Turno: 08:20 - 07:34
+---SEP---
+VENTAS
+Efectivo:     $423.500
+Transfer:     $147.000
+Mixto:        $6.500
+Total ventas: $577.000
+---SEP---
+Ingresos:     $0
+Egresos: 
+=== END ===
+=== PRINT REQUEST ===
+feedLines: 4 | config.feedLinesBeforeCut: 8
+config: {
+  "headerAlign": "center",
+  "footerAlign": "center",
+  "headerBold": true,
+  "totalBold": true,
+  "width": 48,
+  "feedLinesBeforeCut": 8,
+  "autoCut": true,
+  "showLogo": true,
+  "logoText": "SUMAK"
+}
+text (first 200): [LOGO]
+[BOLD][CENTER]Restaurante[/CENTER][/BOLD]
+[SEP:.:48]
+29/05/26  08:15
+Pedido: P-601
+Modalidad: Comer dentro
+[SEP:.:48]
+1x ★ Vaso de jugo
+                                          GRATIS
+  (Combo
+=== END ===
+=== PRINT REQUEST ===
+feedLines: 4 | config.feedLinesBeforeCut: 12
+config: {
+  "headerAlign": "center",
+  "footerAlign": "center",
+  "headerBold": true,
+  "totalBold": true,
+  "width": 48,
+  "feedLinesBeforeCut": 12,
+  "autoCut": true,
+  "showLogo": true,
+  "logoText": "SUMAK"
+}
+text (first 200): [LOGO]
+[BOLD][CENTER]Restaurante[/CENTER][/BOLD]
+[SEP:.:48]
+29/05/26  08:37
+Pedido: P-232
+Modalidad: Comer dentro
+[SEP:.:48]
+1x ★ Vaso de jugo
+                                          GRATIS
+  (Combo
+=== END ===

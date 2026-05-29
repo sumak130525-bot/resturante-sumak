@@ -478,7 +478,7 @@ async function handlePrint(req: http.IncomingMessage, res: http.ServerResponse) 
 
   const cfg = payload.config ?? {}
   const cut = cfg.autoCut !== undefined ? cfg.autoCut : payload.cut !== false
-  const feedLines = cfg.feedLinesBeforeCut ?? payload.feedLines ?? 3
+  const feedLines = cfg.feedLinesBeforeCut ?? payload.feedLines ?? 12
 
   // Pre-download logo bitmap (may be null if not configured or error)
   const logoBitmap = await prepareLogoBitmap(cfg)
