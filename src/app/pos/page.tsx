@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import { useState, useCallback, useEffect, useRef } from 'react'
 import { useMenuRealtime } from '@/hooks/useMenuRealtime'
@@ -4713,5 +4713,3 @@ export default function POSPage() {
     </div>
   )
 }
-/ /   r e d e p l o y   2 0 2 6 - 0 5 - 2 9   1 2 : 4 6  
- 
