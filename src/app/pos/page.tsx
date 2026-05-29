@@ -68,24 +68,34 @@ type PrintData = {
 function escCenter(s: string) { return `[CENTER]${s}[/CENTER]` }
 function escBold(s: string)   { return `[BOLD]${s}[/BOLD]` }
 
+// 3nStar RPT008 80mm printer uses 48 chars per line (Font A 12x24)
+const ESCPOS_PAPER_WIDTH = 48
+
 function buildTicketText(
   data: PrintData,
   cfg: TicketConfig = DEFAULT_TICKET_CONFIG,
   forPrintServer = false,
 ): string {
-  const W = cfg.width
+  // For ESC/POS we always use 48; for HTML fallback we use the config width
+  const W = forPrintServer ? ESCPOS_PAPER_WIDTH : cfg.width
   const marginLeft = cfg.marginLeft ?? 0
   const marginRight = cfg.marginRight ?? 0
   const leftPad = ' '.repeat(marginLeft)
 
-  // Separator line for print-server: [SEP:<char>:W] or plain dashes for HTML fallback
+  // Separator line for print-server: [SEP:<char>:<width>] uses full 48-char width
   const sepChar = cfg.separator ?? '-'
-  const SEP_ESC = cfg.separatorDouble
-    ? `[SEP:${sepChar}:${W}]\n[SEP:${sepChar}:${W}]`
-    : `[SEP:${sepChar}:${W}]`
+  // For ESC/POS always 48; separatorDouble handled in print-server via config
+  const SEP_ESC = `[SEP:${sepChar}:${ESCPOS_PAPER_WIDTH}]`
   // Separator markers — rendered as full-width HTML elements in ticket/page.tsx
   const SEP_HTML = '---SEP---'
   const LINES = forPrintServer ? SEP_ESC : SEP_HTML
+
+  // Section spacing: blank lines between header/items/footer sections
+  // For ESC/POS: use [BLANK:n] marker; n = sectionSpacing / 2 (reasonable mapping)
+  const sectionBlankLines = Math.max(0, Math.floor((cfg.sectionSpacing ?? 4) / 4))
+  const SECTION_GAP = forPrintServer && sectionBlankLines > 0
+    ? `[BLANK:${sectionBlankLines}]`
+    : ''
 
   const total = formatTicketMoney(data.total)
 
@@ -213,15 +223,19 @@ function buildTicketText(
     logoLine,
     logoLine ? '' : applyHeaderStyle(header1Raw),   // skip header1 if logo shown
     applyHeaderStyle(header2Raw),
+    SECTION_GAP,
     LINES,
     ...infoLines,
     LINES,
+    SECTION_GAP,
     ...itemSection,
     LINES,
+    SECTION_GAP,
     totalLine,
     payLine,
     clienteLine,
     LINES,
+    SECTION_GAP,
     footer1Raw,
     footer2Raw,
     feedLines,
@@ -232,6 +246,7 @@ async function tryPrintServer(
   ticketText: string,
   printServerUrl: string,
   cfg?: TicketConfig,
+  logoUrl?: string | null,
 ): Promise<boolean> {
   try {
     const controller = new AbortController()
@@ -242,11 +257,15 @@ async function tryPrintServer(
           footerAlign: cfg.footerAlign,
           headerBold: cfg.headerBold,
           totalBold: cfg.totalBold,
-          width: cfg.width,
+          width: ESCPOS_PAPER_WIDTH,   // always 48 for 3nStar RPT008 80mm
           feedLinesBeforeCut: cfg.feedLinesBeforeCut,
           autoCut: cfg.autoCut,
           showLogo: cfg.showLogo,
           logoText: cfg.header1 ?? 'SUMAK',
+          logoUrl: logoUrl ?? undefined,
+          sectionSpacing: cfg.sectionSpacing,
+          separatorChar: cfg.separator,
+          separatorDouble: cfg.separatorDouble,
         }
       : undefined
     const res = await fetch(`${printServerUrl}/print`, {
@@ -309,7 +328,7 @@ async function triggerPrint(
   onPrinted?: () => void,
 ): Promise<void> {
   if (printServerUrl) {
-    const ok = await tryPrintServer(ticketText, printServerUrl, cfg)
+    const ok = await tryPrintServer(ticketText, printServerUrl, cfg, logoUrl)
     if (ok) {
       onPrinted?.()
       return
@@ -323,12 +342,13 @@ async function printTicketPopup(
   cfg: TicketConfig = DEFAULT_TICKET_CONFIG,
   printServerUrl?: string | null,
   onPrinted?: () => void,
+  logoUrl?: string | null,
 ): Promise<void> {
   const ticketText = buildTicketText(data, cfg, !!printServerUrl)
   // Save ticket text globally so the print button can use it
   ;(window as any).__pendingTicket = ticketText
   if (printServerUrl) {
-    const ok = await tryPrintServer(ticketText, printServerUrl, cfg)
+    const ok = await tryPrintServer(ticketText, printServerUrl, cfg, logoUrl)
     if (ok) {
       onPrinted?.()
     }
@@ -3994,7 +4014,7 @@ export default function POSPage() {
       const ticketText = buildTicketText(snapshot, ticketCfg, !!printServerUrl)
       let printed = false
       if (printServerUrl) {
-        printed = await tryPrintServer(ticketText, printServerUrl, ticketCfg)
+        printed = await tryPrintServer(ticketText, printServerUrl, ticketCfg, ticketLogo)
         if (printed) {
           // Open cash drawer for cash or mixed
           if (paymentMethod === 'Efectivo' || paymentMethod === 'Mixto') {
