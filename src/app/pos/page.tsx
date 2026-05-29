@@ -221,7 +221,7 @@ function buildTicketText(
 
   return [
     logoLine,
-    logoLine ? '' : applyHeaderStyle(header1Raw),   // skip header1 if logo shown
+    applyHeaderStyle(header1Raw),
     applyHeaderStyle(header2Raw),
     SECTION_GAP,
     LINES,
