@@ -352,6 +352,13 @@ async function buildEscPosBuffer(
               // Print bitmap logo
               chunks.push(logoBitmapBuffer)
               chunks.push(Buffer.from('\n', 'latin1'))
+              // Also print logoText as text below the image
+              const logoText = cfg.logoText ?? 'SUMAK'
+              if (logoText) {
+                if (cfg.headerBold ?? true) setBold(true)
+                chunks.push(Buffer.from(logoText + '\n', 'latin1'))
+                setBold(false)
+              }
             } else {
               // Text fallback: print logoText in bold normal size (centered)
               const logoText = cfg.logoText ?? 'SUMAK'
