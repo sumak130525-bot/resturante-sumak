@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next'
 import Script from 'next/script'
 import './globals.css'
 import { Providers } from '@/components/Providers'
+import { RegisterSW } from '@/components/RegisterSW'
 
 const OG_IMAGE = 'https://restaurante-sumak.vercel.app/logo-sumak-dark.jpg'
 const SITE_URL = 'https://restaurante-sumak.vercel.app'
@@ -81,6 +82,9 @@ export default function RootLayout({
   return (
     <html lang="es">
       <head>
+        <link rel="manifest" href="/manifest.json" />
+        <meta name="theme-color" content="#16a34a" />
+        <link rel="apple-touch-icon" href="/icon-192.png" />
         {/* Preconnect for faster font loading */}
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
@@ -95,7 +99,10 @@ export default function RootLayout({
         />
       </head>
       <body className="font-sans antialiased bg-sumak-cream text-sumak-brown selection:bg-sumak-gold selection:text-sumak-brown">
-        <Providers>{children}</Providers>
+        <Providers>
+          <RegisterSW />
+          {children}
+        </Providers>
       </body>
     </html>
   )

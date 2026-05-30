@@ -1,53 +1,27 @@
-// Service Worker for Push Notifications - Sumak Restaurante
+const CACHE_NAME = 'sumak-v1'
 
-self.addEventListener('push', function (event) {
-  let data = {}
-  if (event.data) {
-    try {
-      data = event.data.json()
-    } catch (e) {
-      data = { title: 'Sumak', body: event.data.text() }
-    }
-  }
-
-  const title = data.title || 'Sumak Restaurante'
-  const options = {
-    body: data.body || 'Tenemos novedades para vos',
-    icon: '/logo-sumak.png',
-    badge: '/logo-sumak.png',
-    image: data.image || undefined,
-    data: { url: data.url || 'https://restaurante-sumak.vercel.app' },
-    vibrate: [500, 200, 500, 200, 500],
-    tag: 'sumak-' + Date.now(),
-    renotify: true,
-    requireInteraction: true,
-    silent: false,
-    actions: [
-      { action: 'open', title: '🍽️ Ver oferta' },
-      { action: 'close', title: '❌ Cerrar' }
-    ]
-  }
-
-  event.waitUntil(self.registration.showNotification(title, options))
+self.addEventListener('install', (event) => {
+  self.skipWaiting()
 })
 
-self.addEventListener('notificationclick', function (event) {
-  event.notification.close()
-  const url = (event.notification.data && event.notification.data.url)
-    ? event.notification.data.url
-    : 'https://restaurante-sumak.vercel.app'
+self.addEventListener('activate', (event) => {
+  event.waitUntil(clients.claim())
+})
 
-  event.waitUntil(
-    clients.matchAll({ type: 'window', includeUncontrolled: true }).then(function (windowClients) {
-      for (let i = 0; i < windowClients.length; i++) {
-        const client = windowClients[i]
-        if (client.url === url && 'focus' in client) {
-          return client.focus()
+self.addEventListener('fetch', (event) => {
+  // Network-first strategy: always try network, fallback to cache
+  event.respondWith(
+    fetch(event.request)
+      .then((response) => {
+        // Cache successful GET requests
+        if (event.request.method === 'GET' && response.status === 200) {
+          const clone = response.clone()
+          caches.open(CACHE_NAME).then((cache) => {
+            cache.put(event.request, clone)
+          })
         }
-      }
-      if (clients.openWindow) {
-        return clients.openWindow(url)
-      }
-    })
+        return response
+      })
+      .catch(() => caches.match(event.request))
   )
 })
