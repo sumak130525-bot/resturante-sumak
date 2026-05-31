@@ -134,17 +134,19 @@ export function MenuCard({
         )}
 
         {/* ── Availability / Stock badge ── */}
-        <div className="absolute top-3 right-3">
-          {isSoldOutByQty ? (
-            <span className="badge-available backdrop-blur-sm border border-white/20 bg-gray-700/80 text-white text-[0.65rem] font-bold tracking-widest uppercase">
+        {isSoldOutByQty ? (
+          <div className="absolute inset-0 flex items-center justify-center">
+            <span className="px-4 py-1.5 rounded-full bg-red-600/90 text-white text-sm font-bold tracking-wide uppercase border-2 border-white/40 shadow-lg">
               {t('soldOut')}
             </span>
-          ) : hasLimitedQty ? (
+          </div>
+        ) : hasLimitedQty ? (
+          <div className="absolute top-3 right-3">
             <span className="badge-available backdrop-blur-sm border border-orange-400/40 bg-orange-500/80 text-white text-[0.65rem] font-bold">
               {t('lastUnits', { n: item.available_qty! })}
             </span>
-          ) : null}
-        </div>
+          </div>
+        ) : null}
 
         {/* ── In-cart indicator ── */}
         {quantity > 0 && (
@@ -247,7 +249,10 @@ export function MenuCard({
       {/* ── Content ── */}
       <div className="flex flex-col flex-1 p-5 gap-3">
         {/* Name */}
-        <h3 className="font-serif font-semibold text-[1.05rem] text-sumak-brown leading-snug tracking-tight">
+        <h3 className={cn(
+          "font-serif font-semibold text-[1.05rem] text-sumak-brown leading-snug tracking-tight",
+          isUnavailable && "line-through opacity-60"
+        )}>
           {displayName}
         </h3>
 
@@ -262,7 +267,10 @@ export function MenuCard({
         <div className="flex items-center justify-between mt-auto pt-1">
           {/* Price */}
           <div>
-            <span className="font-bold text-sumak-red text-lg tracking-tight">
+            <span className={cn(
+              "font-bold text-sumak-red text-lg tracking-tight",
+              isUnavailable && "line-through opacity-60"
+            )}>
               {formatPrice(item.price)}
             </span>
           </div>
