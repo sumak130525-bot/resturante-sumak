@@ -3,14 +3,14 @@
 import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
-import { ChefHat, LayoutGrid, ShoppingBag, LogOut, Menu as MenuIcon, X, ChevronLeft, ChevronRight, QrCode, Store, Bell, Tag, ArrowUpDown, Users, Settings, Sliders, DollarSign, BarChart2, Calculator, TrendingUp, FileText, Package, Lightbulb, ScanLine, Star, Lock } from 'lucide-react'
+import { ChefHat, LayoutGrid, ShoppingBag, LogOut, Menu as MenuIcon, X, ChevronLeft, ChevronRight, QrCode, Store, Bell, Tag, ArrowUpDown, Users, Settings, Sliders, DollarSign, BarChart2, Calculator, TrendingUp, FileText, Package, Lightbulb, ScanLine, Star, Lock, CreditCard } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import WhatsAppNotifier from '@/components/WhatsAppNotifier'
 import type { User } from '@supabase/supabase-js'
 
 interface AdminLayoutClientProps {
   children: React.ReactNode
-  active: 'dashboard' | 'menu' | 'categorias' | 'ordenar' | 'orders' | 'qr' | 'loyverse' | 'notificaciones' | 'clientes' | 'configuracion' | 'modificadores' | 'caja' | 'analytics' | 'costs' | 'profitability' | 'reports' | 'inventory' | 'predictions' | 'invoice-scan' | 'bonus-reasons' | 'finanzas' | 'cierre'
+  active: 'dashboard' | 'menu' | 'categorias' | 'ordenar' | 'orders' | 'qr' | 'loyverse' | 'notificaciones' | 'clientes' | 'configuracion' | 'modificadores' | 'caja' | 'analytics' | 'costs' | 'profitability' | 'reports' | 'inventory' | 'predictions' | 'invoice-scan' | 'bonus-reasons' | 'finanzas' | 'mercadopago' | 'cierre'
 }
 
 const NAV_ITEMS = [
@@ -29,6 +29,7 @@ const NAV_ITEMS = [
   { href: '/admin/invoice-scan', label: 'Escanear Factura', icon: ScanLine, key: 'invoice-scan' as const },
   { href: '/admin/reports', label: 'Reportes', icon: FileText, key: 'reports' as const },
   { href: '/admin/finanzas', label: 'Finanzas', icon: TrendingUp, key: 'finanzas' as const },
+  { href: '/admin/mercadopago', label: 'MercadoPago', icon: CreditCard, key: 'mercadopago' as const },
   { href: '/admin/qr', label: 'Códigos QR', icon: QrCode, key: 'qr' as const },
   { href: '/admin/loyverse', label: 'Loyverse', icon: Store, key: 'loyverse' as const },
   { href: '/admin/modificadores', label: 'Modificadores', icon: Sliders, key: 'modificadores' as const },
