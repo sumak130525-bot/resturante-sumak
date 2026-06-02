@@ -112,9 +112,11 @@ export default function MercadoPagoExpensesPage() {
 
   const addItem = () => setItems([...items, { ingredient_id: '', quantity: 1, unit_price: 0 }])
 
-  const formatDate = (d: string) => new Date(d).toLocaleDateString('es-AR', {
-    day: '2-digit', month: '2-digit', year: 'numeric',
-  })
+  const formatDate = (d: string) => {
+    const date = new Date(d)
+    return date.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' }) +
+      ' ' + date.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })
+  }
 
   return (
     <AdminLayoutClient active="mercadopago">

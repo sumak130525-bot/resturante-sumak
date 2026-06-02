@@ -12,7 +12,10 @@ interface MPPayment {
   status: string
   payment_type_id: string
   operation_type: string
-  payer?: { email?: string }
+  payer?: { email?: string; id?: string }
+  payer_id?: number
+  collector?: { id?: number }
+  collector_id?: number
   additional_info?: { items?: Array<{ title?: string }> }
 }
 
@@ -55,14 +58,19 @@ export async function GET(request: NextRequest) {
 
     const data = await res.json()
     
-    // Filter only OUTGOING payments (exclude incoming collections from customers)
-    // operation_type: 'regular_payment' = cobro a cliente, 'money_transfer' = transferencia enviada
-    // payment_type_id: 'account_money' = pago con saldo MP
-    const payments: MPPayment[] = (data.results ?? []).filter((p: MPPayment) => 
-      p.status === 'approved' && 
-      p.operation_type !== 'regular_payment' && // excluir cobros de clientes
-      p.operation_type !== 'pos_payment' // excluir cobros POS
-    )
+    // Get user's own MP account ID to distinguish sent vs received
+    const MY_MP_ID = 814513455
+    
+    // Filter only OUTGOING payments (money the user SENT, not received)
+    // If collector_id or collector.id === MY_MP_ID → someone paid US (income) → exclude
+    // If payer_id === MY_MP_ID and collector is someone else → we paid them (expense) → include
+    const payments: MPPayment[] = (data.results ?? []).filter((p: MPPayment) => {
+      if (p.status !== 'approved') return false
+      const collectorId = p.collector_id ?? p.collector?.id
+      // Exclude payments where WE are the collector (we received money)
+      if (collectorId === MY_MP_ID) return false
+      return true
+    })
 
     return NextResponse.json({
       payments: payments.map((p) => ({
@@ -73,6 +81,7 @@ export async function GET(request: NextRequest) {
         status: p.status,
         type: p.operation_type,
         payment_type: p.payment_type_id,
+        payer_email: p.payer?.email || null,
       })),
       total: data.paging?.total ?? payments.length,
       offset,
