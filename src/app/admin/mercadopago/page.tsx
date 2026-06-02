@@ -124,6 +124,28 @@ export default function MercadoPagoExpensesPage() {
     setImporting(null)
   }
 
+  // New ingredient inline creation
+  const [showNewIngredient, setShowNewIngredient] = useState(false)
+  const [newIngName, setNewIngName] = useState('')
+  const [newIngUnit, setNewIngUnit] = useState('kg')
+
+  const createIngredient = async () => {
+    if (!newIngName.trim()) return
+    try {
+      const res = await fetch('/api/admin/ingredients', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: newIngName.trim(), unit: newIngUnit }),
+      })
+      if (res.ok) {
+        const data = await res.json()
+        setIngredients(prev => [...prev, { id: data.id, name: data.name, unit: data.unit }])
+        setNewIngName('')
+        setShowNewIngredient(false)
+      }
+    } catch (err) { console.error(err) }
+  }
+
   const addItem = () => setItems([...items, { ingredient_id: '', quantity: 1, unit_price: 0 }])
 
   const formatDate = (d: string) => {
@@ -283,10 +305,37 @@ export default function MercadoPagoExpensesPage() {
                       </button>
                     </div>
                   ))}
-                  <button onClick={addItem}
-                    className="text-xs text-blue-600 font-medium hover:underline">
-                    + Agregar producto
-                  </button>
+                  <div className="flex gap-2">
+                    <button onClick={addItem}
+                      className="text-xs text-blue-600 font-medium hover:underline">
+                      + Agregar línea
+                    </button>
+                    <button onClick={() => setShowNewIngredient(!showNewIngredient)}
+                      className="text-xs text-green-600 font-medium hover:underline">
+                      + Nuevo producto
+                    </button>
+                  </div>
+                  {showNewIngredient && (
+                    <div className="flex gap-2 items-center mt-2 p-2 bg-green-50 rounded-lg border border-green-200">
+                      <input type="text" placeholder="Nombre producto" value={newIngName}
+                        onChange={e => setNewIngName(e.target.value)}
+                        className="flex-1 border rounded px-2 py-1.5 text-sm" />
+                      <select value={newIngUnit} onChange={e => setNewIngUnit(e.target.value)}
+                        className="border rounded px-2 py-1.5 text-sm">
+                        <option value="kg">kg</option>
+                        <option value="g">g</option>
+                        <option value="l">l</option>
+                        <option value="ml">ml</option>
+                        <option value="unidad">unidad</option>
+                        <option value="paquete">paquete</option>
+                        <option value="docena">docena</option>
+                      </select>
+                      <button onClick={createIngredient}
+                        className="px-3 py-1.5 bg-green-600 text-white text-xs font-medium rounded hover:bg-green-700">
+                        Crear
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
 
