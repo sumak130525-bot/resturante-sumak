@@ -17,11 +17,22 @@ const AUTH_DIR = path.resolve(__dirname, '../auth_info');
 
 // ── Deduplication: avoid processing the same message twice ────────────────────
 const processedMessages = new Set<string>();
+const processedMsgIds = new Set<string>();
 const MAX_PROCESSED = 1000;
 
-function isDuplicate(sender: string, text: string): boolean {
-  // Dedupe by sender + text + 10-second window (same person, same text within 10s = duplicate)
-  const timeSlot = Math.floor(Date.now() / 10000); // 10-second window
+function isDuplicate(sender: string, text: string, msgId?: string): boolean {
+  // First: dedupe by message ID (catches LID/PN double delivery of same msg)
+  if (msgId) {
+    if (processedMsgIds.has(msgId)) return true;
+    processedMsgIds.add(msgId);
+    if (processedMsgIds.size > MAX_PROCESSED) {
+      const first = processedMsgIds.values().next().value;
+      if (first) processedMsgIds.delete(first);
+    }
+  }
+
+  // Second: dedupe by sender + text + 10-second window
+  const timeSlot = Math.floor(Date.now() / 10000);
   const key = `${sender}:${text}:${timeSlot}`;
   if (processedMessages.has(key)) return true;
   processedMessages.add(key);
@@ -117,10 +128,9 @@ async function startBot() {
           realJid = `${realPhone}@s.whatsapp.net`;
           console.log(`[LID] Resolved LID ${jid} → ${realJid} via senderPn`);
         } else {
-          // Fallback: use LID digits as-is (notification will fail, but we log it)
-          realPhone = jid.split('@')[0];
-          realJid = jid;
-          console.warn(`[LID] ⚠️ Could not resolve LID ${jid} — senderPn not available. Falling back to LID.`);
+          // Cannot resolve LID — skip this message (it will arrive again as normal JID)
+          console.warn(`[LID] ⚠️ Could not resolve LID ${jid} — skipping (will arrive via normal JID)`);
+          continue;
         }
       } else {
         realPhone = jid.split('@')[0];
@@ -139,8 +149,8 @@ async function startBot() {
 
       if (!text || text.trim() === '') continue;
 
-      // Dedup by sender + text (catches LID/PN double delivery)
-      if (isDuplicate(sender, text.trim())) {
+      // Dedup by msg ID + sender + text (catches LID/PN double delivery)
+      if (isDuplicate(sender, text.trim(), msg.key.id ?? undefined)) {
         console.log(`⏭️  Mensaje duplicado ignorado de +${sender}: "${text}"`);
         continue;
       }

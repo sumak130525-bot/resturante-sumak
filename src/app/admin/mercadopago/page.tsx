@@ -101,7 +101,7 @@ export default function MercadoPagoExpensesPage() {
         }),
       })
       if (res.ok) {
-        setImported(prev => new Set([...prev, modalPayment.id]))
+        setImported(prev => { const next = new Set(prev); next.add(modalPayment.id); return next })
         setModalPayment(null)
       }
     } catch (err) {
@@ -117,7 +117,7 @@ export default function MercadoPagoExpensesPage() {
   })
 
   return (
-    <AdminLayoutClient>
+    <AdminLayoutClient active="mercadopago">
       <div className="p-4 md:p-6 max-w-5xl mx-auto space-y-6">
         {/* Header */}
         <div className="flex items-center justify-between">

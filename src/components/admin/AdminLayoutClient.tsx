@@ -40,7 +40,7 @@ const NAV_ITEMS = [
 ]
 
 interface SidebarProps {
-  active: 'dashboard' | 'menu' | 'categorias' | 'ordenar' | 'orders' | 'qr' | 'loyverse' | 'notificaciones' | 'clientes' | 'configuracion' | 'modificadores' | 'caja' | 'analytics' | 'costs' | 'profitability' | 'reports' | 'inventory' | 'predictions' | 'invoice-scan' | 'bonus-reasons' | 'finanzas' | 'cierre'
+  active: 'dashboard' | 'menu' | 'categorias' | 'ordenar' | 'orders' | 'qr' | 'loyverse' | 'notificaciones' | 'clientes' | 'configuracion' | 'modificadores' | 'caja' | 'analytics' | 'costs' | 'profitability' | 'reports' | 'inventory' | 'predictions' | 'invoice-scan' | 'bonus-reasons' | 'finanzas' | 'mercadopago' | 'cierre'
   user: User | null
   onLogout: () => void
   collapsed: boolean
