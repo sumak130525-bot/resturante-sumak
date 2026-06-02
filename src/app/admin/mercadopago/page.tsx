@@ -55,6 +55,20 @@ export default function MercadoPagoExpensesPage() {
       const res = await fetch(`/api/admin/mercadopago-expenses?from=${dateFrom}&to=${dateTo}`)
       const data = await res.json()
       if (data.payments) setPayments(data.payments)
+      
+      // Check which payments are already imported (by receipt_number = MP-{id})
+      const expRes = await fetch(`/api/admin/expenses?from=${dateFrom}&to=${dateTo}`)
+      const expData = await expRes.json()
+      if (Array.isArray(expData)) {
+        const importedIds = new Set<number>()
+        expData.forEach((exp: { receipt_number?: string }) => {
+          if (exp.receipt_number?.startsWith('MP-')) {
+            const mpId = parseInt(exp.receipt_number.replace('MP-', ''))
+            if (!isNaN(mpId)) importedIds.add(mpId)
+          }
+        })
+        setImported(importedIds)
+      }
     } catch (err) {
       console.error(err)
     }
