@@ -55,9 +55,13 @@ export async function GET(request: NextRequest) {
 
     const data = await res.json()
     
-    // Filter only outgoing/expense type payments
+    // Filter only OUTGOING payments (exclude incoming collections from customers)
+    // operation_type: 'regular_payment' = cobro a cliente, 'money_transfer' = transferencia enviada
+    // payment_type_id: 'account_money' = pago con saldo MP
     const payments: MPPayment[] = (data.results ?? []).filter((p: MPPayment) => 
-      p.status === 'approved'
+      p.status === 'approved' && 
+      p.operation_type !== 'regular_payment' && // excluir cobros de clientes
+      p.operation_type !== 'pos_payment' // excluir cobros POS
     )
 
     return NextResponse.json({
