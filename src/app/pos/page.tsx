@@ -3870,6 +3870,7 @@ export default function POSPage() {
     return 'all'
   })
   const [posSearch, setPosSearch] = useState('')
+  const [showPosSearch, setShowPosSearch] = useState(false)
 
   useEffect(() => {
     sessionStorage.setItem('pos_activeCategory', activeCategory)
@@ -4289,6 +4290,18 @@ export default function POSPage() {
           ✏️
         </button>
         )}
+        {/* Search button */}
+        {activeCategory === 'all' && !editMode && (
+          <button
+            onClick={() => setShowPosSearch(!showPosSearch)}
+            title="Buscar producto"
+            className={`flex items-center justify-center w-8 h-8 rounded-lg active:scale-95 transition-all shrink-0 font-bold text-base ${
+              showPosSearch ? 'bg-sumak-gold text-sumak-brown' : 'bg-sumak-brown-mid text-sumak-gold hover:bg-sumak-brown-light'
+            }`}
+          >
+            🔍
+          </button>
+        )}
         {/* Empleados button */}
         <button
           onClick={() => setShowEmpPayModal(true)}
@@ -4321,16 +4334,23 @@ export default function POSPage() {
       <div className="flex-1 flex min-h-0 overflow-hidden">
         {/* ── Left: Dish Grid ── */}
         <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
-          {/* Search bar for "Todos" tab */}
-          {activeCategory === 'all' && !editMode && (
-            <div className="px-2 pt-2">
+          {/* Search bar for "Todos" tab — toggled by search button */}
+          {activeCategory === 'all' && !editMode && showPosSearch && (
+            <div className="px-2 pt-2 flex gap-2">
               <input
                 type="text"
-                placeholder="🔍 Buscar producto..."
+                placeholder="Buscar producto..."
                 value={posSearch}
                 onChange={(e) => setPosSearch(e.target.value)}
-                className="w-full px-3 py-2 rounded-xl border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-sumak-gold bg-white"
+                autoFocus
+                className="flex-1 px-3 py-2 rounded-xl border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-sumak-gold bg-white"
               />
+              <button
+                onClick={() => { setShowPosSearch(false); setPosSearch('') }}
+                className="px-3 py-2 rounded-xl bg-gray-200 text-gray-600 text-sm font-bold hover:bg-gray-300"
+              >
+                ✕
+              </button>
             </div>
           )}
           {/* Dish Grid */}
