@@ -3885,9 +3885,9 @@ export default function POSPage() {
       })
   ).filter((item) => (item.display_order ?? 0) > 0)
 
-  // Search filter for "Todos" tab
+  // Search filter for "Todos" tab — search ALL menu items (not just grid-assigned)
   const searchFilteredItems = (activeCategory === 'all' && posSearch.trim())
-    ? filteredItems.filter((item) => item.name.toLowerCase().includes(posSearch.toLowerCase()))
+    ? menuItems.filter((item) => item.name.toLowerCase().includes(posSearch.toLowerCase()))
     : filteredItems
 
   // Items for category tabs: filter by category, only show assigned items (display_order > 0)
