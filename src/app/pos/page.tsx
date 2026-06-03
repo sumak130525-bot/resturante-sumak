@@ -3869,6 +3869,7 @@ export default function POSPage() {
     }
     return 'all'
   })
+  const [posSearch, setPosSearch] = useState('')
 
   useEffect(() => {
     sessionStorage.setItem('pos_activeCategory', activeCategory)
@@ -3883,6 +3884,11 @@ export default function POSPage() {
       })
   ).filter((item) => (item.display_order ?? 0) > 0)
 
+  // Search filter for "Todos" tab
+  const searchFilteredItems = (activeCategory === 'all' && posSearch.trim())
+    ? filteredItems.filter((item) => item.name.toLowerCase().includes(posSearch.toLowerCase()))
+    : filteredItems
+
   // Items for category tabs: filter by category, only show assigned items (display_order > 0)
   const categoryItems = activeCategory === 'all'
     ? []
@@ -3892,7 +3898,7 @@ export default function POSPage() {
         return cat ? item.category_id === cat.id : true
       })
 
-  const displayItems = activeCategory === 'all' ? filteredItems.slice(0, gridSize) : filteredItems.slice(0, MAX_VISIBLE)
+  const displayItems = activeCategory === 'all' ? searchFilteredItems.slice(0, posSearch.trim() ? 50 : gridSize) : filteredItems.slice(0, MAX_VISIBLE)
 
   // Items for edit mode: all positioned items (display_order 1-24), not filtered by category
   const positionedItems = menuItems.filter((item) => (item.display_order ?? 0) > 0)
@@ -4315,6 +4321,18 @@ export default function POSPage() {
       <div className="flex-1 flex min-h-0 overflow-hidden">
         {/* ── Left: Dish Grid ── */}
         <div className="flex-1 min-w-0 flex flex-col overflow-hidden">
+          {/* Search bar for "Todos" tab */}
+          {activeCategory === 'all' && !editMode && (
+            <div className="px-2 pt-2">
+              <input
+                type="text"
+                placeholder="🔍 Buscar producto..."
+                value={posSearch}
+                onChange={(e) => setPosSearch(e.target.value)}
+                className="w-full px-3 py-2 rounded-xl border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-sumak-gold bg-white"
+              />
+            </div>
+          )}
           {/* Dish Grid */}
           <main
             ref={(el) => { gridRef.current = el }}
