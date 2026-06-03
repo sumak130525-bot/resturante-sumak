@@ -2182,6 +2182,29 @@ function SwapItemModal({
   const [result, setResult] = useState<{ difference: number; old_item: string; new_item: string } | null>(null)
   const [showRefundChoice, setShowRefundChoice] = useState(false)
 
+  const [cancellingItem, setCancellingItem] = useState(false)
+  const [showCancelItemConfirm, setShowCancelItemConfirm] = useState(false)
+
+  const handleCancelItem = async () => {
+    if (!selectedItem) return
+    setCancellingItem(true)
+    setError(null)
+    try {
+      const res = await fetch(`/api/pos/orders/${order.id}/cancel-item`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ order_item_id: selectedItem }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error ?? 'Error')
+      setResult({ difference: -data.refund_amount, old_item: data.item_name, new_item: '(cancelado)' })
+      setShowCancelItemConfirm(false)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Error')
+    }
+    setCancellingItem(false)
+  }
+
   const items = order.order_items ?? []
   const selectedOrderItem = items.find((i) => i.id === selectedItem)
 
@@ -2302,8 +2325,45 @@ function SwapItemModal({
                 </div>
               </div>
 
-              {/* Step 2: Select replacement */}
-              {selectedItem && (
+              {/* Step 2: Actions - Cancel item or Swap */}
+              {selectedItem && !showCancelItemConfirm && (
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setShowCancelItemConfirm(true)}
+                    className="flex-1 py-2.5 rounded-xl font-bold text-sm bg-red-100 text-red-700 hover:bg-red-200 active:scale-95 transition-all"
+                  >
+                    ✕ Cancelar plato
+                  </button>
+                  <p className="self-center text-xs text-gray-400">ó cambiar por otro ↓</p>
+                </div>
+              )}
+
+              {/* Cancel item confirmation */}
+              {showCancelItemConfirm && selectedOrderItem && (
+                <div className="bg-red-50 border border-red-200 rounded-xl p-4 space-y-3">
+                  <p className="text-sm font-bold text-red-700">
+                    ¿Cancelar {selectedOrderItem.quantity}x {selectedOrderItem.name} (${(Number(selectedOrderItem.price) * Number(selectedOrderItem.quantity)).toLocaleString('es-AR')})?
+                  </p>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => setShowCancelItemConfirm(false)}
+                      className="flex-1 py-2 rounded-lg text-sm font-bold bg-gray-100 text-gray-700 hover:bg-gray-200"
+                    >
+                      Volver
+                    </button>
+                    <button
+                      onClick={handleCancelItem}
+                      disabled={cancellingItem}
+                      className="flex-1 py-2 rounded-lg text-sm font-bold bg-red-600 text-white hover:bg-red-700 disabled:opacity-50"
+                    >
+                      {cancellingItem ? 'Cancelando...' : 'Confirmar'}
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Step 3: Select replacement */}
+              {selectedItem && !showCancelItemConfirm && (
                 <div>
                   <p className="text-xs font-bold text-gray-500 mb-2">2. Elegir nuevo plato</p>
                   <input
