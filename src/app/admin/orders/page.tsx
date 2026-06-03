@@ -394,7 +394,8 @@ export default function AdminOrdersPage() {
     const list = activeFilter === 'all'
       ? filteredOrders
       : filteredOrders.filter((o) => o.status === activeFilter)
-    return list.reduce((sum, o) => sum + (Number(o.total) || 0), 0)
+    // Exclude cancelled orders from total
+    return list.filter(o => o.status !== 'cancelled').reduce((sum, o) => sum + (Number(o.total) || 0), 0)
   }, [filteredOrders, activeFilter])
 
   const formattedTotal = filteredTotal.toLocaleString('es-AR', {
