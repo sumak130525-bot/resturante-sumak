@@ -2166,11 +2166,13 @@ function SwapItemModal({
   menuItems,
   onClose,
   onSuccess,
+  onRefund,
 }: {
   order: SentOrder
   menuItems: Array<{ id: string; name: string; price: number; category_id?: string }>
   onClose: () => void
   onSuccess: () => void
+  onRefund: (amount: number, method: 'cash' | 'transfer') => void
 }) {
   const [selectedItem, setSelectedItem] = useState<string | null>(null)
   const [newMenuItemId, setNewMenuItemId] = useState<string>('')
@@ -2178,6 +2180,7 @@ function SwapItemModal({
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [result, setResult] = useState<{ difference: number; old_item: string; new_item: string } | null>(null)
+  const [showRefundChoice, setShowRefundChoice] = useState(false)
 
   const items = order.order_items ?? []
   const selectedOrderItem = items.find((i) => i.id === selectedItem)
@@ -2230,13 +2233,50 @@ function SwapItemModal({
 
         <div className="flex-1 overflow-y-auto p-4 space-y-4" style={{ minHeight: 0 }}>
           {result ? (
-            <div className="text-center py-6 space-y-2">
+            <div className="text-center py-6 space-y-3">
               <p className="text-green-600 font-bold text-lg">✓ Plato cambiado</p>
               <p className="text-sm text-gray-600">{result.old_item} → {result.new_item}</p>
-              {Math.abs(result.difference) >= 1 && (
-                <p className={`text-sm font-bold ${result.difference > 0 ? 'text-blue-600' : 'text-red-600'}`}>
-                  {result.difference > 0 ? `Cobrar diferencia: +$${result.difference.toLocaleString('es-AR')}` : `Devolución: $${Math.abs(result.difference).toLocaleString('es-AR')}`}
+              {result.difference > 0 && (
+                <p className="text-sm font-bold text-blue-600">
+                  Cobrar diferencia: +${result.difference.toLocaleString('es-AR')}
                 </p>
+              )}
+              {result.difference < 0 && !showRefundChoice && (
+                <div className="space-y-2">
+                  <p className="text-sm font-bold text-red-600">
+                    Devolución: ${Math.abs(result.difference).toLocaleString('es-AR')}
+                  </p>
+                  <button
+                    onClick={() => setShowRefundChoice(true)}
+                    className="px-4 py-2 bg-red-600 text-white text-sm font-bold rounded-xl hover:bg-red-700"
+                  >
+                    Realizar devolución
+                  </button>
+                </div>
+              )}
+              {result.difference < 0 && showRefundChoice && (
+                <div className="space-y-2">
+                  <p className="text-sm font-bold text-red-600">
+                    Devolver ${Math.abs(result.difference).toLocaleString('es-AR')} por:
+                  </p>
+                  <div className="flex gap-3 justify-center">
+                    <button
+                      onClick={() => { onRefund(Math.abs(result.difference), 'cash'); onClose() }}
+                      className="px-4 py-3 bg-green-600 text-white text-sm font-bold rounded-xl hover:bg-green-700"
+                    >
+                      💵 Efectivo
+                    </button>
+                    <button
+                      onClick={() => { onRefund(Math.abs(result.difference), 'transfer'); onClose() }}
+                      className="px-4 py-3 bg-blue-600 text-white text-sm font-bold rounded-xl hover:bg-blue-700"
+                    >
+                      📱 Transferencia
+                    </button>
+                  </div>
+                </div>
+              )}
+              {result.difference === 0 && (
+                <p className="text-sm text-gray-500">Sin diferencia de precio</p>
               )}
             </div>
           ) : (
@@ -4613,6 +4653,19 @@ export default function POSPage() {
             setSwapItemOrder(null)
             loadSentOrders()
             setToast('Plato cambiado correctamente')
+          }}
+          onRefund={(amount, method) => {
+            setSwapItemOrder(null)
+            loadSentOrders()
+            if (method === 'cash') {
+              setCashModalPrefill({
+                amount,
+                description: `Devolución cambio plato`,
+              })
+              setShowCashModal(true)
+            } else {
+              setToast(`Realizar devolución de ${formatARS(amount)} por transferencia`)
+            }
           }}
         />
       )}
