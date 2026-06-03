@@ -4423,6 +4423,21 @@ export default function POSPage() {
                   </div>
                 )
               })
+            ) : activeCategory === 'all' && posSearch.trim() ? (
+              // Search mode: simple list of matching items
+              searchFilteredItems.slice(0, 50).map((item) => (
+                <div key={item.id} className="relative w-full h-full rounded-xl">
+                  <POSDishCard
+                    item={item}
+                    onAdd={handleAddItem}
+                    locale={locale}
+                    editMode={false}
+                    onUnassign={handleUnassign}
+                    onDragStart={handleDragStart}
+                    isDragging={false}
+                  />
+                </div>
+              ))
             ) : activeCategory === 'all' ? (
               // Normal mode Todos: fixed grid by position
               Array.from({ length: gridSize }).map((_, gridIndex) => {
