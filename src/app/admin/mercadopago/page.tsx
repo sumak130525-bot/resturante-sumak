@@ -52,23 +52,45 @@ export default function MercadoPagoExpensesPage() {
   const fetchPayments = useCallback(async () => {
     setLoading(true)
     try {
-      const res = await fetch(`/api/admin/mercadopago-expenses?from=${dateFrom}&to=${dateTo}`)
-      const data = await res.json()
-      if (data.payments) setPayments(data.payments)
-      
-      // Check which payments are already imported (by receipt_number = MP-{id})
-      const expRes = await fetch(`/api/admin/expenses?from=${dateFrom}&to=${dateTo}`)
+      const [mpRes, expRes] = await Promise.all([
+        fetch(`/api/admin/mercadopago-expenses?from=${dateFrom}&to=${dateTo}`),
+        fetch(`/api/admin/expenses?from=${dateFrom}&to=${dateTo}`),
+      ])
+      const mpData = await mpRes.json()
       const expData = await expRes.json()
+
+      const apiPayments: MPPayment[] = mpData.payments ?? []
+
+      const importedIds = new Set<number>()
+      const manualPayments: MPPayment[] = []
+
       if (Array.isArray(expData)) {
-        const importedIds = new Set<number>()
-        expData.forEach((exp: { receipt_number?: string }) => {
-          if (exp.receipt_number?.startsWith('MP-')) {
+        expData.forEach((exp: { receipt_number?: string; date?: string; description?: string; amount?: number }) => {
+          if (exp.receipt_number?.startsWith('MP-MANUAL-')) {
+            const ts = parseInt(exp.receipt_number.replace('MP-MANUAL-', ''))
+            if (!isNaN(ts)) {
+              manualPayments.push({
+                id: ts,
+                date: exp.date ?? '',
+                description: exp.description ?? '',
+                amount: exp.amount ?? 0,
+                status: 'approved',
+                type: 'manual',
+                payment_type: 'transfer',
+              })
+            }
+          } else if (exp.receipt_number?.startsWith('MP-')) {
             const mpId = parseInt(exp.receipt_number.replace('MP-', ''))
             if (!isNaN(mpId)) importedIds.add(mpId)
           }
         })
-        setImported(importedIds)
       }
+
+      const combined = [...apiPayments, ...manualPayments].sort(
+        (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
+      )
+      setPayments(combined)
+      setImported(importedIds)
     } catch (err) {
       console.error(err)
     }
@@ -162,6 +184,7 @@ export default function MercadoPagoExpensesPage() {
       })
       if (res.ok) {
         setShowManualModal(false)
+        fetchPayments()
       } else {
         const data = await res.json()
         setManualError(data.error || 'Error al guardar')
@@ -246,16 +269,28 @@ export default function MercadoPagoExpensesPage() {
         ) : (
           <div className="space-y-2">
             {payments.map(p => (
-              <div key={p.id} className={`flex items-center justify-between p-4 rounded-xl border ${
+              <div key={`${p.type}-${p.id}`} className={`flex items-center justify-between p-4 rounded-xl border ${
+                p.type === 'manual' ? 'bg-green-50 border-green-200' :
                 imported.has(p.id) ? 'bg-green-50 border-green-200' : 'bg-white border-gray-200'
               }`}>
                 <div className="flex-1">
-                  <p className="font-medium text-gray-800 text-sm">{p.description}</p>
+                  <div className="flex items-center gap-2">
+                    <p className="font-medium text-gray-800 text-sm">{p.description}</p>
+                    {p.type === 'manual' && (
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-green-100 text-green-700 border border-green-300">
+                        Manual
+                      </span>
+                    )}
+                  </div>
                   <p className="text-xs text-gray-400 mt-0.5">{formatDate(p.date)} • {p.type}</p>
                 </div>
                 <div className="flex items-center gap-3">
                   <span className="font-bold text-red-600">{formatPrice(p.amount)}</span>
-                  {imported.has(p.id) ? (
+                  {p.type === 'manual' ? (
+                    <span className="flex items-center gap-1 text-green-600 text-xs font-medium">
+                      <Check className="w-4 h-4" /> Guardado
+                    </span>
+                  ) : imported.has(p.id) ? (
                     <span className="flex items-center gap-1 text-green-600 text-xs font-medium">
                       <Check className="w-4 h-4" /> Importado
                     </span>
