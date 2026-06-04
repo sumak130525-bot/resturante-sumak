@@ -1903,6 +1903,7 @@ type SentOrder = {
   updated_at?: string | null
   status?: string | null
   table_number?: number | null
+  notes?: string | null
   order_items?: Array<{
     id: string
     menu_item_id: string
@@ -4689,10 +4690,13 @@ export default function POSPage() {
                       : '💵 Efectivo'
                     const isCancelled = order.status === 'cancelled'
                     const isDelivered = order.status === 'delivered'
+                    // Extract table number from notes (e.g. "Mesa 5 | nota")
+                    const tableMatch = order.notes?.match(/[Mm]esa\s*(\d+)/)
+                    const tableNum = order.table_number ?? (tableMatch ? tableMatch[1] : null)
                     // Time calculation
                     const createdAt = new Date(order.created_at)
-                    const endTime = isDelivered && order.updated_at ? new Date(order.updated_at) : new Date()
-                    const elapsedMs = endTime.getTime() - createdAt.getTime()
+                    const now = new Date()
+                    const elapsedMs = now.getTime() - createdAt.getTime()
                     const elapsedMin = Math.floor(elapsedMs / 60000)
                     const elapsedStr = elapsedMin < 60 ? `${elapsedMin} min` : `${Math.floor(elapsedMin / 60)}h ${elapsedMin % 60}m`
                     return (
