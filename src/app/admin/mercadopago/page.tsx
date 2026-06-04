@@ -86,9 +86,12 @@ export default function MercadoPagoExpensesPage() {
         })
       }
 
-      const combined = [...apiPayments, ...manualPayments].sort(
-        (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
-      )
+      const combined = [...apiPayments, ...manualPayments].sort((a, b) => {
+        // Manual entries use their timestamp id for precise ordering
+        const timeA = a.type === 'manual' ? a.id : new Date(a.date).getTime()
+        const timeB = b.type === 'manual' ? b.id : new Date(b.date).getTime()
+        return timeB - timeA
+      })
       setPayments(combined)
       setImported(importedIds)
     } catch (err) {
