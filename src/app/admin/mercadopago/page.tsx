@@ -4,7 +4,7 @@ import React, { useState, useEffect, useCallback } from 'react'
 import { AdminLayoutClient } from '@/components/admin/AdminLayoutClient'
 import { formatPrice } from '@/lib/utils'
 import {
-  CreditCard, Download, Check, X, Tag, Package, RefreshCw, ChevronDown,
+  CreditCard, Download, Check, X, Tag, Package, RefreshCw, ChevronDown, PlusCircle,
 } from 'lucide-react'
 
 interface MPPayment {
@@ -124,6 +124,54 @@ export default function MercadoPagoExpensesPage() {
     setImporting(null)
   }
 
+  // Manual expense modal state
+  const [showManualModal, setShowManualModal] = useState(false)
+  const [manualAmount, setManualAmount] = useState('')
+  const [manualDesc, setManualDesc] = useState('')
+  const [manualDate, setManualDate] = useState(() => new Date().toISOString().split('T')[0])
+  const [manualCategory, setManualCategory] = useState('')
+  const [savingManual, setSavingManual] = useState(false)
+  const [manualError, setManualError] = useState('')
+
+  const openManualModal = () => {
+    setManualAmount('')
+    setManualDesc('')
+    setManualDate(new Date().toISOString().split('T')[0])
+    setManualCategory('')
+    setManualError('')
+    setShowManualModal(true)
+  }
+
+  const handleSaveManual = async () => {
+    if (!manualAmount || !manualDesc.trim()) {
+      setManualError('Monto y descripción son requeridos')
+      return
+    }
+    setSavingManual(true)
+    setManualError('')
+    try {
+      const res = await fetch('/api/admin/mercadopago-expenses/manual', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          amount: parseFloat(manualAmount),
+          description: manualDesc.trim(),
+          date: manualDate,
+          category_id: manualCategory || null,
+        }),
+      })
+      if (res.ok) {
+        setShowManualModal(false)
+      } else {
+        const data = await res.json()
+        setManualError(data.error || 'Error al guardar')
+      }
+    } catch {
+      setManualError('Error de conexión')
+    }
+    setSavingManual(false)
+  }
+
   // New ingredient inline creation
   const [showNewIngredient, setShowNewIngredient] = useState(false)
   const [newIngName, setNewIngName] = useState('')
@@ -183,6 +231,10 @@ export default function MercadoPagoExpensesPage() {
           <button onClick={fetchPayments}
             className="px-4 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700">
             Buscar
+          </button>
+          <button onClick={openManualModal}
+            className="flex items-center gap-1.5 px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 ml-auto">
+            <PlusCircle className="w-4 h-4" /> Agregar gasto manual
           </button>
         </div>
 
@@ -348,6 +400,105 @@ export default function MercadoPagoExpensesPage() {
                 <button onClick={handleImport} disabled={importing === modalPayment.id}
                   className="px-4 py-2 text-sm bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 disabled:opacity-50">
                   {importing === modalPayment.id ? 'Importando...' : 'Importar a finanzas'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+        {/* Manual Expense Modal */}
+        {showManualModal && (
+          <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
+            <div className="bg-white rounded-2xl shadow-xl max-w-md w-full p-6 space-y-4">
+              <div className="flex items-center justify-between">
+                <h2 className="text-lg font-bold text-gray-800">Agregar gasto manual</h2>
+                <button onClick={() => setShowManualModal(false)} className="p-1 rounded hover:bg-gray-100">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              {/* Amount */}
+              <div>
+                <label className="text-sm font-medium text-gray-700">Monto *</label>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  placeholder="0.00"
+                  value={manualAmount}
+                  onChange={e => setManualAmount(e.target.value)}
+                  className="w-full border rounded-lg px-3 py-2 mt-1 text-sm"
+                />
+              </div>
+
+              {/* Description */}
+              <div>
+                <label className="text-sm font-medium text-gray-700">Descripción / Destinatario *</label>
+                <input
+                  type="text"
+                  placeholder="Ej: Transferencia a Uala - Juan Pérez"
+                  value={manualDesc}
+                  onChange={e => setManualDesc(e.target.value)}
+                  className="w-full border rounded-lg px-3 py-2 mt-1 text-sm"
+                />
+              </div>
+
+              {/* Date */}
+              <div>
+                <label className="text-sm font-medium text-gray-700">Fecha</label>
+                <input
+                  type="date"
+                  value={manualDate}
+                  onChange={e => setManualDate(e.target.value)}
+                  className="w-full border rounded-lg px-3 py-2 mt-1 text-sm"
+                />
+              </div>
+
+              {/* Category */}
+              <div>
+                <label className="text-sm font-medium text-gray-700 flex items-center gap-1">
+                  <Tag className="w-4 h-4" /> Categoría
+                </label>
+                <select
+                  value={manualCategory}
+                  onChange={e => setManualCategory(e.target.value)}
+                  className="w-full border rounded-lg px-3 py-2 mt-1 text-sm"
+                >
+                  <option value="">Sin categoría</option>
+                  {categories.map(c => (
+                    <option key={c.id} value={c.id}>{c.name}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Method (read-only) */}
+              <div>
+                <label className="text-sm font-medium text-gray-700">Método</label>
+                <input
+                  type="text"
+                  value="MercadoPago transferencia"
+                  readOnly
+                  className="w-full border rounded-lg px-3 py-2 mt-1 text-sm bg-gray-50 text-gray-500 cursor-not-allowed"
+                />
+              </div>
+
+              {manualError && (
+                <p className="text-sm text-red-600">{manualError}</p>
+              )}
+
+              {/* Actions */}
+              <div className="flex justify-end gap-2 pt-2">
+                <button
+                  onClick={() => setShowManualModal(false)}
+                  className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-lg"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={handleSaveManual}
+                  disabled={savingManual}
+                  className="px-4 py-2 text-sm bg-green-600 text-white font-medium rounded-lg hover:bg-green-700 disabled:opacity-50"
+                >
+                  {savingManual ? 'Guardando...' : 'Guardar gasto'}
                 </button>
               </div>
             </div>
