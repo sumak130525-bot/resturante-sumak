@@ -3876,6 +3876,13 @@ export default function POSPage() {
   const [posSearch, setPosSearch] = useState('')
   const [showPosSearch, setShowPosSearch] = useState(false)
 
+  // Tick every 30s to update live timers in sent orders
+  const [, setTick] = useState(0)
+  useEffect(() => {
+    const id = setInterval(() => setTick(t => t + 1), 30000)
+    return () => clearInterval(id)
+  }, [])
+
   useEffect(() => {
     sessionStorage.setItem('pos_activeCategory', activeCategory)
   }, [activeCategory])
@@ -4694,14 +4701,11 @@ export default function POSPage() {
                     // Table number: direct column or extract from notes
                     const tableMatch = order.notes?.match(/[Mm]esa\s*(\d+)/)
                     const tableNum = order.table_number ?? (tableMatch ? parseInt(tableMatch[1]) : null)
-                    // Delivery time: only show when delivered
-                    let deliveryStr = ''
-                    if (isDelivered && order.delivered_at) {
-                      const createdAt = new Date(order.created_at)
-                      const deliveredAt = new Date(order.delivered_at)
-                      const mins = Math.floor((deliveredAt.getTime() - createdAt.getTime()) / 60000)
-                      deliveryStr = mins < 60 ? `${mins} min` : `${Math.floor(mins / 60)}h ${mins % 60}m`
-                    }
+                    // Time: if delivered, frozen at delivered_at. If still in kitchen, live clock.
+                    const createdAt = new Date(order.created_at)
+                    const endTime = isDelivered && order.delivered_at ? new Date(order.delivered_at) : new Date()
+                    const mins = Math.floor((endTime.getTime() - createdAt.getTime()) / 60000)
+                    const timeStr = mins < 60 ? `${mins} min` : `${Math.floor(mins / 60)}h ${mins % 60}m`
                     return (
                       <li key={order.id} className={`flex items-center gap-3 rounded-xl px-3 py-2.5 border ${isCancelled ? 'bg-red-50 border-red-200 opacity-75' : 'bg-gray-50 border-gray-100'}`}>
                         <div className="flex-1 min-w-0">
@@ -4718,11 +4722,10 @@ export default function POSPage() {
                             <span className={`text-xs font-bold tabular-nums ${isCancelled ? 'text-gray-400 line-through' : 'text-teal-700'}`}>{formatARS(order.total)}</span>
                             <span className="text-xs text-gray-500">{pmLabel}</span>
                             <span className="text-xs text-gray-400">{new Date(order.created_at).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })}</span>
-                            {isDelivered && deliveryStr && (
-                              <span className="text-xs font-bold text-green-600">✓ {deliveryStr}</span>
-                            )}
-                            {!isDelivered && !isCancelled && (
-                              <span className="text-xs font-bold text-orange-500">⏳ en cocina</span>
+                            {!isCancelled && (
+                              <span className={`text-xs font-bold ${isDelivered ? 'text-green-600' : mins > 30 ? 'text-red-600' : 'text-orange-500'}`}>
+                                {isDelivered ? `✓ ${timeStr}` : `⏱ ${timeStr}`}
+                              </span>
                             )}
                           </div>
                         </div>
