@@ -1900,7 +1900,9 @@ type SentOrder = {
   cash_amount?: number | null
   transfer_amount?: number | null
   created_at: string
+  updated_at?: string | null
   status?: string | null
+  table_number?: number | null
   order_items?: Array<{
     id: string
     menu_item_id: string
@@ -4687,22 +4689,31 @@ export default function POSPage() {
                       : '💵 Efectivo'
                     const isCancelled = order.status === 'cancelled'
                     const isDelivered = order.status === 'delivered'
+                    // Time calculation
+                    const createdAt = new Date(order.created_at)
+                    const endTime = isDelivered && order.updated_at ? new Date(order.updated_at) : new Date()
+                    const elapsedMs = endTime.getTime() - createdAt.getTime()
+                    const elapsedMin = Math.floor(elapsedMs / 60000)
+                    const elapsedStr = elapsedMin < 60 ? `${elapsedMin} min` : `${Math.floor(elapsedMin / 60)}h ${elapsedMin % 60}m`
                     return (
                       <li key={order.id} className={`flex items-center gap-3 rounded-xl px-3 py-2.5 border ${isCancelled ? 'bg-red-50 border-red-200 opacity-75' : 'bg-gray-50 border-gray-100'}`}>
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2">
+                            {order.table_number && (
+                              <span className="shrink-0 px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 text-[10px] font-black">M{order.table_number}</span>
+                            )}
                             <span className={`font-bold text-sm truncate ${isCancelled ? 'line-through text-gray-400' : 'text-gray-900'}`}>{order.customer_name}</span>
                             {isCancelled && (
                               <span className="shrink-0 px-1.5 py-0.5 rounded-full bg-red-600 text-white text-[10px] font-black uppercase">Anulado</span>
                             )}
-                            <span className="text-xs text-gray-400">{new Date(order.created_at).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })}</span>
                           </div>
                           <div className="flex items-center gap-2 mt-0.5">
                             <span className={`text-xs font-bold tabular-nums ${isCancelled ? 'text-gray-400 line-through' : 'text-teal-700'}`}>{formatARS(order.total)}</span>
                             <span className="text-xs text-gray-500">{pmLabel}</span>
-                            {order.payment_method === 'mixed' && order.cash_amount != null && order.transfer_amount != null && (
-                              <span className="text-xs text-gray-400">({formatARS(order.cash_amount)} ef + {formatARS(order.transfer_amount)} tr)</span>
-                            )}
+                            <span className="text-xs text-gray-400">{new Date(order.created_at).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })}</span>
+                            <span className={`text-xs font-bold ${isDelivered ? 'text-green-600' : elapsedMin > 30 ? 'text-red-600' : 'text-orange-500'}`}>
+                              {isDelivered ? `✓ ${elapsedStr}` : `⏱ ${elapsedStr}`}
+                            </span>
                           </div>
                         </div>
                         {!isCancelled && (
