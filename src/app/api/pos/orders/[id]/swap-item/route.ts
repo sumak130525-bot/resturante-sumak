@@ -50,7 +50,6 @@ export async function PATCH(
       .update({
         menu_item_id: new_menu_item_id,
         unit_price: new_price,
-        subtotal: newTotal,
       })
       .eq('id', order_item_id)
 
