@@ -228,23 +228,32 @@ async function getProfitabilityReport(db: any, from: string, to: string) {
 async function getInventoryReport(db: any) {
   const { data: ingredients, error } = await db
     .from('ingredients')
-    .select('id, name, unit, price_per_unit, stock, min_stock, updated_at')
+    .select('id, name, unit, price_per_unit, updated_at')
     .order('name')
 
   if (error) throw new Error(error.message)
+
+  // Get stock from inventory table
+  const { data: inventoryRows } = await db
+    .from('inventory')
+    .select('ingredient_id, stock, min_stock')
+
+  const inventoryMap = new Map<string, { stock: number; min_stock: number }>()
+  for (const row of (inventoryRows ?? [])) {
+    inventoryMap.set(row.ingredient_id, { stock: Number(row.stock ?? 0), min_stock: Number(row.min_stock ?? 5) })
+  }
 
   const rows = (ingredients ?? []).map((ing: {
     id: string
     name: string
     unit: string | null
     price_per_unit: number | null
-    stock: number | null
-    min_stock: number | null
     updated_at: string | null
   }) => {
-    const stock = ing.stock ?? null
-    const minStock = ing.min_stock ?? null
-    const alertaBajoStock = stock !== null && minStock !== null ? stock <= minStock : false
+    const inv = inventoryMap.get(ing.id)
+    const stock = inv ? inv.stock : 0
+    const minStock = inv ? inv.min_stock : 5
+    const alertaBajoStock = stock <= minStock
 
     return {
       ingrediente: ing.name,
