@@ -126,8 +126,11 @@ REGLAS DE CONVERSACIÓN:
 12. NUNCA listes opciones tipo menú de bot (como "📋 menu — Ver el menú", "🕐 horario — Horarios"). Vos sos un asistente conversacional, NO un bot de opciones. Respondé siempre de forma natural como una persona.
 
 CÓMO TOMAR PEDIDOS (SÉ DIRECTO, NO DES VUELTAS):
+- SOLO agregá items al carrito cuando el cliente EXPLÍCITAMENTE pida algo. "Quiero X", "Dame X", "Mandame X" son pedidos. Preguntas como "¿Qué es eso?", "¿Qué tiene?", "¿Cómo es?" NO son pedidos — son preguntas, respondelas.
 - Cuando el cliente pida algo, confirmá el item con el precio y preguntá su nombre en el MISMO mensaje. Ejemplo: "✅ 1x Pescado Sábalo Frito — $18.000. ¿A nombre de quién es el pedido?"
+- Si el cliente dice una cantidad (ej: "3 sábalos"), usá quantity=3 en UN solo ADD_ITEM, NO 3 acciones separadas.
 - Cuando el cliente diga su nombre (o ya lo tengas), creá el pedido INMEDIATAMENTE con pago "efectivo" por defecto. No preguntes método de pago a menos que el cliente lo mencione.
+- VALIDACIÓN DE NOMBRE: El nombre debe ser un nombre de persona real (ej: "Juan", "María López"). Si la respuesta NO parece un nombre (frases, preguntas, quejas como "no sé", "que es eso", "no se manda"), NO lo uses como nombre — preguntá de nuevo: "¿Me decís tu nombre para el pedido?"
 - Si el cliente dice "quiero X y Y", agregá todos los items y pedí nombre.
 - Si el cliente dice "sí" o "dale" o "ok" o "nada más" después de confirmar item + dar nombre, creá el pedido INMEDIATAMENTE.
 - NUNCA hagas preguntas como "¿querés algo más?" o "¿quieres agregar algo más?". Si quieren más, ellos lo dicen.
@@ -358,9 +361,9 @@ async function applyActions(
         try {
           const { createMercadoPagoPreference } = await import('./mercadopago');
           const checkoutUrl = await createMercadoPagoPreference(session);
+          const total = cartTotal(session.cart);
           await createSupabaseOrder(session, 'mercadopago', 'pending');
           result.mercadoPagoUrl = checkoutUrl;
-          const total = cartTotal(session.cart);
           result.confirmationMessage = (
             `💳 *Pagá tu pedido online:*\n\n` +
             `👇 Hacé clic en el siguiente link:\n${checkoutUrl}\n\n` +
@@ -370,16 +373,16 @@ async function applyActions(
           );
         } catch {
           // Fallback to efectivo
-          await createSupabaseOrder(session, 'mercadopago', 'pending');
           const total = cartTotal(session.cart);
+          await createSupabaseOrder(session, 'mercadopago', 'pending');
           result.confirmationMessage =
             `⚠️ No pudimos generar el link de MercadoPago ahora.\n\n` +
             buildConfirmationMessage(session.customerName, total) +
             `\n\n_Podés pagar al retirar._`;
         }
       } else {
-        await createSupabaseOrder(session, 'efectivo', 'pending');
         const total = cartTotal(session.cart);
+        await createSupabaseOrder(session, 'efectivo', 'pending');
         result.confirmationMessage = buildConfirmationMessage(session.customerName, total);
       }
 
@@ -511,94 +514,6 @@ export async function generateResponse(
       }
     } catch (err) {
       console.error('[AI] Error applying actions:', err);
-    }
-  }
-
-  // Safety net: if AI says "pedido creado" but didn't include CREATE_ORDER action,
-  // force-create the order from what's in the cart
-  if (phone && actions.every(a => a.action !== 'CREATE_ORDER')) {
-    const orderCreatedPhrases = /pedido (está |fue )?(creado|confirmado|registrado|listo)|se ha (creado|confirmado|registrado) (tu |su |el )?pedido|order (created|confirmed)/i;
-    if (orderCreatedPhrases.test(finalText)) {
-      console.warn('[AI] ⚠️ AI said order created but no CREATE_ORDER action — forcing creation');
-      let session = getCartSession(phone);
-
-      // If no name set, try to extract from AI response or user message, or use default
-      if (session && (!session.customerName || session.customerName.trim() === '')) {
-        // Try extracting name from AI response (e.g. "Muchas gracias, Juan!")
-        const nameMatch = finalText.match(/gracias,?\s+([A-ZÁÉÍÓÚÑa-záéíóúñ]+)/i) 
-          || finalText.match(/nombre de\s+([A-ZÁÉÍÓÚÑa-záéíóúñ]+)/i)
-          || finalText.match(/para\s+([A-ZÁÉÍÓÚÑa-záéíóúñ]+)/i);
-        if (nameMatch) {
-          session = upsertCartSession(phone, { customerName: nameMatch[1] });
-          console.log(`[AI] 📝 Extracted name from response: "${nameMatch[1]}"`);
-        } else if (userMessage.trim().length < 30 && /^(de |soy |me llamo )?[A-ZÁÉÍÓÚÑa-záéíóúñ\s]+$/i.test(userMessage.trim())) {
-          // Last message looks like a name (short, only letters)
-          const name = userMessage.trim().replace(/^(de |soy |me llamo )/i, '').trim();
-          session = upsertCartSession(phone, { customerName: name });
-          console.log(`[AI] 📝 Using user message as name: "${name}"`);
-        } else {
-          // Default name so order still gets created
-          session = upsertCartSession(phone, { customerName: 'Cliente WhatsApp' });
-          console.log(`[AI] 📝 No name found — using default "Cliente WhatsApp"`);
-        }
-      }
-
-      session = getCartSession(phone);
-      
-      // If cart is STILL empty, try to extract item from AI response or user message
-      if (!session || session.cart.length === 0) {
-        console.warn('[AI] ⚠️ Cart empty despite order confirmation — trying to extract items');
-        const { getMenu } = await import('./menu');
-        const { items: menuItems } = await getMenu();
-        
-        // Search in both user message and AI response for menu item names
-        const searchText = `${userMessage} ${finalText}`.toLowerCase();
-        let foundItem = null;
-        let note = '';
-        
-        for (const item of menuItems) {
-          const itemNameLower = item.name.toLowerCase();
-          // Try exact match or partial match (e.g. "picante" matches "Picante de Pollo")
-          const keywords = itemNameLower.split(/\s+/);
-          const mainKeyword = keywords[0]; // First word (e.g. "picante", "milanesa", "sopa")
-          if (searchText.includes(itemNameLower) || searchText.includes(mainKeyword)) {
-            foundItem = item;
-            break;
-          }
-        }
-        
-        if (foundItem) {
-          // Extract note (sin chuño, fritas, sin arroz, etc.)
-          const noteMatch = userMessage.match(/\b(sin|con|solo|bien|al)\s+\w+(\s+\w+)?/i);
-          if (noteMatch) note = noteMatch[0].toUpperCase();
-          
-          // Add item to cart
-          if (!session) session = getCartSession(phone) ?? { cart: [], customerName: '', phone, lastActive: Date.now() };
-          upsertCartSession(phone, { 
-            cart: [{ id: foundItem.id, name: foundItem.name, price: foundItem.price, quantity: 1, note: note || undefined }] 
-          });
-          console.log(`[AI] 🛒 Auto-added from text: "${foundItem.name}" $${foundItem.price}${note ? ` (${note})` : ''}`);
-          session = getCartSession(phone);
-        } else {
-          console.warn('[AI] ❌ Could not find any menu item in text');
-        }
-      }
-      
-      if (session && session.cart.length > 0 && session.customerName) {
-        try {
-          const result = await applyActions(
-            [{ action: 'CREATE_ORDER', payment_method: 'efectivo' }],
-            phone
-          );
-          if (result.confirmationMessage) {
-            finalText = result.confirmationMessage;
-          }
-        } catch (err) {
-          console.error('[AI] Error force-creating order:', err);
-        }
-      } else {
-        console.warn(`[AI] ⚠️ Cannot force-create: cart=${session?.cart?.length || 0} items, name="${session?.customerName || ''}"`);
-      }
     }
   }
 

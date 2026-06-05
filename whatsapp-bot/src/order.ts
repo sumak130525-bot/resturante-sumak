@@ -141,7 +141,10 @@ export async function createSupabaseOrder(
     void stockErr;
   }
 
-  return order.id as string;
+  // Clear cart after order
+  clearCartSession(session.phone);
+
+  return buildConfirmationMessage(session.customerName, total);
 }
 
 // ── Confirmation message ──────────────────────────────────────────────────────
