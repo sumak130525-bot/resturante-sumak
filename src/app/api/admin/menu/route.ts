@@ -148,7 +148,7 @@ export async function PUT(request: NextRequest) {
   return NextResponse.json(data)
 }
 
-// DELETE: eliminar o desactivar plato
+// DELETE: desactivar plato activo, o eliminar definitivamente si ya está inactivo
 export async function DELETE(request: NextRequest) {
   const supabase = await getUntypedClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -161,11 +161,18 @@ export async function DELETE(request: NextRequest) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const admin = await getUntypedClient(true) as any
 
-  const { error } = await admin
-    .from('menu_items')
-    .update({ active: false })
-    .eq('id', id)
+  // Check if item is already inactive
+  const { data: item } = await admin.from('menu_items').select('active').eq('id', id).single()
 
+  if (item && item.active === false) {
+    // Already inactive → delete permanently
+    const { error } = await admin.from('menu_items').delete().eq('id', id)
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    return NextResponse.json({ success: true, deleted: true })
+  }
+
+  // Active → just deactivate
+  const { error } = await admin.from('menu_items').update({ active: false }).eq('id', id)
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json({ success: true })
 }

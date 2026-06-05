@@ -66,7 +66,11 @@ export default function AdminMenuPage() {
   }
 
   const handleDelete = async (id: string) => {
-    if (!confirm('¿Desactivar este plato del menú?')) return
+    const item = items.find(i => i.id === id)
+    const msg = item && !item.active
+      ? '¿Eliminar este plato DEFINITIVAMENTE? No se puede deshacer.'
+      : '¿Desactivar este plato del menú?'
+    if (!confirm(msg)) return
     await fetch('/api/admin/menu', {
       method: 'DELETE',
       headers: { 'Content-Type': 'application/json' },
