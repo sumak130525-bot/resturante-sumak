@@ -7,7 +7,7 @@ import { FileText, Download, FileSpreadsheet, FileDown, AlertTriangle, TrendingU
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type ReportType = 'sales' | 'profitability' | 'inventory'
+type ReportType = 'sales' | 'profitability'
 type Period = 'today' | 'week' | 'month' | 'year' | 'custom'
 
 interface SalesRow {
@@ -73,7 +73,6 @@ interface ReportData {
 const REPORT_TYPES: { label: string; value: ReportType; desc: string }[] = [
   { label: 'Ventas', value: 'sales', desc: 'Pedidos con totales, método de pago y canal' },
   { label: 'Rentabilidad', value: 'profitability', desc: 'Margen y ganancia por plato' },
-  { label: 'Inventario', value: 'inventory', desc: 'Stock, precios y alertas de ingredientes' },
 ]
 
 const PERIODS: { label: string; value: Period }[] = [
@@ -485,9 +484,8 @@ export default function ReportsPage() {
               </div>
             </div>
 
-            {/* Period (hidden for inventory) */}
-            {reportType !== 'inventory' && (
-              <div>
+            {/* Period */}
+            <div>
                 <p className="text-xs text-gray-400 font-medium uppercase tracking-wide mb-3">Período</p>
                 <div className="flex flex-wrap gap-2">
                   {PERIODS.map(({ label, value }) => (
@@ -528,14 +526,13 @@ export default function ReportsPage() {
                     </div>
                   </div>
                 )}
-              </div>
-            )}
+            </div>
 
             {/* Generate Button */}
             <div className="flex items-center gap-4">
               <button
                 onClick={fetchReport}
-                disabled={loading || (reportType !== 'inventory' && period === 'custom' && (!dateFrom || !dateTo))}
+                disabled={loading || (period === 'custom' && (!dateFrom || !dateTo))}
                 className="flex items-center gap-2 px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-xl text-sm font-semibold transition-all shadow-sm"
               >
                 <FileText size={16} />
@@ -543,7 +540,7 @@ export default function ReportsPage() {
               </button>
               {data && (
                 <p className="text-xs text-gray-400">
-                  {reportType !== 'inventory' && `Período: ${periodLabel()} · `}
+                  {`Período: ${periodLabel()} · `}
                   {data.rows.length} registros
                 </p>
               )}
@@ -578,9 +575,7 @@ export default function ReportsPage() {
                 <h2 className="font-semibold text-gray-900 text-lg">
                   Reporte de {getReportLabel(data.type)}
                 </h2>
-                {data.type !== 'inventory' && (
-                  <p className="text-xs text-gray-400 mt-0.5">Período: {periodLabel()}</p>
-                )}
+                <p className="text-xs text-gray-400 mt-0.5">Período: {periodLabel()}</p>
               </div>
               <div className="flex items-center gap-2">
                 <button
@@ -615,9 +610,6 @@ export default function ReportsPage() {
             )}
             {data.type === 'profitability' && (
               <ProfitTable rows={data.rows as ProfitRow[]} totals={data.totals as ProfitTotals} />
-            )}
-            {data.type === 'inventory' && (
-              <InventoryTable rows={data.rows as InventoryRow[]} totals={data.totals as InventoryTotals} />
             )}
           </div>
         )}
