@@ -123,7 +123,12 @@ export async function GET() {
 
   // ── Helper: get date string (YYYY-MM-DD) from order ──────────────────────
   function dateOf(o: OrderRow) { return o.created_at.slice(0, 10) }
-  function hourOf(o: OrderRow) { return new Date(o.created_at).getHours() }
+  function hourOf(o: OrderRow) {
+    const utc = new Date(o.created_at)
+    // Convert UTC to Argentina (UTC-3)
+    utc.setHours(utc.getHours() - 3)
+    return utc.getHours()
+  }
   function dayOfWeek(o: OrderRow) {
     // 0=Sun, 1=Mon, ..., 6=Sat  →  convert to 0=Mon..5=Sat
     const d = new Date(o.created_at).getDay()
