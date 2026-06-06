@@ -43,6 +43,11 @@ export default function AdminConfiguracionPage() {
   const [cocinaPinLoading, setCocinaPinLoading] = useState(true)
   const [cocinaPinSaving, setCocinaPinSaving] = useState(false)
 
+  // ── Mesas abiertas ───────────────────────────────────────────────────────
+  const [openTablesEnabled, setOpenTablesEnabled] = useState(false)
+  const [openTablesLoading, setOpenTablesLoading] = useState(true)
+  const [openTablesSaving, setOpenTablesSaving] = useState(false)
+
   // ── Ticket config ──────────────────────────────────────────────────────────
   const [ticketConfig, setTicketConfig] = useState<TicketConfig>(DEFAULT_TICKET_CONFIG)
   const [ticketConfigLoading, setTicketConfigLoading] = useState(true)
@@ -132,6 +137,14 @@ export default function AdminConfiguracionPage() {
         setCocinaPinLoading(false)
       })
       .catch(() => setCocinaPinLoading(false))
+
+    fetch('/api/admin/settings?key=open_tables_enabled')
+      .then((r) => r.ok ? r.json() : [])
+      .then((d: { key: string; value: string }[]) => {
+        setOpenTablesEnabled(d[0]?.value === 'true')
+        setOpenTablesLoading(false)
+      })
+      .catch(() => setOpenTablesLoading(false))
   }, [])
 
   const handleSaveTip = async () => {
@@ -1081,6 +1094,49 @@ export default function AdminConfiguracionPage() {
                 className="flex items-center gap-2 bg-sumak-brown text-white text-sm font-medium px-5 py-2.5 rounded-xl hover:bg-sumak-brown/90 disabled:opacity-50 transition-colors"
               >
                 {cocinaPinSaving ? 'Guardando...' : 'Guardar configuración de cocina'}
+              </button>
+            </div>
+          )}
+        </section>
+
+        {/* ── Mesas abiertas ───────────────────────────────────────── */}
+        <section className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
+          <h3 className="text-lg font-bold text-gray-800 mb-4">🪑 Mesas abiertas</h3>
+          {openTablesLoading ? (
+            <p className="text-sm text-gray-400">Cargando…</p>
+          ) : (
+            <div className="space-y-4">
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => setOpenTablesEnabled(!openTablesEnabled)}
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${openTablesEnabled ? 'bg-green-500' : 'bg-gray-300'}`}
+                >
+                  <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${openTablesEnabled ? 'translate-x-6' : 'translate-x-1'}`} />
+                </button>
+                <span className="text-sm font-medium text-gray-700">
+                  {openTablesEnabled ? 'Mesas abiertas habilitadas' : 'Mesas abiertas deshabilitadas'}
+                </span>
+              </div>
+              <p className="text-xs text-gray-400">
+                Cuando está activado, los mozos pueden abrir mesas, agregar items en tandas, enviar a cocina y cobrar al final.
+                Cuando está desactivado, el POS funciona en modo rápido (pedido → cobro inmediato).
+              </p>
+              <button
+                onClick={async () => {
+                  setOpenTablesSaving(true)
+                  try {
+                    await fetch('/api/admin/settings', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ key: 'open_tables_enabled', value: openTablesEnabled ? 'true' : 'false' }),
+                    })
+                  } catch { /* ignore */ }
+                  setOpenTablesSaving(false)
+                }}
+                disabled={openTablesSaving}
+                className="flex items-center gap-2 bg-green-600 text-white text-sm font-medium px-5 py-2.5 rounded-xl hover:bg-green-700 disabled:opacity-50 transition-colors"
+              >
+                {openTablesSaving ? 'Guardando...' : 'Guardar configuración de mesas'}
               </button>
             </div>
           )}
