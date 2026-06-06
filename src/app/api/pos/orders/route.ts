@@ -102,24 +102,29 @@ export async function POST(request: NextRequest) {
     const orderNotes = customNotes && String(customNotes).trim() ? String(customNotes).trim() : null
 
     // Crear el pedido en la tabla orders
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const orderInsert: Record<string, any> = {
+      customer_name: customer_name || 'POS',
+      customer_phone: null,
+      notes: orderNotes,
+      total: total ?? 0,
+      status: 'pending',
+      channel: 'pos',
+      dining_option: dining_option || null,
+      payment_method: is_open ? null : (payment_method || null),
+      cash_amount: is_open ? null : (cash_amount ?? null),
+      transfer_amount: is_open ? null : (transfer_amount ?? null),
+      persons: persons && Number(persons) > 1 ? Number(persons) : 1,
+      table_number: table_number ?? null,
+    }
+    // Only include open table columns if migration has run
+    if (is_open) {
+      orderInsert.is_open = true
+      orderInsert.opened_by_employee_id = employee_id ?? null
+    }
     const { data: order, error: orderError } = await supabase
       .from('orders')
-      .insert({
-        customer_name: customer_name || 'POS',
-        customer_phone: null,
-        notes: orderNotes,
-        total: total ?? 0,
-        status: 'pending',
-        channel: 'pos',
-        dining_option: dining_option || null,
-        payment_method: is_open ? null : (payment_method || null),
-        cash_amount: is_open ? null : (cash_amount ?? null),
-        transfer_amount: is_open ? null : (transfer_amount ?? null),
-        persons: persons && Number(persons) > 1 ? Number(persons) : 1,
-        table_number: table_number ?? null,
-        is_open: is_open === true,
-        opened_by_employee_id: is_open ? (employee_id ?? null) : null,
-      })
+      .insert(orderInsert)
       .select()
       .single()
 
@@ -127,21 +132,21 @@ export async function POST(request: NextRequest) {
     if (!order) throw new Error('No se pudo crear el pedido')
 
     // Crear order_items con line_note para modificadores y person_number para pedidos multi-persona
-    const now = new Date().toISOString()
-    const orderItems = (items as PosOrderItem[]).map((item) => ({
-      order_id: order.id,
-      menu_item_id: item.menu_item_id,
-      quantity: item.quantity,
-      unit_price: item.is_bonus ? 0 : Math.round(item.price),
-      line_note: item.line_note || null,
-      person_number: item.person_number ?? null,
-      is_bonus: item.is_bonus ?? false,
-      bonus_reason: item.bonus_reason ?? null,
-      original_price: item.original_price ?? null,
-      added_at: now,
-      // Si es mesa abierta, los items se envían a cocina después; si no, ya están "enviados"
-      sent_to_kitchen_at: is_open === true ? null : now,
-    }))
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const orderItems = (items as PosOrderItem[]).map((item): Record<string, any> => {
+      const base: Record<string, any> = {
+        order_id: order.id,
+        menu_item_id: item.menu_item_id,
+        quantity: item.quantity,
+        unit_price: item.is_bonus ? 0 : Math.round(item.price),
+        line_note: item.line_note || null,
+        person_number: item.person_number ?? null,
+        is_bonus: item.is_bonus ?? false,
+        bonus_reason: item.bonus_reason ?? null,
+        original_price: item.original_price ?? null,
+      }
+      return base
+    })
 
     const { error: itemsError } = await supabase
       .from('order_items')
