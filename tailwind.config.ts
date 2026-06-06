@@ -83,6 +83,20 @@ const config: Config = {
           from: { transform: 'rotate(0deg)' },
           to:   { transform: 'rotate(360deg)' },
         },
+        'shake': {
+          '0%, 100%': { transform: 'translateX(0)' },
+          '15%':      { transform: 'translateX(-8px)' },
+          '30%':      { transform: 'translateX(8px)' },
+          '45%':      { transform: 'translateX(-6px)' },
+          '60%':      { transform: 'translateX(6px)' },
+          '75%':      { transform: 'translateX(-4px)' },
+          '90%':      { transform: 'translateX(4px)' },
+        },
+        'bounce-in': {
+          '0%':   { opacity: '0', transform: 'scale(0.7)' },
+          '60%':  { opacity: '1', transform: 'scale(1.08)' },
+          '100%': { transform: 'scale(1)' },
+        },
       },
       animation: {
         'fade-up':         'fade-up 0.45s cubic-bezier(0.16,1,0.3,1) both',
@@ -94,6 +108,8 @@ const config: Config = {
         'pulse-ring':      'pulse-ring 1.8s ease-in-out infinite',
         'float':           'float 3s ease-in-out infinite',
         'spin-slow':       'spin-slow 8s linear infinite',
+        'shake':           'shake 0.45s ease-in-out both',
+        'bounce-in':       'bounce-in 0.3s ease-out both',
       },
       backgroundImage: {
         'andean-stripe': 'repeating-linear-gradient(90deg, #C0392B 0px, #C0392B 8px, #D4A017 8px, #D4A017 16px, #3E1C00 16px, #3E1C00 24px, #D4A017 24px, #D4A017 32px)',

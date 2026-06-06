@@ -32,6 +32,17 @@ export default function AdminConfiguracionPage() {
   const [gridLoading, setGridLoading] = useState(true)
   const [gridSaving, setGridSaving] = useState(false)
 
+  // ── Propina sugerida ───────────────────────────────────────────────────────
+  const [tipEnabled, setTipEnabled] = useState(false)
+  const [tipPercentages, setTipPercentages] = useState('10,15,20')
+  const [tipLoading, setTipLoading] = useState(true)
+  const [tipSaving, setTipSaving] = useState(false)
+
+  // ── PIN cocina ─────────────────────────────────────────────────────────────
+  const [cocinaPinRequired, setCocinaPinRequired] = useState(false)
+  const [cocinaPinLoading, setCocinaPinLoading] = useState(true)
+  const [cocinaPinSaving, setCocinaPinSaving] = useState(false)
+
   // ── Ticket config ──────────────────────────────────────────────────────────
   const [ticketConfig, setTicketConfig] = useState<TicketConfig>(DEFAULT_TICKET_CONFIG)
   const [ticketConfigLoading, setTicketConfigLoading] = useState(true)
@@ -100,6 +111,71 @@ export default function AdminConfiguracionPage() {
       })
       .catch(() => setGridLoading(false))
   }, [])
+
+  // Fetch tip + cocina PIN settings on mount
+  useEffect(() => {
+    fetch('/api/admin/settings?prefix=tip_suggestion')
+      .then((r) => r.ok ? r.json() : [])
+      .then((d: { key: string; value: string }[]) => {
+        const enabled = d.find((s) => s.key === 'tip_suggestion_enabled')
+        const pcts = d.find((s) => s.key === 'tip_suggestion_percentages')
+        if (enabled) setTipEnabled(enabled.value === 'true')
+        if (pcts) setTipPercentages(pcts.value)
+        setTipLoading(false)
+      })
+      .catch(() => setTipLoading(false))
+
+    fetch('/api/admin/settings?key=cocina_pin_required')
+      .then((r) => r.ok ? r.json() : [])
+      .then((d: { key: string; value: string }[]) => {
+        setCocinaPinRequired(d[0]?.value === 'true')
+        setCocinaPinLoading(false)
+      })
+      .catch(() => setCocinaPinLoading(false))
+  }, [])
+
+  const handleSaveTip = async () => {
+    setTipSaving(true)
+    setError(null)
+    try {
+      await Promise.all([
+        fetch('/api/admin/settings', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ key: 'tip_suggestion_enabled', value: String(tipEnabled) }),
+        }),
+        fetch('/api/admin/settings', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ key: 'tip_suggestion_percentages', value: tipPercentages }),
+        }),
+      ])
+      setSuccess('Configuración de propina guardada')
+    } catch {
+      setError('Error al guardar configuración de propina')
+    } finally {
+      setTipSaving(false)
+    }
+  }
+
+  const handleSaveCocinaPIN = async () => {
+    setCocinaPinSaving(true)
+    setError(null)
+    try {
+      await fetch('/api/admin/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key: 'cocina_pin_required', value: String(cocinaPinRequired) }),
+      })
+      setSuccess('Configuración de cocina guardada')
+    } catch {
+      setError('Error al guardar configuración de cocina')
+    } finally {
+      setCocinaPinSaving(false)
+    }
+  }
+
+
 
   const handleSaveGrid = async () => {
     setGridSaving(true)
@@ -926,6 +1002,88 @@ export default function AdminConfiguracionPage() {
               </>
             )}
           </div>
+        </section>
+
+        {/* ── Propina sugerida ── */}
+        <section className="bg-white rounded-2xl shadow-card-rest border border-gray-100 p-6">
+          <h2 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
+            <Settings size={20} className="text-sumak-red" />
+            Propina sugerida (pre-cuenta)
+          </h2>
+          {tipLoading ? (
+            <p className="text-sm text-gray-400">Cargando...</p>
+          ) : (
+            <div className="space-y-4">
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => setTipEnabled(!tipEnabled)}
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${tipEnabled ? 'bg-sumak-red' : 'bg-gray-300'}`}
+                >
+                  <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${tipEnabled ? 'translate-x-6' : 'translate-x-1'}`} />
+                </button>
+                <span className="text-sm font-medium text-gray-700">
+                  {tipEnabled ? 'Activada' : 'Desactivada'}
+                </span>
+              </div>
+              {tipEnabled && (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Porcentajes sugeridos (separados por coma)
+                  </label>
+                  <input
+                    type="text"
+                    value={tipPercentages}
+                    onChange={(e) => setTipPercentages(e.target.value)}
+                    placeholder="10,15,20"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-sumak-red"
+                  />
+                  <p className="text-xs text-gray-400 mt-1">Ejemplo: 10,15,20 para 10%, 15% y 20%</p>
+                </div>
+              )}
+              <button
+                onClick={handleSaveTip}
+                disabled={tipSaving}
+                className="flex items-center gap-2 bg-sumak-brown text-white text-sm font-medium px-5 py-2.5 rounded-xl hover:bg-sumak-brown/90 disabled:opacity-50 transition-colors"
+              >
+                {tipSaving ? 'Guardando...' : 'Guardar configuración de propina'}
+              </button>
+            </div>
+          )}
+        </section>
+
+        {/* ── PIN cocina ── */}
+        <section className="bg-white rounded-2xl shadow-card-rest border border-gray-100 p-6">
+          <h2 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
+            <Settings size={20} className="text-sumak-red" />
+            Pantalla cocina — Acceso
+          </h2>
+          {cocinaPinLoading ? (
+            <p className="text-sm text-gray-400">Cargando...</p>
+          ) : (
+            <div className="space-y-4">
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => setCocinaPinRequired(!cocinaPinRequired)}
+                  className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${cocinaPinRequired ? 'bg-sumak-red' : 'bg-gray-300'}`}
+                >
+                  <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${cocinaPinRequired ? 'translate-x-6' : 'translate-x-1'}`} />
+                </button>
+                <span className="text-sm font-medium text-gray-700">
+                  {cocinaPinRequired ? 'Requiere PIN para acceder a /cocina' : 'Acceso libre a /cocina (sin PIN)'}
+                </span>
+              </div>
+              <p className="text-xs text-gray-400">
+                Cuando está activado, el personal debe ingresar su PIN antes de ver la pantalla de cocina.
+              </p>
+              <button
+                onClick={handleSaveCocinaPIN}
+                disabled={cocinaPinSaving}
+                className="flex items-center gap-2 bg-sumak-brown text-white text-sm font-medium px-5 py-2.5 rounded-xl hover:bg-sumak-brown/90 disabled:opacity-50 transition-colors"
+              >
+                {cocinaPinSaving ? 'Guardando...' : 'Guardar configuración de cocina'}
+              </button>
+            </div>
+          )}
         </section>
       </div>
     </AdminLayoutClient>

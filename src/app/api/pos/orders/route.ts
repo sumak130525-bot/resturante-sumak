@@ -36,6 +36,8 @@ export async function POST(request: NextRequest) {
       customer_name,
       notes: customNotes,
       persons,
+      is_open,
+      employee_id,
     } = body
 
     if (!items || !Array.isArray(items) || items.length === 0) {
@@ -72,6 +74,30 @@ export async function POST(request: NextRequest) {
       query: "ALTER TABLE orders ADD COLUMN IF NOT EXISTS cash_amount numeric; ALTER TABLE orders ADD COLUMN IF NOT EXISTS transfer_amount numeric;"
     }).then(() => {}, () => {})
 
+    // ── Mesa abierta: nuevas columnas en orders ───────────────────────────────
+    await supabase.rpc('exec_sql', {
+      query: [
+        "ALTER TABLE orders ADD COLUMN IF NOT EXISTS is_open boolean DEFAULT false;",
+        "ALTER TABLE orders ADD COLUMN IF NOT EXISTS closed_at timestamptz;",
+        "ALTER TABLE orders ADD COLUMN IF NOT EXISTS opened_by_employee_id uuid;",
+        "ALTER TABLE orders ADD COLUMN IF NOT EXISTS closed_by_employee_id uuid;",
+        "ALTER TABLE orders ADD COLUMN IF NOT EXISTS pre_bill_printed_at timestamptz;",
+      ].join(' ')
+    }).then(() => {}, () => {})
+
+    // ── Mesa abierta: nuevas columnas en order_items ─────────────────────────
+    await supabase.rpc('exec_sql', {
+      query: [
+        "ALTER TABLE order_items ADD COLUMN IF NOT EXISTS sent_to_kitchen_at timestamptz;",
+        "ALTER TABLE order_items ADD COLUMN IF NOT EXISTS added_at timestamptz DEFAULT now();",
+      ].join(' ')
+    }).then(() => {}, () => {})
+
+    // ── Mesa abierta: índice parcial para mesas abiertas ─────────────────────
+    await supabase.rpc('exec_sql', {
+      query: "CREATE INDEX IF NOT EXISTS idx_orders_open_tables ON orders(table_number, is_open) WHERE is_open = true AND channel = 'pos';"
+    }).then(() => {}, () => {})
+
     // Usar nota personalizada del usuario tal cual viene del POS
     const orderNotes = customNotes && String(customNotes).trim() ? String(customNotes).trim() : null
 
@@ -86,10 +112,13 @@ export async function POST(request: NextRequest) {
         status: 'pending',
         channel: 'pos',
         dining_option: dining_option || null,
-        payment_method: payment_method || null,
-        cash_amount: cash_amount ?? null,
-        transfer_amount: transfer_amount ?? null,
+        payment_method: is_open ? null : (payment_method || null),
+        cash_amount: is_open ? null : (cash_amount ?? null),
+        transfer_amount: is_open ? null : (transfer_amount ?? null),
         persons: persons && Number(persons) > 1 ? Number(persons) : 1,
+        table_number: table_number ?? null,
+        is_open: is_open === true,
+        opened_by_employee_id: is_open ? (employee_id ?? null) : null,
       })
       .select()
       .single()
@@ -98,6 +127,7 @@ export async function POST(request: NextRequest) {
     if (!order) throw new Error('No se pudo crear el pedido')
 
     // Crear order_items con line_note para modificadores y person_number para pedidos multi-persona
+    const now = new Date().toISOString()
     const orderItems = (items as PosOrderItem[]).map((item) => ({
       order_id: order.id,
       menu_item_id: item.menu_item_id,
@@ -108,6 +138,9 @@ export async function POST(request: NextRequest) {
       is_bonus: item.is_bonus ?? false,
       bonus_reason: item.bonus_reason ?? null,
       original_price: item.original_price ?? null,
+      added_at: now,
+      // Si es mesa abierta, los items se envían a cocina después; si no, ya están "enviados"
+      sent_to_kitchen_at: is_open === true ? null : now,
     }))
 
     const { error: itemsError } = await supabase

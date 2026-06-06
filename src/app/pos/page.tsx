@@ -8,6 +8,10 @@ import { useTranslation, getItemName, type Locale } from '@/lib/i18n'
 import { useLanguagesEnabled } from '@/hooks/useLanguagesEnabled'
 import { type TicketConfig, DEFAULT_TICKET_CONFIG } from '@/types/ticket-config'
 import WalkieTalkie from '@/components/WalkieTalkie'
+import PinGate from '@/components/pos/PinGate'
+import OpenTablesPanel, { type OpenTable } from '@/components/pos/OpenTablesPanel'
+import { usePosAuth } from '@/hooks/usePosAuth'
+import { buildKitchenComanda, buildPreBillText, type KitchenItem } from '@/components/pos/KitchenPrint'
 
 // ─── Ticket helpers ───────────────────────────────────────────────────────────
 
@@ -2752,6 +2756,14 @@ function TicketPanel({
   onDirectSubmit,
   onBonusClick,
   onUnbonus,
+  // ─── Mesa abierta / roles ───────────────────────────────────────
+  canCharge,
+  canSendKitchen,
+  canRequestBill,
+  onSendKitchen,
+  onRequestBill,
+  sendingKitchen,
+  activeOpenOrder,
 }: {
   items: TicketItem[]
   diningOption: DiningOption
@@ -2780,6 +2792,14 @@ function TicketPanel({
   onDirectSubmit: () => void
   onBonusClick?: (uid: string) => void
   onUnbonus?: (uid: string) => void
+  // ─── Mesa abierta / roles ───────────────────────────────────────
+  canCharge?: boolean
+  canSendKitchen?: boolean
+  canRequestBill?: boolean
+  onSendKitchen?: () => void
+  onRequestBill?: () => void
+  sendingKitchen?: boolean
+  activeOpenOrder?: { id: string; table_number: number; existingItems: TicketItem[] } | null
 }) {
   const total = items.reduce((s, i) => {
     if (i.is_bonus) return s
@@ -3002,22 +3022,57 @@ function TicketPanel({
             <span className="text-gray-500 text-sm font-semibold">Total</span>
             <span className="text-gray-900 font-black text-2xl tabular-nums">{formatARS(total)}</span>
           </div>
-          <button
-            onClick={onDirectSubmit}
-            disabled={isEmpty || submitting}
-            className={`w-full py-4 rounded-2xl font-black text-lg tracking-wide transition-all active:scale-95 shadow-md ${
-              isEmpty || submitting
-                ? 'bg-gray-300 text-gray-400 cursor-not-allowed'
-                : canDirectSubmit
-                  ? 'bg-green-500 hover:bg-green-600 text-white cursor-pointer'
-                  : paymentMethod === 'Mixto'
-                    ? 'bg-purple-600 hover:bg-purple-700 text-white cursor-pointer'
-                    : 'bg-amber-500 hover:bg-amber-600 text-white cursor-pointer'
-            }`}
-            style={{ minHeight: 56 }}
-          >
-            {submitting ? 'Cobrando...' : '🖨️ COBRAR E IMPRIMIR'}
-          </button>
+
+          {/* Botones por rol */}
+          <div className="flex flex-col gap-2">
+            {/* Enviar a cocina — visible para mozo (no puede cobrar) */}
+            {canSendKitchen && !canCharge && (
+              <button
+                onClick={onSendKitchen}
+                disabled={isEmpty || sendingKitchen}
+                className={`w-full py-4 rounded-2xl font-black text-lg tracking-wide transition-all active:scale-95 shadow-md ${
+                  isEmpty || sendingKitchen
+                    ? 'bg-gray-300 text-gray-400 cursor-not-allowed'
+                    : 'bg-orange-500 hover:bg-orange-600 text-white cursor-pointer'
+                }`}
+                style={{ minHeight: 56 }}
+              >
+                {sendingKitchen ? 'Enviando...' : '🍽️ Enviar a cocina'}
+              </button>
+            )}
+
+            {/* Cobrar — solo cajero/gerente/dueño */}
+            {(canCharge ?? true) && (
+              <button
+                onClick={onDirectSubmit}
+                disabled={isEmpty || submitting}
+                className={`w-full py-4 rounded-2xl font-black text-lg tracking-wide transition-all active:scale-95 shadow-md ${
+                  isEmpty || submitting
+                    ? 'bg-gray-300 text-gray-400 cursor-not-allowed'
+                    : canDirectSubmit
+                      ? 'bg-green-500 hover:bg-green-600 text-white cursor-pointer'
+                      : paymentMethod === 'Mixto'
+                        ? 'bg-purple-600 hover:bg-purple-700 text-white cursor-pointer'
+                        : 'bg-amber-500 hover:bg-amber-600 text-white cursor-pointer'
+                }`}
+                style={{ minHeight: 56 }}
+              >
+                {submitting ? 'Cobrando...' : '🖨️ COBRAR E IMPRIMIR'}
+              </button>
+            )}
+
+            {/* Pedir cuenta — visible para mozo con mesa activa */}
+            {canRequestBill && activeOpenOrder && !canCharge && (
+              <button
+                onClick={onRequestBill}
+                disabled={!activeOpenOrder}
+                className="w-full py-3 rounded-2xl font-bold text-base tracking-wide transition-all active:scale-95 bg-teal-600 hover:bg-teal-700 text-white cursor-pointer shadow-md"
+              >
+                🧾 Pedir cuenta
+              </button>
+            )}
+          </div>
+
           {!isEmpty && needsTable && (
             <p className="text-center text-[10px] text-amber-600 font-semibold mt-1.5">Ingresá una mesa para cobrar</p>
           )}
@@ -3534,6 +3589,23 @@ export default function POSPage() {
   const { menuItems, categories, loading } = useMenuRealtime()
   const { locale, setLocale } = useTranslation()
   const { languagesEnabled } = useLanguagesEnabled()
+
+  // ─── Autenticación por PIN ─────────────────────────────────────────────────
+  const { session, permissions, isAuthenticated, logout } = usePosAuth()
+
+  // ─── Mesa abierta ─────────────────────────────────────────────────────────
+  // Orden actualmente cargada como "mesa abierta" (para agregar items)
+  const [activeOpenOrder, setActiveOpenOrder] = useState<{
+    id: string
+    table_number: number
+    existingItems: TicketItem[]  // items ya enviados a cocina (readonly)
+  } | null>(null)
+  // Panel lateral de mesas abiertas
+  const [showOpenTables, setShowOpenTables] = useState(false)
+  const [openTablesRefresh, setOpenTablesRefresh] = useState(0)
+  // Estado de envío/cobro de mesa abierta
+  const [sendingKitchen, setSendingKitchen] = useState(false)
+  const [closingTable, setClosingTable] = useState(false)
 
   // Force locale to 'es' when languages are disabled
   useEffect(() => {
@@ -4056,6 +4128,266 @@ export default function POSPage() {
     }))
   }, [])
 
+  // ─── Cargar mesa abierta ────────────────────────────────────────────────────
+  const handleLoadOpenTable = useCallback(async (table: OpenTable) => {
+    try {
+      // Cargar items existentes de la mesa
+      const res = await fetch(`/api/pos/orders/${table.order_id}/pre-bill`)
+      if (!res.ok) {
+        setToast('Error al cargar mesa')
+        return
+      }
+      const data = await res.json()
+      const orderItems = (data.items ?? []) as {
+        id: string
+        quantity: number
+        unit_price: number
+        line_note: string | null
+        is_bonus: boolean
+        menu_items: { name: string; subcategory?: string } | null
+        sent_to_kitchen_at: string | null
+      }[]
+
+      // Convertir items de la orden a TicketItem[]
+      const existingItems: TicketItem[] = orderItems
+        .filter((i) => i.sent_to_kitchen_at !== null)  // solo items ya enviados
+        .map((i) => ({
+          uid: `open__${i.id}`,
+          menu_item_id: '',  // no necesario para display
+          name: i.menu_items?.name ?? 'Item',
+          price: i.unit_price,
+          quantity: i.quantity,
+          is_bonus: i.is_bonus,
+        }))
+
+      setActiveOpenOrder({
+        id: table.order_id,
+        table_number: table.table_number,
+        existingItems,
+      })
+
+      // Precargar número de mesa
+      setTableNumber(String(table.table_number))
+      setDiningOption('Comer dentro')
+      // Limpiar items nuevos (solo los pendientes que aún no se enviaron)
+      const pendingItems: TicketItem[] = orderItems
+        .filter((i) => i.sent_to_kitchen_at === null)
+        .map((i) => ({
+          uid: `pending__${i.id}`,
+          menu_item_id: '',
+          name: i.menu_items?.name ?? 'Item',
+          price: i.unit_price,
+          quantity: i.quantity,
+          is_bonus: i.is_bonus,
+        }))
+      setTicketItems(pendingItems.length > 0 ? pendingItems : [])
+      setTicketOpen(true)
+    } catch {
+      setToast('Error al cargar la mesa')
+    }
+  }, [])
+
+  // ─── Enviar items a cocina (mesa abierta) ───────────────────────────────────
+  const handleSendKitchen = useCallback(async () => {
+    if (ticketItems.length === 0) return
+    setSendingKitchen(true)
+
+    let targetOrderId = activeOpenOrder?.id ?? null
+    let targetTableNumber = activeOpenOrder?.table_number ?? (tableNumber ? parseInt(tableNumber, 10) : null)
+
+    // Si no hay mesa activa, crear nueva orden abierta
+    if (!targetOrderId) {
+      if (!tableNumber) {
+        setToast('Indica número de mesa antes de enviar a cocina')
+        setSendingKitchen(false)
+        return
+      }
+      try {
+        const newItemsPayload = ticketItems.map((item) => ({
+          menu_item_id: item.menu_item_id,
+          price: item.is_bonus ? 0 : item.price,
+          quantity: item.quantity,
+          line_note: item.customNote ?? buildLineNote(item.modifiers ?? []),
+          person_number: item.person_number ?? null,
+          is_bonus: item.is_bonus ?? false,
+          bonus_reason: item.bonus_reason ?? null,
+          original_price: item.original_price ?? null,
+        }))
+        const total = ticketItems.reduce((s, i) => s + (i.is_bonus ? 0 : i.price) * i.quantity, 0)
+        const createRes = await fetch('/api/pos/orders', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            items: newItemsPayload,
+            total,
+            dining_option: diningOption,
+            table_number: parseInt(tableNumber, 10),
+            notes: orderNotes,
+            persons,
+            is_open: true,
+            employee_id: session?.employee.id,
+          }),
+        })
+        if (!createRes.ok) {
+          const err = await createRes.json()
+          setToast(err.error ?? 'Error al crear mesa')
+          return
+        }
+        const createData = await createRes.json()
+        targetOrderId = createData.order?.id ?? null
+        targetTableNumber = parseInt(tableNumber, 10)
+
+        if (!targetOrderId) {
+          setToast('Error al crear mesa')
+          return
+        }
+
+        setActiveOpenOrder({ id: targetOrderId, table_number: targetTableNumber!, existingItems: [] })
+      } catch {
+        setToast('Error al crear mesa')
+        setSendingKitchen(false)
+        return
+      }
+    } else {
+      // Mesa ya existe: agregar items
+      const newItemsPayload = ticketItems.map((item) => ({
+        menu_item_id: item.menu_item_id,
+        quantity: item.quantity,
+        unit_price: item.is_bonus ? 0 : item.price,
+        line_note: item.customNote ?? buildLineNote(item.modifiers ?? []),
+        person_number: item.person_number ?? null,
+        is_bonus: item.is_bonus ?? false,
+        bonus_reason: item.bonus_reason ?? null,
+        original_price: item.original_price ?? null,
+      }))
+
+      const addRes = await fetch(`/api/pos/orders/${targetOrderId}/items`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ items: newItemsPayload, employee_id: session?.employee.id }),
+      })
+      if (!addRes.ok) {
+        const err = await addRes.json()
+        setToast(err.error ?? 'Error al agregar items')
+        setSendingKitchen(false)
+        return
+      }
+    }
+
+    try {
+      // Marcar items como enviados y obtener datos para comanda
+      const sendRes = await fetch(`/api/pos/orders/${targetOrderId}/send-kitchen`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ employee_id: session?.employee.id }),
+      })
+      if (!sendRes.ok) {
+        const err = await sendRes.json()
+        setToast(err.error ?? 'Error al enviar a cocina')
+        return
+      }
+      const sendData = await sendRes.json()
+
+      // Imprimir comanda de cocina
+      const kitchenItems: KitchenItem[] = (sendData.items_sent ?? []).map((i: { name: string; quantity: number; line_note?: string | null; person_number?: number | null }) => ({
+        name: i.name,
+        quantity: i.quantity,
+        line_note: i.line_note,
+        person_number: i.person_number,
+      }))
+      const comandaLines = buildKitchenComanda(
+        targetTableNumber ?? activeOpenOrder?.table_number ?? tableNumber,
+        kitchenItems,
+        sendData.round ?? 1,
+        session?.employee.name,
+      )
+      const comandaText = comandaLines.join('\n')
+
+      if (printServerUrl) {
+        await tryPrintServer(comandaText, printServerUrl)
+      }
+
+      // Actualizar items existentes y limpiar pendientes
+      setActiveOpenOrder((prev) => {
+        if (!prev) return { id: targetOrderId!, table_number: targetTableNumber!, existingItems: kitchenItems.map((ki) => ({ uid: `sent__${ki.name}`, menu_item_id: '', name: ki.name, price: 0, quantity: ki.quantity })) }
+        const newExisting: TicketItem[] = kitchenItems.map((ki) => ({
+          uid: `sent__${Date.now()}__${ki.name}`,
+          menu_item_id: '',
+          name: ki.name,
+          price: 0,
+          quantity: ki.quantity,
+        }))
+        return { ...prev, existingItems: [...prev.existingItems, ...newExisting] }
+      })
+      setTicketItems([])
+      setOpenTablesRefresh((n) => n + 1)
+      setToast(`Mesa ${targetTableNumber ?? tableNumber} — enviado a cocina`)
+    } catch {
+      setToast('Error al enviar a cocina')
+    } finally {
+      setSendingKitchen(false)
+    }
+  }, [activeOpenOrder, ticketItems, session, printServerUrl, tableNumber, diningOption, orderNotes, persons])
+
+  // ─── Pedir cuenta (imprime pre-cuenta, NO cobra) ────────────────────────────
+  const handleRequestBill = useCallback(async () => {
+    if (!activeOpenOrder) return
+    try {
+      const res = await fetch(`/api/pos/orders/${activeOpenOrder.id}/pre-bill`)
+      if (!res.ok) {
+        setToast('Error al obtener cuenta')
+        return
+      }
+      const data = await res.json()
+      const total = (data.order?.total ?? 0) as number
+      const items = (data.items ?? []) as { quantity: number; unit_price: number; is_bonus?: boolean; line_note?: string | null; menu_items?: { name: string } | null }[]
+      const preBillItems = items.map((i) => ({
+        name: i.menu_items?.name ?? 'Item',
+        quantity: i.quantity,
+        unit_price: i.unit_price,
+        is_bonus: i.is_bonus ?? false,
+        line_note: i.line_note ?? null,
+      }))
+
+      const preBillText = buildPreBillText(
+        activeOpenOrder.table_number,
+        preBillItems,
+        data.tip_enabled ?? false,
+        data.tip_percentages ?? [],
+      )
+
+      if (printServerUrl) {
+        const ok = await tryPrintServer(preBillText, printServerUrl)
+        if (ok) {
+          setToast(`Pre-cuenta mesa ${activeOpenOrder.table_number} impresa`)
+          return
+        }
+      }
+      // Fallback: mostrar total en toast
+      void total
+      setToast(`Pre-cuenta mesa ${activeOpenOrder.table_number}: $${total}`)
+    } catch {
+      setToast('Error al imprimir pre-cuenta')
+    }
+  }, [activeOpenOrder, printServerUrl])
+
+  // ─── Abrir mesa nueva ────────────────────────────────────────────────────────
+  const handleOpenNewTable = useCallback(() => {
+    setActiveOpenOrder(null)
+    setTicketItems([])
+    setTableNumber('')
+    setDiningOption('Comer dentro')
+    setTicketOpen(true)
+  }, [])
+
+  // ─── Cerrar / limpiar mesa activa ────────────────────────────────────────────
+  const handleClearActiveTable = useCallback(() => {
+    setActiveOpenOrder(null)
+    setTicketItems([])
+    setTableNumber('')
+    setTicketOpen(false)
+  }, [])
+
   const handleSubmit = useCallback(async () => {
     if (ticketItems.length === 0) return
     setSubmitting(true)
@@ -4194,6 +4526,22 @@ export default function POSPage() {
 
   const ticketCount = ticketItems.reduce((s, i) => s + i.quantity, 0)
 
+  // ─── PIN Gate ───────────────────────────────────────────────────────────────
+  if (!isAuthenticated) {
+    return (
+      <PinGate
+        title="POS Sumak"
+        subtitle="Ingresa tu PIN para continuar"
+        onAuth={(emp) => {
+          void emp
+          // usePosAuth persiste la sesión en sessionStorage al hacer login
+          // PinGate llama onAuth después de validar; forzamos re-render recargando
+          window.location.reload()
+        }}
+      />
+    )
+  }
+
   return (
     <div className="fixed inset-0 flex flex-col bg-black overflow-hidden select-none" style={{ fontFamily: "'Inter', sans-serif" }}>
       {/* ── Top Bar: POS + Categories + Language + Clock + Ticket ── */}
@@ -4321,6 +4669,26 @@ export default function POSPage() {
         >
           💰
         </button>
+        {/* Mesas abiertas button */}
+        {permissions.canOpenTable && (
+          <button
+            onClick={() => setShowOpenTables(true)}
+            title="Mesas abiertas"
+            className="flex items-center justify-center w-8 h-8 rounded-lg bg-sumak-brown-mid text-amber-400 hover:bg-sumak-brown-light active:scale-95 transition-all shrink-0 font-bold text-base"
+          >
+            🪑
+          </button>
+        )}
+        {/* Usuario activo + cambiar PIN */}
+        {session && (
+          <button
+            onClick={logout}
+            title={`${session.employee.name} — Click para cerrar sesión`}
+            className="flex items-center gap-1 px-2 py-1 rounded-lg bg-sumak-brown-mid text-sumak-gold hover:bg-red-900/60 active:scale-95 transition-all shrink-0 text-xs font-bold max-w-[80px]"
+          >
+            <span className="truncate">{session.employee.name.split(' ')[0]}</span>
+          </button>
+        )}
         {/* Walkie-talkie */}
         <WalkieTalkie device="pos" />
         {/* Ticket toggle button */}
@@ -4602,6 +4970,13 @@ export default function POSPage() {
               onDirectSubmit={handleDirectSubmit}
               onBonusClick={handleBonusClick}
               onUnbonus={handleUnbonus}
+              canCharge={permissions.canCharge}
+              canSendKitchen={permissions.canSendKitchen}
+              canRequestBill={permissions.canRequestBill}
+              onSendKitchen={() => void handleSendKitchen()}
+              onRequestBill={() => void handleRequestBill()}
+              sendingKitchen={sendingKitchen}
+              activeOpenOrder={activeOpenOrder}
             />
           )}
         </aside>
@@ -4897,6 +5272,50 @@ export default function POSPage() {
       {/* ── Employee Payments Modal ── */}
       {showEmpPayModal && (
         <EmployeePOSModal onClose={() => setShowEmpPayModal(false)} />
+      )}
+
+      {/* ── Mesas abiertas panel ── */}
+      {showOpenTables && (
+        <OpenTablesPanel
+          onSelectTable={handleLoadOpenTable}
+          onClose={() => setShowOpenTables(false)}
+          refreshTrigger={openTablesRefresh}
+        />
+      )}
+
+      {/* ── Banner de mesa abierta activa ── */}
+      {activeOpenOrder && (
+        <div className="fixed bottom-0 left-0 right-0 z-30 bg-amber-600/95 text-white px-4 py-2 flex items-center gap-3 text-sm font-semibold shadow-lg">
+          <span>Mesa {activeOpenOrder.table_number} abierta</span>
+          <span className="text-xs font-normal opacity-80">
+            {activeOpenOrder.existingItems.length > 0
+              ? `${activeOpenOrder.existingItems.reduce((s, i) => s + i.quantity, 0)} items enviados`
+              : 'Sin items enviados aún'}
+          </span>
+          {permissions.canSendKitchen && ticketItems.length > 0 && (
+            <button
+              onClick={() => void handleSendKitchen()}
+              disabled={sendingKitchen}
+              className="ml-auto px-3 py-1 rounded-lg bg-white/20 hover:bg-white/30 active:scale-95 transition-all font-bold disabled:opacity-50"
+            >
+              {sendingKitchen ? 'Enviando...' : `Enviar a cocina (${ticketItems.length})`}
+            </button>
+          )}
+          {permissions.canRequestBill && (
+            <button
+              onClick={() => void handleRequestBill()}
+              className="px-3 py-1 rounded-lg bg-white/20 hover:bg-white/30 active:scale-95 transition-all font-bold"
+            >
+              Pedir cuenta
+            </button>
+          )}
+          <button
+            onClick={handleClearActiveTable}
+            className="px-2 py-1 rounded-lg bg-white/10 hover:bg-white/20 text-white/70 hover:text-white active:scale-95 transition-all text-xs"
+          >
+            ✕
+          </button>
+        </div>
       )}
 
       {/* WhatsApp Notifications */}

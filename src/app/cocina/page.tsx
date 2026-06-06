@@ -2,9 +2,11 @@
 
 import { useEffect, useRef, useState, useCallback } from 'react'
 import Image from 'next/image'
+import { useRouter } from 'next/navigation'
 import { createClient } from '@/lib/supabase/client'
 import WalkieTalkie from '@/components/WalkieTalkie'
 import WhatsAppNotifier from '@/components/WhatsAppNotifier'
+import PinGate from '@/components/pos/PinGate'
 
 // ─── LocalStorage helpers para dismissed IDs ─────────────────────────────────
 
@@ -701,6 +703,7 @@ function SoundSelector({
 // ─── Página principal ─────────────────────────────────────────────────────────
 
 export default function CocinaPage() {
+  const router = useRouter()
   const [orders, setOrders] = useState<KdsOrder[]>([])
   const [deliveredOrders, setDeliveredOrders] = useState<KdsOrder[]>([])
   const [loading, setLoading] = useState(true)
@@ -718,6 +721,23 @@ export default function CocinaPage() {
   const lastSoundTimestampRef = useRef<number>(0)
   const prevCountRef = useRef<number>(0)
 
+  // ── PIN Gate ─────────────────────────────────────────────────────────────────
+  const [pinRequired, setPinRequired] = useState<boolean | null>(null) // null = cargando
+  const [pinAuthenticated, setPinAuthenticated] = useState(false)
+
+  useEffect(() => {
+    fetch('/api/admin/settings?key=cocina_pin_required')
+      .then((r) => r.ok ? r.json() : [])
+      .then((d: { key: string; value: string }[]) => {
+        const required = d[0]?.value === 'true'
+        setPinRequired(required)
+        if (!required) setPinAuthenticated(true) // sin PIN requerido, acceso libre
+      })
+      .catch(() => {
+        setPinRequired(false)
+        setPinAuthenticated(true)
+      })
+  }, [])
   // Desbloquear AudioContext en cualquier interacción del usuario
   useEffect(() => {
     const unlock = async () => {
@@ -1023,6 +1043,26 @@ export default function CocinaPage() {
 
   // ─────────────────────────────────────────────────────────────────────────────
 
+  // ── PIN gate rendering (sin early return para no romper orden de hooks) ─────
+  if (pinRequired === null) {
+    return (
+      <div className="fixed inset-0 bg-gray-950 flex items-center justify-center">
+        <div className="w-8 h-8 border-2 border-teal-400 border-t-transparent rounded-full animate-spin" />
+      </div>
+    )
+  }
+
+  if (pinRequired && !pinAuthenticated) {
+    return (
+      <PinGate
+        title="Cocina Sumak"
+        subtitle="Ingresa tu PIN para continuar"
+        allowedRoles={['cocina', 'cocinero', 'dueno', 'gerente', 'admin']}
+        onAuth={() => setPinAuthenticated(true)}
+      />
+    )
+  }
+
   return (
     <div className="min-h-screen bg-gray-100 text-gray-900 flex flex-col select-none">
       {/* ── Barra superior ── */}
@@ -1070,6 +1110,13 @@ export default function CocinaPage() {
           )}
           <WalkieTalkie device="cocina" idleClassName="bg-white/20 text-white hover:bg-white/30" />
           <SoundSelector value={soundOption} onChange={handleSoundChange} />
+          <button
+            onClick={() => router.push('/menu-display')}
+            title="Pantalla de menú"
+            className="flex items-center justify-center w-8 h-8 rounded-lg bg-white/20 text-white hover:bg-white/30 active:scale-95 transition-all"
+          >
+            📺
+          </button>
           <span className="hidden sm:inline text-teal-100">Actualiza cada 5s</span>
           <span className="w-2 h-2 rounded-full bg-green-300 animate-pulse" />
         </div>
