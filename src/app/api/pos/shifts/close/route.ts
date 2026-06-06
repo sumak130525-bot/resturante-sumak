@@ -25,7 +25,7 @@ export async function POST(request: NextRequest) {
 
     // Get current open shift
     const { data: shift, error: shiftErr } = await supabase
-      .from('shifts')
+      .from('cash_shifts')
       .select('*')
       .eq('status', 'open')
       .order('opened_at', { ascending: false })
@@ -118,7 +118,7 @@ export async function POST(request: NextRequest) {
     const closedAt = new Date().toISOString()
 
     const { data: closedShift, error: closeErr } = await supabase
-      .from('shifts')
+      .from('cash_shifts')
       .update({
         status: 'closed',
         closed_at: closedAt,
@@ -138,9 +138,9 @@ export async function POST(request: NextRequest) {
 
     if (closeErr) throw new Error(closeErr.message)
 
-    // Sync: close the open cash_shift (admin/caja uses this table)
+    // Sync: close the legacy shifts table
     await supabase
-      .from('cash_shifts')
+      .from('shifts')
       .update({
         status: 'closed',
         closed_at: closedAt,

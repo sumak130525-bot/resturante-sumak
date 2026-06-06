@@ -18,7 +18,7 @@ export async function GET() {
     const supabase = getAdminClient()
 
     const { data: shifts, error: queryErr } = await supabase
-      .from('shifts')
+      .from('cash_shifts')
       .select('*')
       .eq('status', 'open')
       .order('opened_at', { ascending: false })
@@ -31,37 +31,12 @@ export async function GET() {
     if (shifts && shifts.length > 1) {
       const staleIds = shifts.slice(1).map((s: { id: string }) => s.id)
       await supabase
-        .from('shifts')
+        .from('cash_shifts')
         .update({ status: 'closed', closed_at: new Date().toISOString() })
         .in('id', staleIds)
     }
 
     const shift = shifts && shifts.length > 0 ? shifts[0] : null
-
-    if (shift) {
-      // Sync: if there is an open shift in 'shifts' but no open cash_shift, create one
-      const { data: openCashShift } = await supabase
-        .from('cash_shifts')
-        .select('id')
-        .eq('status', 'open')
-        .limit(1)
-        .single()
-
-      if (!openCashShift) {
-        await supabase
-          .from('cash_shifts')
-          .update({ status: 'closed', closed_at: new Date().toISOString() })
-          .eq('status', 'open')
-
-        await supabase
-          .from('cash_shifts')
-          .insert({
-            opening_amount: Number(shift.opening_amount),
-            status: 'open',
-            opened_at: shift.opened_at,
-          })
-      }
-    }
 
     return NextResponse.json({ shift: shift ?? null })
   } catch (err) {

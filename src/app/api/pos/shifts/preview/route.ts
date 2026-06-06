@@ -16,7 +16,7 @@ export async function GET() {
     const supabase = getAdminClient()
 
     const { data: shift, error: shiftErr } = await supabase
-      .from('shifts')
+      .from('cash_shifts')
       .select('*')
       .eq('status', 'open')
       .order('opened_at', { ascending: false })
