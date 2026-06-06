@@ -3602,7 +3602,18 @@ export default function POSPage() {
   } | null>(null)
   // Panel lateral de mesas abiertas
   const [showOpenTables, setShowOpenTables] = useState(false)
+  const [openTablesEnabled, setOpenTablesEnabled] = useState(false)
   const [openTablesRefresh, setOpenTablesRefresh] = useState(0)
+
+  // Load open_tables_enabled setting
+  useEffect(() => {
+    fetch('/api/admin/settings?key=open_tables_enabled')
+      .then(r => r.ok ? r.json() : [])
+      .then((d: { key: string; value: string }[]) => {
+        setOpenTablesEnabled(d[0]?.value === 'true')
+      })
+      .catch(() => {})
+  }, [])
   // Estado de envío/cobro de mesa abierta
   const [sendingKitchen, setSendingKitchen] = useState(false)
   const [closingTable, setClosingTable] = useState(false)
@@ -4670,7 +4681,7 @@ export default function POSPage() {
           💰
         </button>
         {/* Mesas abiertas button */}
-        {permissions.canOpenTable && (
+        {openTablesEnabled && permissions.canOpenTable && (
           <button
             onClick={() => setShowOpenTables(true)}
             title="Mesas abiertas"
