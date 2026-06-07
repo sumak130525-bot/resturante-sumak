@@ -102,8 +102,9 @@ function buildItemsSummary(order: Order): string {
 function getTableLabel(order: Order): string {
   const t = order.table_number ?? order.mesa ?? null
   if (!t) return '—'
-  const num = t.replace(/[^\d]/g, '')
-  return num ? `Mesa ${num}` : t
+  const str = String(t)
+  const num = str.replace(/[^\d]/g, '')
+  return num ? `Mesa ${num}` : str
 }
 
 // ─── Sub-components ──────────────────────────────────────────────────────────
