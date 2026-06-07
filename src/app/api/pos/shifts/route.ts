@@ -17,7 +17,7 @@ export async function GET() {
     const supabase = getAdminClient()
 
     const { data: shift, error } = await supabase
-      .from('cash_shifts')
+      .from('shifts')
       .select('*')
       .eq('status', 'open')
       .order('opened_at', { ascending: false })
@@ -44,7 +44,7 @@ export async function POST(request: NextRequest) {
     const supabase = getAdminClient()
 
     const { data: shift, error } = await supabase
-      .from('cash_shifts')
+      .from('shifts')
       .insert({ opening_amount: Number(opening_amount), status: 'open' })
       .select()
       .single()

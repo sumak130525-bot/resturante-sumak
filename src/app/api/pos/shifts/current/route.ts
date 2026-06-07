@@ -18,7 +18,7 @@ export async function GET() {
     const supabase = getAdminClient()
 
     const { data: shifts, error: queryErr } = await supabase
-      .from('cash_shifts')
+      .from('shifts')
       .select('*')
       .eq('status', 'open')
       .order('opened_at', { ascending: false })
@@ -31,7 +31,7 @@ export async function GET() {
     if (shifts && shifts.length > 1) {
       const staleIds = shifts.slice(1).map((s: { id: string }) => s.id)
       await supabase
-        .from('cash_shifts')
+        .from('shifts')
         .update({ status: 'closed', closed_at: new Date().toISOString() })
         .in('id', staleIds)
     }

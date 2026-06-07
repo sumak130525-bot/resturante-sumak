@@ -44,9 +44,9 @@ export async function GET(request: NextRequest) {
     let shiftId: string | null = shiftIdParam
 
     if (!shiftId) {
-      // Get current open shift
+      // Get current open shift from 'shifts' table
       const { data: shift } = await supabase
-        .from('cash_shifts')
+        .from('shifts')
         .select('id')
         .eq('status', 'open')
         .order('opened_at', { ascending: false })
@@ -89,10 +89,10 @@ export async function POST(request: NextRequest) {
 
     const supabase = getAdminClient()
 
-    // Get current open shift (or create one if none exists)
+    // Get current open shift from 'shifts' table (has all columns for close)
     let shiftId: string | null = null
     const { data: shift } = await supabase
-      .from('cash_shifts')
+      .from('shifts')
       .select('id')
       .eq('status', 'open')
       .order('opened_at', { ascending: false })
@@ -104,7 +104,7 @@ export async function POST(request: NextRequest) {
     } else {
       // Auto-create shift if none open
       const { data: newShift, error: shiftErr } = await supabase
-        .from('cash_shifts')
+        .from('shifts')
         .insert({ opening_amount: 0, status: 'open' })
         .select('id')
         .single()

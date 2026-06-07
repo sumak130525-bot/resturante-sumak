@@ -23,30 +23,29 @@ export async function POST(request: NextRequest) {
 
     const supabase = getAdminClient()
 
-    // Close any existing open shifts
-    await supabase
-      .from('cash_shifts')
-      .update({ status: 'closed', closed_at: new Date().toISOString() })
-      .eq('status', 'open')
-
-    // Also close in legacy 'shifts' table if exists
+    // Close any existing open shifts in both tables
     await supabase
       .from('shifts')
       .update({ status: 'closed', closed_at: new Date().toISOString() })
       .eq('status', 'open')
 
-    // Create new shift in cash_shifts (primary)
-    const { data: shift, error } = await supabase
+    await supabase
       .from('cash_shifts')
+      .update({ status: 'closed', closed_at: new Date().toISOString() })
+      .eq('status', 'open')
+
+    // Create new shift in 'shifts' (primary — has all columns)
+    const { data: shift, error } = await supabase
+      .from('shifts')
       .insert({ opening_amount, status: 'open' })
       .select()
       .single()
 
     if (error) throw new Error(error.message)
 
-    // Sync: also create in legacy 'shifts' table
+    // Sync: also create in 'cash_shifts'
     await supabase
-      .from('shifts')
+      .from('cash_shifts')
       .insert({ opening_amount, status: 'open', opened_at: shift.opened_at })
 
     return NextResponse.json({ shift }, { status: 201 })

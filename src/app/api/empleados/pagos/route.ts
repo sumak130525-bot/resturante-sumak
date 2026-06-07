@@ -151,7 +151,7 @@ export async function POST(req: NextRequest) {
   // 1. Find current open cash shift
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: openShift } = await (sb as any)
-    .from('cash_shifts')
+    .from('shifts')
     .select('id')
     .eq('status', 'open')
     .order('opened_at', { ascending: false })

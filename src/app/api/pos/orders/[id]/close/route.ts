@@ -77,7 +77,7 @@ export async function POST(
 
       let shiftId: string | null = null
       const { data: openShift } = await supabase
-        .from('cash_shifts')
+        .from('shifts')
         .select('id')
         .eq('status', 'open')
         .order('opened_at', { ascending: false })
@@ -88,7 +88,7 @@ export async function POST(
         shiftId = openShift.id
       } else {
         const { data: newShift } = await supabase
-          .from('cash_shifts')
+          .from('shifts')
           .insert({ opening_amount: 0, status: 'open' })
           .select('id')
           .single()

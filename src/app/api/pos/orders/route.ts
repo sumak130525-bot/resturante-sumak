@@ -197,7 +197,7 @@ export async function POST(request: NextRequest) {
       // Get current open shift (if any)
       let shiftId: string | null = null
       const { data: openShift } = await supabase
-        .from('cash_shifts')
+        .from('shifts')
         .select('id')
         .eq('status', 'open')
         .order('opened_at', { ascending: false })
@@ -209,7 +209,7 @@ export async function POST(request: NextRequest) {
       } else {
         // Auto-create shift so sales are always tracked
         const { data: newShift } = await supabase
-          .from('cash_shifts')
+          .from('shifts')
           .insert({ opening_amount: 0, status: 'open' })
           .select('id')
           .single()
