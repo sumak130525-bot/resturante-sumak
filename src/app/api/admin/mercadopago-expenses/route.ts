@@ -24,7 +24,7 @@ export async function GET(request: NextRequest) {
   const from = searchParams.get('from') // YYYY-MM-DD
   const to = searchParams.get('to') // YYYY-MM-DD
   const offset = parseInt(searchParams.get('offset') ?? '0')
-  const limit = parseInt(searchParams.get('limit') ?? '50')
+  const limit = parseInt(searchParams.get('limit') ?? '200')
 
   // Search for payments made BY the user (money_transfer, payment)
   const params = new URLSearchParams({
