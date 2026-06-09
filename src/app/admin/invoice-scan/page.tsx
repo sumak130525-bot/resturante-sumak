@@ -111,6 +111,7 @@ function EditCell({
 export default function InvoiceScanPage() {
   const [imageFile, setImageFile] = useState<File | null>(null)
   const [imagePreview, setImagePreview] = useState<string | null>(null)
+  const [fullscreenPreview, setFullscreenPreview] = useState(false)
   const [scanning, setScanning] = useState(false)
   const [scanError, setScanError] = useState<string | null>(null)
   const [invoiceData, setInvoiceData] = useState<InvoiceData | null>(null)
@@ -466,7 +467,12 @@ export default function InvoiceScanPage() {
             ) : (
               <div className="relative rounded-2xl overflow-hidden bg-white border border-gray-100 shadow-sm">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={imagePreview} alt="Factura" className="w-full object-contain max-h-[400px]" />
+                <img
+                  src={imagePreview}
+                  alt="Factura"
+                  className="w-full object-contain max-h-[400px] cursor-zoom-in"
+                  onClick={() => setFullscreenPreview(true)}
+                />
                 <button
                   onClick={handleReset}
                   className="absolute top-3 right-3 w-8 h-8 bg-black/50 hover:bg-black/70 text-white rounded-full flex items-center justify-center transition-colors"
@@ -856,6 +862,28 @@ export default function InvoiceScanPage() {
           </div>
         </div>
       </div>
+
+      {/* Fullscreen preview modal */}
+      {fullscreenPreview && imagePreview && (
+        <div
+          className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-4"
+          onClick={() => setFullscreenPreview(false)}
+        >
+          <button
+            onClick={() => setFullscreenPreview(false)}
+            className="absolute top-4 right-4 w-10 h-10 bg-white/20 hover:bg-white/30 text-white rounded-full flex items-center justify-center transition-colors z-10"
+          >
+            <X size={20} />
+          </button>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={imagePreview}
+            alt="Factura completa"
+            className="max-w-full max-h-full object-contain rounded-lg"
+            onClick={(e) => e.stopPropagation()}
+          />
+        </div>
+      )}
     </AdminLayoutClient>
   )
 }
