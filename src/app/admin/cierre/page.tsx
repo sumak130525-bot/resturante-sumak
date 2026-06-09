@@ -2,14 +2,30 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { AdminLayoutClient } from '@/components/admin/AdminLayoutClient'
-import { Lock, ChefHat, Plus, Trash2, Power, Calendar, Clock } from 'lucide-react'
-import type { ClosureDay, KitchenStatusResponse } from '@/lib/types'
+import { Lock, ChefHat, Plus, Trash2, Power, Calendar, Clock, Repeat } from 'lucide-react'
+import type { ClosureDay, KitchenStatusResponse, WeeklySchedule, DaySchedule } from '@/lib/types'
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 function formatDate(d: string) {
   const [y, m, day] = d.split('-')
   return `${day}/${m}/${y}`
+}
+
+const DAY_LABELS: Record<string, string> = {
+  mon: 'Lunes', tue: 'Martes', wed: 'Miércoles', thu: 'Jueves',
+  fri: 'Viernes', sat: 'Sábado', sun: 'Domingo'
+}
+const DAY_ORDER = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun']
+
+const DEFAULT_SCHEDULE: WeeklySchedule = {
+  mon: { open: '08:00', close: '22:30' },
+  tue: { open: '08:00', close: '22:30' },
+  wed: { open: '08:00', close: '22:30' },
+  thu: { open: '08:00', close: '22:30' },
+  fri: { open: '08:00', close: '22:30' },
+  sat: { open: '08:00', close: '22:30' },
+  sun: null,
 }
 
 // ── Componente principal ─────────────────────────────────────────────────────
@@ -33,6 +49,11 @@ export default function AdminCierrePage() {
   const [kitchenReason, setKitchenReason] = useState('')
   const [schedStart, setSchedStart] = useState('')
   const [schedEnd, setSchedEnd] = useState('')
+
+  // ── Estado: Horario Semanal ─────────────────────────────────────────────
+  const [weeklySchedule, setWeeklySchedule] = useState<WeeklySchedule>(DEFAULT_SCHEDULE)
+  const [weeklyEnabled, setWeeklyEnabled] = useState(false)
+  const [savingWeekly, setSavingWeekly] = useState(false)
 
   // ── Feedback ──────────────────────────────────────────────────────────────
   const [error, setError] = useState<string | null>(null)
@@ -73,6 +94,10 @@ export default function AdminCierrePage() {
           ? new Date(data.schedule_end).toISOString().slice(0, 16)
           : ''
       )
+      if (data.weekly_schedule) {
+        setWeeklySchedule(data.weekly_schedule)
+        setWeeklyEnabled(!data.manual)
+      }
     }
     setLoadingKitchen(false)
   }, [])
@@ -230,6 +255,69 @@ export default function AdminCierrePage() {
       showError(d.error ?? 'Error')
     }
     setSavingKitchen(false)
+  }
+
+  // ── Cocina: guardar horario semanal ────────────────────────────────────────
+  const handleSaveWeekly = async () => {
+    setSavingWeekly(true)
+    const r = await fetch('/api/admin/kitchen-status', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        manual: false,
+        is_closed: false,
+        weekly_schedule: weeklySchedule,
+        schedule_start: null,
+        schedule_end: null,
+      }),
+    })
+    if (r.ok) {
+      const data: KitchenStatusResponse = await r.json()
+      setKitchen(data)
+      setWeeklyEnabled(true)
+      showSuccess('Horario semanal guardado — la cocina se abre/cierra automáticamente')
+    } else {
+      const d = await r.json()
+      showError(d.error ?? 'Error al guardar horario')
+    }
+    setSavingWeekly(false)
+  }
+
+  const handleDisableWeekly = async () => {
+    setSavingWeekly(true)
+    const r = await fetch('/api/admin/kitchen-status', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        manual: true,
+        is_closed: false,
+        weekly_schedule: null,
+      }),
+    })
+    if (r.ok) {
+      const data: KitchenStatusResponse = await r.json()
+      setKitchen(data)
+      setWeeklyEnabled(false)
+      showSuccess('Horario automático desactivado — control manual activo')
+    } else {
+      const d = await r.json()
+      showError(d.error ?? 'Error')
+    }
+    setSavingWeekly(false)
+  }
+
+  const updateDaySchedule = (day: string, field: 'open' | 'close', value: string) => {
+    setWeeklySchedule(prev => ({
+      ...prev,
+      [day]: prev[day] ? { ...prev[day]!, [field]: value } : { open: '08:00', close: '22:30', [field]: value }
+    }))
+  }
+
+  const toggleDayClosed = (day: string) => {
+    setWeeklySchedule(prev => ({
+      ...prev,
+      [day]: prev[day] === null ? { open: '08:00', close: '22:30' } : null
+    }))
   }
 
   // ── Clases compartidas ────────────────────────────────────────────────────
@@ -453,52 +541,75 @@ export default function AdminCierrePage() {
                 {/* Programar cierre */}
                 <div>
                   <div className="flex items-center gap-2 mb-3">
-                    <Clock size={14} className="text-gray-400" />
-                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Programar cierre</p>
+                    <Repeat size={14} className="text-gray-400" />
+                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Horario semanal automático</p>
                   </div>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
-                    <div>
-                      <label className={labelClass}>Inicio del cierre *</label>
-                      <input
-                        type="datetime-local"
-                        className={inputClass}
-                        value={schedStart}
-                        onChange={(e) => setSchedStart(e.target.value)}
-                      />
-                    </div>
-                    <div>
-                      <label className={labelClass}>Fin del cierre (opcional)</label>
-                      <input
-                        type="datetime-local"
-                        className={inputClass}
-                        value={schedEnd}
-                        min={schedStart}
-                        onChange={(e) => setSchedEnd(e.target.value)}
-                      />
-                    </div>
+                  <p className="text-xs text-gray-500 mb-4">
+                    Configurá el horario de cocina para cada día. Fuera de ese horario, la cocina se cierra automáticamente.
+                  </p>
+
+                  <div className="space-y-2 mb-4">
+                    {DAY_ORDER.map(day => {
+                      const conf = weeklySchedule[day]
+                      const isClosed = conf === null
+                      return (
+                        <div key={day} className={`flex items-center gap-3 p-3 rounded-xl border ${isClosed ? 'bg-gray-50 border-gray-200' : 'bg-white border-gray-100'}`}>
+                          <button
+                            type="button"
+                            onClick={() => toggleDayClosed(day)}
+                            className={`w-5 h-5 rounded border-2 flex items-center justify-center text-xs font-bold transition-colors ${isClosed ? 'border-red-300 bg-red-100 text-red-500' : 'border-green-300 bg-green-100 text-green-600'}`}
+                          >
+                            {isClosed ? '✕' : '✓'}
+                          </button>
+                          <span className="text-sm font-medium w-24">{DAY_LABELS[day]}</span>
+                          {isClosed ? (
+                            <span className="text-xs text-gray-400 italic">Cerrado</span>
+                          ) : (
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="time"
+                                value={conf?.open ?? '08:00'}
+                                onChange={(e) => updateDaySchedule(day, 'open', e.target.value)}
+                                className="text-sm border border-gray-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-sumak-brown/30"
+                              />
+                              <span className="text-xs text-gray-400">a</span>
+                              <input
+                                type="time"
+                                value={conf?.close ?? '22:30'}
+                                onChange={(e) => updateDaySchedule(day, 'close', e.target.value)}
+                                className="text-sm border border-gray-200 rounded-lg px-2 py-1.5 focus:outline-none focus:ring-2 focus:ring-sumak-brown/30"
+                              />
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })}
                   </div>
+
                   <div className="flex flex-wrap gap-3">
                     <button
-                      onClick={handleScheduleKitchen}
-                      disabled={savingKitchen}
+                      onClick={handleSaveWeekly}
+                      disabled={savingWeekly}
                       className={btnPrimary}
                     >
                       <Power size={15} />
-                      {savingKitchen ? 'Guardando...' : 'Guardar programación'}
+                      {savingWeekly ? 'Guardando...' : 'Activar horario automático'}
                     </button>
-                    {isScheduled && (
+                    {weeklyEnabled && (
                       <button
-                        onClick={handleCancelSchedule}
-                        disabled={savingKitchen}
+                        onClick={handleDisableWeekly}
+                        disabled={savingWeekly}
                         className={btnSecondary}
                       >
-                        Cancelar programación
+                        Desactivar (volver a manual)
                       </button>
                     )}
                   </div>
-                  <p className="text-xs text-gray-400 mt-3">
-                    Al guardar una programación, el toggle manual se desactiva. La cocina se cerrará automáticamente en el horario indicado (TZ: America/Argentina/Mendoza).
-                  </p>
+                  {weeklyEnabled && (
+                    <p className="text-xs text-green-600 mt-3 font-medium">
+                      ✓ Horario automático activo — la cocina se abre/cierra según este horario (TZ: Argentina/Mendoza)
+                    </p>
+                  )}
                 </div>
               </>
             )}

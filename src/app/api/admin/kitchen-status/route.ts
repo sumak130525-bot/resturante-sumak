@@ -53,21 +53,48 @@ async function getClient(useServiceRole = false) {
 }
 
 /**
+ * Formato weekly_schedule:
+ * { "mon": { "open": "08:00", "close": "22:30" }, "tue": { ... }, "sun": null }
+ * null = cerrado todo el día
+ */
+type DaySchedule = { open: string; close: string } | null
+type WeeklySchedule = Record<string, DaySchedule>
+
+const DAY_KEYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat']
+
+/**
  * Calcula si la cocina está efectivamente cerrada.
- * - Si manual=true → devuelve is_closed
- * - Si manual=false (programado) → verifica si now() está entre schedule_start y schedule_end
+ * Prioridad: manual > weekly_schedule > schedule_start/end
  */
 function computeEffectiveClosed(row: {
   is_closed: boolean
   manual: boolean
   schedule_start: string | null
   schedule_end: string | null
+  weekly_schedule: WeeklySchedule | null
 }): boolean {
   if (row.manual) return row.is_closed
 
-  // Modo programado: comparar con hora actual en TZ Mendoza
+  // Hora actual en Mendoza
   const nowArg = new Date(new Date().toLocaleString('en-US', { timeZone: TZ }))
 
+  // Horario semanal recurrente
+  if (row.weekly_schedule) {
+    const dayKey = DAY_KEYS[nowArg.getDay()]
+    const dayConf = row.weekly_schedule[dayKey]
+    if (dayConf === null || dayConf === undefined) return true // día cerrado
+
+    const nowMinutes = nowArg.getHours() * 60 + nowArg.getMinutes()
+    const [oh, om] = dayConf.open.split(':').map(Number)
+    const [ch, cm] = dayConf.close.split(':').map(Number)
+    const openMin = oh * 60 + om
+    const closeMin = ch * 60 + cm
+
+    // Fuera del rango open-close = cocina cerrada
+    return nowMinutes < openMin || nowMinutes >= closeMin
+  }
+
+  // Programación puntual (legacy)
   const start = row.schedule_start ? new Date(row.schedule_start) : null
   const end = row.schedule_end ? new Date(row.schedule_end) : null
 
@@ -115,7 +142,7 @@ export async function GET() {
 // PATCH — actualiza el estado de la cocina (requiere auth)
 export async function PATCH(request: NextRequest) {
   const body = await request.json()
-  const { is_closed, reason, schedule_start, schedule_end, manual } = body
+  const { is_closed, reason, schedule_start, schedule_end, manual, weekly_schedule } = body
 
   // Verificar auth
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -140,6 +167,7 @@ export async function PATCH(request: NextRequest) {
   if (schedule_start !== undefined) updates.schedule_start = schedule_start || null
   if (schedule_end !== undefined) updates.schedule_end = schedule_end || null
   if (typeof manual === 'boolean') updates.manual = manual
+  if (weekly_schedule !== undefined) updates.weekly_schedule = weekly_schedule
 
   let data, error
 

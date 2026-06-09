@@ -119,6 +119,9 @@ export type ClosureDay = {
   created_at: string
 }
 
+export type DaySchedule = { open: string; close: string } | null
+export type WeeklySchedule = Record<string, DaySchedule>
+
 export type KitchenStatus = {
   id: string
   is_closed: boolean
@@ -126,6 +129,7 @@ export type KitchenStatus = {
   schedule_start: string | null  // ISO timestamptz
   schedule_end: string | null
   manual: boolean
+  weekly_schedule: WeeklySchedule | null
   created_at: string
 }
 
@@ -149,6 +153,7 @@ type KitchenStatusRow = {
   schedule_start: string | null
   schedule_end: string | null
   manual: boolean
+  weekly_schedule: WeeklySchedule | null
   created_at: string
 }
 
