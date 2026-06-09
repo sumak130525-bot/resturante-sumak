@@ -136,6 +136,7 @@ function ManualPurchaseModal({
   const [categoryId, setCategoryId] = useState('')
   const [menuItemId, setMenuItemId] = useState('')
   const [notes, setNotes] = useState('')
+  const [purchaseDate, setPurchaseDate] = useState(new Date().toISOString().slice(0, 10))
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState(false)
@@ -208,6 +209,7 @@ function ManualPurchaseModal({
           quantity: Number(quantity),
           price: unitPrice ? Number(unitPrice) * Number(quantity) : undefined,
           notes: notes.trim() || undefined,
+          date: purchaseDate ? new Date(purchaseDate + 'T12:00:00').toISOString() : undefined,
         }),
       })
       if (!movRes.ok) {
@@ -426,6 +428,17 @@ function ManualPurchaseModal({
               />
             </div>
 
+            {/* Fecha de compra */}
+            <div>
+              <label className="block text-xs font-medium text-gray-500 mb-1">Fecha de compra</label>
+              <input
+                type="date"
+                className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400"
+                value={purchaseDate}
+                onChange={(e) => setPurchaseDate(e.target.value)}
+              />
+            </div>
+
             {/* Total preview */}
             {quantity && unitPrice && (
               <div className="bg-emerald-50 border border-emerald-100 rounded-xl px-4 py-3 text-sm text-emerald-700 flex items-center justify-between">
@@ -487,6 +500,7 @@ function StockModal({
   const [quantity, setQuantity] = useState<string>('')
   const [price, setPrice] = useState<string>('')
   const [notes, setNotes] = useState('')
+  const [purchaseDate, setPurchaseDate] = useState(new Date().toISOString().slice(0, 10))
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -506,6 +520,7 @@ function StockModal({
           quantity: Number(quantity),
           price: price ? Number(price) : undefined,
           notes: notes || undefined,
+          date: mode === 'purchase' && purchaseDate ? new Date(purchaseDate + 'T12:00:00').toISOString() : undefined,
         }),
       })
       if (!res.ok) {
@@ -604,6 +619,17 @@ function StockModal({
               onChange={(e) => setNotes(e.target.value)}
             />
           </div>
+          {mode === 'purchase' && (
+            <div>
+              <label className="block text-xs font-medium text-gray-500 mb-1">Fecha de compra</label>
+              <input
+                type="date"
+                className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                value={purchaseDate}
+                onChange={(e) => setPurchaseDate(e.target.value)}
+              />
+            </div>
+          )}
           {mode === 'adjustment' && (
             <p className="text-xs text-gray-400 bg-gray-50 rounded-lg px-3 py-2">
               El ajuste reemplaza el stock actual con el valor ingresado.
