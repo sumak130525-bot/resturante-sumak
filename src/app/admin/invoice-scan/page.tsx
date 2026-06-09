@@ -15,6 +15,7 @@ import {
   Calendar,
   Package,
   ChevronRight,
+  Maximize2,
 } from 'lucide-react'
 
 // ──────────────────────────────────────────────
@@ -112,6 +113,7 @@ export default function InvoiceScanPage() {
   const [imageFile, setImageFile] = useState<File | null>(null)
   const [imagePreview, setImagePreview] = useState<string | null>(null)
   const [fullscreenPreview, setFullscreenPreview] = useState(false)
+  const [fullscreenData, setFullscreenData] = useState(false)
   const [scanning, setScanning] = useState(false)
   const [scanError, setScanError] = useState<string | null>(null)
   const [invoiceData, setInvoiceData] = useState<InvoiceData | null>(null)
@@ -589,10 +591,22 @@ export default function InvoiceScanPage() {
             )}
 
             {invoiceData && !saveResults && (
-              <div className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+              <div className={`${fullscreenData ? 'fixed inset-0 z-50 bg-white overflow-auto p-4' : 'bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden'}`}>
                 {/* Header info */}
-                <div className="p-5 border-b border-gray-50 bg-gradient-to-r from-gray-50 to-white">
-                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Datos de la factura</p>
+                <div className={`p-5 border-b border-gray-50 ${fullscreenData ? 'bg-white' : 'bg-gradient-to-r from-gray-50 to-white'}`}>
+                  <div className="flex items-center justify-between mb-3">
+                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Datos de la factura</p>
+                    <button
+                      onClick={() => setFullscreenData(!fullscreenData)}
+                      className="flex items-center gap-1.5 text-xs text-indigo-600 hover:text-indigo-800 font-medium transition-colors"
+                    >
+                      {fullscreenData ? (
+                        <><X size={14} /> Salir de pantalla completa</>
+                      ) : (
+                        <><Maximize2 size={14} /> Pantalla completa</>
+                      )}
+                    </button>
+                  </div>
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <label className="text-xs text-gray-400 flex items-center gap-1 mb-1">
