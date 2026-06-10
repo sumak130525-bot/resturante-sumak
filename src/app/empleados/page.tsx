@@ -1549,19 +1549,18 @@ async function printViaThermal(text: string): Promise<boolean> {
   try {
     const controller = new AbortController()
     const timeout = setTimeout(() => controller.abort(), 8000)
-    // Usar no-cors para evitar bloqueo mixed-content HTTPS→HTTP
+    // Mismo formato exacto que usa el POS en tryPrintServer
     const res = await fetch(`${url}/print`, {
       method: 'POST',
-      headers: { 'Content-Type': 'text/plain' },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ text, cut: true, feedLines: 3, config: {} }),
-      mode: 'no-cors',
       signal: controller.signal,
     })
     clearTimeout(timeout)
-    // Con no-cors el status siempre es 0 (opaque), asumimos éxito si no tiró error
-    return true
+    return res.ok
   } catch (err) {
-    alert(`Error conexión impresora: ${err instanceof Error ? err.message : 'timeout/red'}`)
+    // Si falla, mostrar URL para debug
+    alert(`No se pudo conectar a ${url}/print — ¿La app ESC POS está activa?\n\n${err instanceof Error ? err.message : 'error desconocido'}`)
     return false
   }
 }
