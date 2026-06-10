@@ -1530,12 +1530,23 @@ function paymentMethodLabel(pm: 'cash' | 'transfer' | 'mixed' | null): string {
   return 'Efectivo'
 }
 
-// ── Print via thermal printer (through /pos/receipt page) ─────────────────────
-function printViaReceipt(text: string) {
+// ── Print via /pos/receipt page ───────────────────────────────────────────────
+function printViaReceipt(text: string, html: string) {
   sessionStorage.setItem('pos_receipt_thermal', text)
+  sessionStorage.setItem('pos_receipt_html', html)
   sessionStorage.setItem('pos_receipt_return', '/empleados')
-  sessionStorage.removeItem('pos_receipt_html')
   window.location.href = '/pos/receipt'
+}
+
+function buildReceiptHtml(title: string, rows: string[]): string {
+  return `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><title>${title}</title>
+<style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:'Courier New',monospace;font-size:11px;width:72mm;padding:4mm}
+.center{text-align:center}.bold{font-weight:bold}.sep{border-top:1px dashed #000;margin:3mm 0}
+.row{display:flex;justify-content:space-between;margin:1mm 0}.title{font-size:13px;font-weight:bold;margin-bottom:2mm}
+.firma{margin-top:10mm;border-top:1px solid #000;padding-top:2mm;width:50mm;margin-left:auto;margin-right:auto;text-align:center;font-size:10px}
+@media print{@page{margin:0;size:72mm auto}body{padding:2mm}}</style></head><body>
+${rows.join('\n')}
+</body></html>`
 }
 
 async function printAdvanceReceipt(payment: EmployeePayment, empName: string, empRole: string) {
@@ -1562,7 +1573,22 @@ async function printAdvanceReceipt(payment: EmployeePayment, empName: string, em
   text += '[CENTER]________________________[/CENTER]\n'
   text += '[CENTER]Firma del empleado[/CENTER]\n'
 
-  printViaReceipt(text)
+  const htmlRows = [
+    '<div class="center"><div class="title">SUMAK RESTAURANTE</div><div>RECIBO DE ADELANTO</div></div>',
+    '<div class="sep"></div>',
+    `<div class="row"><span>Fecha:</span><span>${dateStr}</span></div>`,
+    `<div class="row"><span>Empleado:</span><span>${empName}</span></div>`,
+    `<div class="row"><span>Cargo:</span><span>${empRole || '—'}</span></div>`,
+    '<div class="sep"></div>',
+    `<div class="row bold"><span>MONTO:</span><span>${formatARS(payment.amount)}</span></div>`,
+    payment.description ? `<div class="row"><span>Concepto:</span><span>${payment.description}</span></div>` : '',
+    `<div class="row"><span>Método:</span><span>${pmLabel}</span></div>`,
+    payment.payment_method === 'mixed' ? `<div class="row"><span>  Efectivo:</span><span>${formatARS(payment.cash_amount ?? 0)}</span></div><div class="row"><span>  Transfer:</span><span>${formatARS(payment.transfer_amount ?? 0)}</span></div>` : '',
+    '<div class="sep"></div>',
+    '<div class="firma">Firma del empleado</div>',
+  ].filter(Boolean)
+
+  printViaReceipt(text, buildReceiptHtml('Recibo Adelanto', htmlRows))
 }
 
 async function printSalaryReceipt(payment: EmployeePayment, empName: string, empRole: string) {
@@ -1598,7 +1624,28 @@ async function printSalaryReceipt(payment: EmployeePayment, empName: string, emp
   text += '[CENTER]________________________[/CENTER]\n'
   text += '[CENTER]Firma del empleado[/CENTER]\n'
 
-  printViaReceipt(text)
+  const htmlRows = [
+    '<div class="center"><div class="title">SUMAK RESTAURANTE</div><div>RECIBO DE SUELDO</div></div>',
+    '<div class="sep"></div>',
+    `<div class="row"><span>Fecha:</span><span>${dateStr}</span></div>`,
+    `<div class="row"><span>Empleado:</span><span>${empName}</span></div>`,
+    `<div class="row"><span>Cargo:</span><span>${empRole || '—'}</span></div>`,
+    '<div class="sep"></div>',
+    `<div class="row"><span>Período:</span><span>${periodStr}</span></div>`,
+    `<div class="row"><span>Horas:</span><span>${formatHours(payment.hours_worked ?? 0)}</span></div>`,
+    `<div class="row"><span>Tarifa/h:</span><span>${formatARS(payment.employees?.hourly_rate ?? 0)}</span></div>`,
+    '<div class="sep"></div>',
+    `<div class="row"><span>Bruto:</span><span>${formatARS(payment.gross_amount ?? 0)}</span></div>`,
+    `<div class="row"><span>(-) Adelantos:</span><span>${formatARS(payment.advances_deducted ?? 0)}</span></div>`,
+    '<div class="sep"></div>',
+    `<div class="row bold"><span>NETO:</span><span>${formatARS(payment.amount)}</span></div>`,
+    `<div class="row"><span>Método:</span><span>${pmLabel}</span></div>`,
+    payment.payment_method === 'mixed' ? `<div class="row"><span>  Efectivo:</span><span>${formatARS(payment.cash_amount ?? 0)}</span></div><div class="row"><span>  Transfer:</span><span>${formatARS(payment.transfer_amount ?? 0)}</span></div>` : '',
+    '<div class="sep"></div>',
+    '<div class="firma">Firma del empleado</div>',
+  ].filter(Boolean)
+
+  printViaReceipt(text, buildReceiptHtml('Recibo Sueldo', htmlRows))
 }
 
 // ─── Tab: Pagos ───────────────────────────────────────────────────────────────
