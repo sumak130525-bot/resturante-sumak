@@ -1542,10 +1542,10 @@ async function getPrintServerUrl(): Promise<string | null> {
 
 async function printViaThermal(text: string): Promise<boolean> {
   const url = await getPrintServerUrl()
-  if (!url) return false
+  if (!url) { console.error('print: no print_server_url configurada'); return false }
   try {
     const controller = new AbortController()
-    const timeout = setTimeout(() => controller.abort(), 4000)
+    const timeout = setTimeout(() => controller.abort(), 8000)
     const res = await fetch(`${url}/print`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -1553,8 +1553,9 @@ async function printViaThermal(text: string): Promise<boolean> {
       signal: controller.signal,
     })
     clearTimeout(timeout)
+    if (!res.ok) console.error('print: server responded', res.status)
     return res.ok
-  } catch { return false }
+  } catch (err) { console.error('print: error', err); return false }
 }
 
 async function printAdvanceReceipt(payment: EmployeePayment, empName: string, empRole: string) {
