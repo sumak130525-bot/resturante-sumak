@@ -135,8 +135,8 @@ export async function POST(req: NextRequest) {
   } = body
 
   if (!employee_id) return NextResponse.json({ error: 'employee_id es requerido' }, { status: 400 })
-  if (!type || !['advance', 'salary'].includes(type))
-    return NextResponse.json({ error: 'type debe ser "advance" o "salary"' }, { status: 400 })
+  if (!type || !['advance', 'salary', 'bonus'].includes(type))
+    return NextResponse.json({ error: 'type debe ser "advance", "salary" o "bonus"' }, { status: 400 })
   if (!amount || Number(amount) <= 0)
     return NextResponse.json({ error: 'amount debe ser mayor que 0' }, { status: 400 })
 
@@ -159,9 +159,10 @@ export async function POST(req: NextRequest) {
     .maybeSingle()
 
   // 2. Register cash movement as egreso — only when payment touches cash
+  // Bonus type does NOT create cash movement (added to salary later)
   let cashMovementId: string | null = null
 
-  if (payment_method !== 'transfer') {
+  if (type !== 'bonus' && payment_method !== 'transfer') {
     // 'cash': egreso = total amount; 'mixed': egreso = cash_amount only
     const egresoAmount = payment_method === 'mixed'
       ? Number(cash_amount ?? 0)
@@ -212,6 +213,11 @@ export async function POST(req: NextRequest) {
     paymentRecord.hours_worked = hours_worked != null ? Number(hours_worked) : null
     paymentRecord.gross_amount = gross_amount != null ? Number(gross_amount) : null
     paymentRecord.advances_deducted = advances_deducted != null ? Number(advances_deducted) : null
+  }
+
+  if (type === 'bonus') {
+    paymentRecord.period_from = period_from ?? null
+    paymentRecord.period_to = period_to ?? null
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

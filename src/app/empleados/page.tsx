@@ -44,7 +44,7 @@ type PauseEntry = {
 type EmployeePayment = {
   id: string
   employee_id: string
-  type: 'advance' | 'salary'
+  type: 'advance' | 'salary' | 'bonus'
   amount: number
   description: string | null
   period_from: string | null
@@ -1654,7 +1654,7 @@ function TabPagos({ employees }: { employees: Employee[] }) {
   const [filterTo, setFilterTo] = useState(todayArg())
   const [filterType, setFilterType] = useState('')
 
-  const [modal, setModal] = useState<'none' | 'advance' | 'salary'>('none')
+  const [modal, setModal] = useState<'none' | 'advance' | 'salary' | 'bonus'>('none')
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
 
@@ -1664,6 +1664,13 @@ function TabPagos({ employees }: { employees: Employee[] }) {
   const [advPaymentMethod, setAdvPaymentMethod] = useState<'cash' | 'transfer' | 'mixed'>('cash')
   const [advCashAmount, setAdvCashAmount] = useState('')
   const [advTransferAmount, setAdvTransferAmount] = useState('')
+
+  // Bonus state
+  const [bonusEmployee, setBonusEmployee] = useState('')
+  const [bonusAmount, setBonusAmount] = useState('')
+  const [bonusDescription, setBonusDescription] = useState('Presentismo')
+  const [bonusFrom, setBonusFrom] = useState('')
+  const [bonusTo, setBonusTo] = useState('')
 
   const [salEmployee, setSalEmployee] = useState('')
   const [salFrom, setSalFrom] = useState(firstDayOfMonthArg())
@@ -1738,6 +1745,41 @@ function TabPagos({ employees }: { employees: Employee[] }) {
     } else {
       const d = await res.json()
       setSaveError(d.error ?? 'Error al registrar adelanto')
+    }
+    setSaving(false)
+  }
+
+  const handleBonusSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setSaveError(null)
+    if (!bonusEmployee) { setSaveError('Seleccioná un empleado'); return }
+    if (!bonusAmount || Number(bonusAmount) <= 0) { setSaveError('Ingresá un monto válido'); return }
+    if (!bonusFrom || !bonusTo) { setSaveError('Ingresá el período semanal'); return }
+    setSaving(true)
+    const res = await fetch('/api/empleados/pagos', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        employee_id: bonusEmployee,
+        type: 'bonus',
+        amount: Number(bonusAmount),
+        description: bonusDescription || 'Presentismo',
+        period_from: bonusFrom,
+        period_to: bonusTo,
+        payment_method: 'transfer', // No cash movement
+      }),
+    })
+    if (res.ok) {
+      setModal('none')
+      setBonusEmployee('')
+      setBonusAmount('')
+      setBonusDescription('Presentismo')
+      setBonusFrom('')
+      setBonusTo('')
+      await fetchPayments()
+    } else {
+      const d = await res.json()
+      setSaveError(d.error ?? 'Error al registrar bono')
     }
     setSaving(false)
   }
@@ -1856,6 +1898,7 @@ function TabPagos({ employees }: { employees: Employee[] }) {
 
   const totalAdvances = payments.filter((p) => p.type === 'advance').reduce((s, p) => s + Number(p.amount), 0)
   const totalSalaries = payments.filter((p) => p.type === 'salary').reduce((s, p) => s + Number(p.amount), 0)
+  const totalBonuses = payments.filter((p) => p.type === 'bonus').reduce((s, p) => s + Number(p.amount), 0)
 
   return (
     <div className="space-y-5">
@@ -1873,6 +1916,13 @@ function TabPagos({ employees }: { employees: Employee[] }) {
         >
           <Plus size={15} />
           Pagar sueldo
+        </button>
+        <button
+          onClick={() => { setBonusEmployee(''); setBonusAmount(''); setBonusDescription('Presentismo'); setBonusFrom(''); setBonusTo(''); setModal('bonus') }}
+          className="flex items-center gap-2 bg-emerald-600 text-white text-sm font-medium px-4 py-2.5 rounded-xl hover:bg-emerald-700 transition-colors"
+        >
+          <CheckCircle2 size={15} />
+          Registrar bono
         </button>
       </div>
 
@@ -1901,6 +1951,7 @@ function TabPagos({ employees }: { employees: Employee[] }) {
               <option value="">Todos</option>
               <option value="advance">Adelantos</option>
               <option value="salary">Sueldos</option>
+              <option value="bonus">Bonos</option>
             </select>
           </div>
           <div>
@@ -1924,6 +1975,11 @@ function TabPagos({ employees }: { employees: Employee[] }) {
           <p className="text-xs text-gray-400 mb-1">Sueldos</p>
           <p className="text-xl font-bold text-green-700">{formatARS(totalSalaries)}</p>
           <p className="text-xs text-gray-300 mt-0.5">{payments.filter((p) => p.type === 'salary').length} registros</p>
+        </div>
+        <div className="bg-white rounded-2xl border border-emerald-100 p-4">
+          <p className="text-xs text-gray-400 mb-1">Bonos</p>
+          <p className="text-xl font-bold text-emerald-600">{formatARS(totalBonuses)}</p>
+          <p className="text-xs text-gray-300 mt-0.5">{payments.filter((p) => p.type === 'bonus').length} registros</p>
         </div>
         <div className="bg-white rounded-2xl border border-sumak-brown/20 p-4 col-span-2 sm:col-span-1">
           <p className="text-xs text-gray-400 mb-1">Total egresado</p>
@@ -1974,8 +2030,8 @@ function TabPagos({ employees }: { employees: Employee[] }) {
                         {empRole && <p className="text-xs text-gray-400">{empRole}</p>}
                       </td>
                       <td className="px-5 py-3.5 hidden sm:table-cell">
-                        <span className={cn('text-xs font-semibold px-2.5 py-1 rounded-full', pmt.type === 'advance' ? 'bg-amber-100 text-amber-700' : 'bg-green-100 text-green-700')}>
-                          {pmt.type === 'advance' ? 'Adelanto' : 'Sueldo'}
+                        <span className={cn('text-xs font-semibold px-2.5 py-1 rounded-full', pmt.type === 'advance' ? 'bg-amber-100 text-amber-700' : pmt.type === 'bonus' ? 'bg-emerald-100 text-emerald-700' : 'bg-green-100 text-green-700')}>
+                          {pmt.type === 'advance' ? 'Adelanto' : pmt.type === 'bonus' ? 'Bono' : 'Sueldo'}
                         </span>
                       </td>
                       <td className="px-5 py-3.5 hidden md:table-cell">
@@ -2064,6 +2120,7 @@ function TabPagos({ employees }: { employees: Employee[] }) {
                       <tr key={pmt.id + '-detail'} className="bg-amber-50/30">
                         <td colSpan={8} className="px-5 py-3 text-xs text-gray-600 space-y-1">
                           {pmt.type === 'advance' && pmt.description && <div>Concepto: {pmt.description}</div>}
+                          {pmt.type === 'bonus' && <div>Motivo: {pmt.description ?? 'Presentismo'}{pmt.period_from && pmt.period_to ? ` (${pmt.period_from} al ${pmt.period_to})` : ''}</div>}
                           {pmt.payment_method === 'mixed' && (
                             <div>Desglose: Efectivo {formatARS(pmt.cash_amount ?? 0)} + Transferencia {formatARS(pmt.transfer_amount ?? 0)}</div>
                           )}
@@ -2177,6 +2234,58 @@ function TabPagos({ employees }: { employees: Employee[] }) {
                 <button type="submit" disabled={saving} className="flex-1 bg-amber-600 text-white rounded-xl py-2.5 text-sm font-medium hover:bg-amber-700 disabled:opacity-50 transition-colors flex items-center justify-center gap-2">
                   {saving ? <Loader2 size={15} className="animate-spin" /> : <Printer size={15} />}
                   {saving ? 'Guardando…' : 'Registrar e imprimir'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Bonus Modal */}
+      {modal === 'bonus' && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6 space-y-5 animate-scale-in">
+            <h2 className="font-serif text-xl font-bold text-emerald-700 flex items-center gap-2"><CheckCircle2 size={20} /> Registrar bono</h2>
+            <form onSubmit={handleBonusSubmit} className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-gray-500 mb-1.5">Empleado</label>
+                <select value={bonusEmployee} onChange={(e) => setBonusEmployee(e.target.value)} required
+                  className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400">
+                  <option value="">Seleccionar...</option>
+                  {employees.filter(e => e.active).map((e) => <option key={e.id} value={e.id}>{e.name} — {e.role}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-500 mb-1.5">Monto del bono</label>
+                <input type="number" value={bonusAmount} onChange={(e) => setBonusAmount(e.target.value)} required min="1" step="1"
+                  className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400"
+                  placeholder="Ej: 5000" />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-500 mb-1.5">Motivo</label>
+                <input type="text" value={bonusDescription} onChange={(e) => setBonusDescription(e.target.value)}
+                  className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400"
+                  placeholder="Ej: Presentismo" />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 mb-1.5">Desde</label>
+                  <input type="date" value={bonusFrom} onChange={(e) => setBonusFrom(e.target.value)} required
+                    className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400" />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 mb-1.5">Hasta</label>
+                  <input type="date" value={bonusTo} onChange={(e) => setBonusTo(e.target.value)} required
+                    className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400" />
+                </div>
+              </div>
+              <p className="text-xs text-gray-400">El bono se suma al total cuando se liquida el sueldo. No genera movimiento de caja.</p>
+              {saveError && <p className="text-sm text-red-500 font-medium">{saveError}</p>}
+              <div className="flex gap-3 justify-end pt-2">
+                <button type="button" onClick={() => setModal('none')} className="px-4 py-2 text-sm text-gray-500 hover:text-gray-700">Cancelar</button>
+                <button type="submit" disabled={saving}
+                  className="px-5 py-2.5 bg-emerald-600 text-white text-sm font-semibold rounded-xl hover:bg-emerald-700 disabled:opacity-50">
+                  {saving ? 'Guardando...' : 'Registrar bono'}
                 </button>
               </div>
             </form>

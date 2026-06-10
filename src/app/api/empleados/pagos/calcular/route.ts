@@ -95,7 +95,23 @@ export async function GET(req: NextRequest) {
     (sum: number, a: { amount: number }) => sum + Number(a.amount), 0
   )
 
-  const net_amount = Math.max(0, Math.round((gross_amount - advances_total) * 100) / 100)
+  // 4. Sum bonuses in the same period
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data: bonuses, error: bonErr } = await (sb as any)
+    .from('employee_payments')
+    .select('amount, description, period_from, period_to')
+    .eq('employee_id', employee_id)
+    .eq('type', 'bonus')
+    .gte('created_at', `${period_from}T00:00:00.000Z`)
+    .lte('created_at', `${period_to}T23:59:59.999Z`)
+
+  if (bonErr) return NextResponse.json({ error: bonErr.message }, { status: 500 })
+
+  const bonuses_total = (bonuses ?? []).reduce(
+    (sum: number, b: { amount: number }) => sum + Number(b.amount), 0
+  )
+
+  const net_amount = Math.max(0, Math.round((gross_amount + bonuses_total - advances_total) * 100) / 100)
 
   return NextResponse.json({
     employee: {
@@ -109,6 +125,8 @@ export async function GET(req: NextRequest) {
     hours_worked: hours_rounded,
     hourly_rate,
     gross_amount,
+    bonuses_total: Math.round(bonuses_total * 100) / 100,
+    bonuses: bonuses ?? [],
     advances_total: Math.round(advances_total * 100) / 100,
     net_amount,
   })
