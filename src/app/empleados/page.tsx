@@ -1549,17 +1549,16 @@ async function printViaThermal(text: string): Promise<boolean> {
   try {
     const controller = new AbortController()
     const timeout = setTimeout(() => controller.abort(), 8000)
+    // Usar no-cors para evitar bloqueo mixed-content HTTPS→HTTP
     const res = await fetch(`${url}/print`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'text/plain' },
       body: JSON.stringify({ text, cut: true, feedLines: 3, config: {} }),
+      mode: 'no-cors',
       signal: controller.signal,
     })
     clearTimeout(timeout)
-    if (!res.ok) {
-      alert(`Error impresora: respondió ${res.status}`)
-      return false
-    }
+    // Con no-cors el status siempre es 0 (opaque), asumimos éxito si no tiró error
     return true
   } catch (err) {
     alert(`Error conexión impresora: ${err instanceof Error ? err.message : 'timeout/red'}`)
