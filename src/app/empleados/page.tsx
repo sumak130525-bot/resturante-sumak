@@ -60,13 +60,23 @@ type EmployeePayment = {
   employees?: { name: string; role: string; hourly_rate: number } | null
 }
 
+type BonusDetail = {
+  name: string
+  daily_amount: number
+  days: number
+  total: number
+}
+
 type CalcResult = {
   employee: { id: string; name: string; role: string; hourly_rate: number }
   period_from: string
   period_to: string
   hours_worked: number
+  days_worked: number
   hourly_rate: number
   gross_amount: number
+  bonuses_total: number
+  bonuses: BonusDetail[]
   advances_total: number
   net_amount: number
 }
@@ -1676,6 +1686,7 @@ function TabPagos({ employees }: { employees: Employee[] }) {
   const [salFrom, setSalFrom] = useState(firstDayOfMonthArg())
   const [salTo, setSalTo] = useState(todayArg())
   const [calcResult, setCalcResult] = useState<CalcResult | null>(null)
+  const [applyBonus, setApplyBonus] = useState(true)
   const [calcLoading, setCalcLoading] = useState(false)
   const [calcError, setCalcError] = useState<string | null>(null)
   const [salCustomAmount, setSalCustomAmount] = useState('')
@@ -1916,13 +1927,6 @@ function TabPagos({ employees }: { employees: Employee[] }) {
         >
           <Plus size={15} />
           Pagar sueldo
-        </button>
-        <button
-          onClick={() => { setBonusEmployee(''); setBonusAmount(''); setBonusDescription('Presentismo'); setBonusFrom(''); setBonusTo(''); setModal('bonus') }}
-          className="flex items-center gap-2 bg-emerald-600 text-white text-sm font-medium px-4 py-2.5 rounded-xl hover:bg-emerald-700 transition-colors"
-        >
-          <CheckCircle2 size={15} />
-          Registrar bono
         </button>
       </div>
 
@@ -2327,11 +2331,42 @@ function TabPagos({ employees }: { employees: Employee[] }) {
             {calcResult && (
               <form onSubmit={handleSalarySubmit} className="space-y-4">
                 <div className="bg-gray-50 rounded-xl p-4 space-y-2 text-sm">
+                  <div className="flex justify-between"><span className="text-gray-500">Días trabajados</span><span className="font-medium">{calcResult.days_worked} días</span></div>
                   <div className="flex justify-between"><span className="text-gray-500">Horas trabajadas</span><span className="font-medium">{formatHours(calcResult.hours_worked)}</span></div>
                   <div className="flex justify-between"><span className="text-gray-500">Tarifa/hora</span><span className="font-medium">{formatARS(calcResult.hourly_rate)}</span></div>
-                  <div className="flex justify-between"><span className="text-gray-500">Bruto</span><span className="font-medium">{formatARS(calcResult.gross_amount)}</span></div>
+                  <div className="flex justify-between"><span className="text-gray-500">Bruto (horas)</span><span className="font-medium">{formatARS(calcResult.gross_amount)}</span></div>
+
+                  {/* Bonuses */}
+                  {calcResult.bonuses.length > 0 && (
+                    <div className="border-t border-gray-200 pt-2 space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-semibold text-emerald-700 uppercase">Bonos</span>
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <span className="text-xs text-gray-500">{applyBonus ? 'Aplicar' : 'No aplicar'}</span>
+                          <input type="checkbox" checked={applyBonus} onChange={(e) => setApplyBonus(e.target.checked)}
+                            className="w-4 h-4 rounded text-emerald-600 focus:ring-emerald-400" />
+                        </label>
+                      </div>
+                      {calcResult.bonuses.map((b, i) => (
+                        <div key={i} className={`flex justify-between ${applyBonus ? 'text-emerald-700' : 'text-gray-400 line-through'}`}>
+                          <span>✓ {b.name} ({b.days} días × {formatARS(b.daily_amount)})</span>
+                          <span className="font-medium">{formatARS(b.total)}</span>
+                        </div>
+                      ))}
+                      {applyBonus && (
+                        <div className="flex justify-between text-emerald-700 font-medium">
+                          <span>(+) Total bonos</span>
+                          <span>{formatARS(calcResult.bonuses_total)}</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
                   <div className="flex justify-between text-red-600"><span>(−) Adelantos en el período</span><span className="font-medium">{formatARS(calcResult.advances_total)}</span></div>
-                  <div className="flex justify-between font-bold text-base border-t border-gray-200 pt-2"><span>Neto sugerido</span><span className="text-green-700">{formatARS(calcResult.net_amount)}</span></div>
+                  <div className="flex justify-between font-bold text-base border-t border-gray-200 pt-2">
+                    <span>Neto sugerido</span>
+                    <span className="text-green-700">{formatARS(applyBonus ? calcResult.net_amount : calcResult.net_amount - calcResult.bonuses_total)}</span>
+                  </div>
                 </div>
                 <div>
                   <label className="block text-xs font-bold text-gray-600 mb-1">Monto a pagar (ARS) *</label>

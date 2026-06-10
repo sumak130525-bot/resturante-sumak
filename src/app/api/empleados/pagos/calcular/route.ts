@@ -64,7 +64,7 @@ export async function GET(req: NextRequest) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data: timeEntries, error: timeErr } = await (sb as any)
     .from('time_entries')
-    .select('hours_worked')
+    .select('hours_worked, date')
     .eq('employee_id', employee_id)
     .not('clock_out', 'is', null)
     .gte('date', period_from)
@@ -95,21 +95,29 @@ export async function GET(req: NextRequest) {
     (sum: number, a: { amount: number }) => sum + Number(a.amount), 0
   )
 
-  // 4. Sum bonuses in the same period
+  // 4. Calculate bonuses from bonus_configs (days worked × daily_amount for each active config)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { data: bonuses, error: bonErr } = await (sb as any)
-    .from('employee_payments')
-    .select('amount, description, period_from, period_to')
-    .eq('employee_id', employee_id)
-    .eq('type', 'bonus')
-    .gte('created_at', `${period_from}T00:00:00.000Z`)
-    .lte('created_at', `${period_to}T23:59:59.999Z`)
+  const { data: bonusConfigs } = await (sb as any)
+    .from('bonus_configs')
+    .select('id, name, daily_amount')
+    .eq('active', true)
 
-  if (bonErr) return NextResponse.json({ error: bonErr.message }, { status: 500 })
+  // Count unique days worked in period
+  const daysWorked = new Set(
+    (timeEntries ?? [])
+      .filter((e: { hours_worked: number | null }) => (e.hours_worked ?? 0) > 0)
+      .map((e: { date: string }) => e.date)
+  ).size
 
-  const bonuses_total = (bonuses ?? []).reduce(
-    (sum: number, b: { amount: number }) => sum + Number(b.amount), 0
-  )
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const bonusDetails = (bonusConfigs ?? []).map((cfg: any) => ({
+    name: cfg.name,
+    daily_amount: Number(cfg.daily_amount),
+    days: daysWorked,
+    total: Math.round(Number(cfg.daily_amount) * daysWorked * 100) / 100,
+  }))
+
+  const bonuses_total = bonusDetails.reduce((sum: number, b: { total: number }) => sum + b.total, 0)
 
   const net_amount = Math.max(0, Math.round((gross_amount + bonuses_total - advances_total) * 100) / 100)
 
@@ -123,10 +131,11 @@ export async function GET(req: NextRequest) {
     period_from,
     period_to,
     hours_worked: hours_rounded,
+    days_worked: daysWorked,
     hourly_rate,
     gross_amount,
     bonuses_total: Math.round(bonuses_total * 100) / 100,
-    bonuses: bonuses ?? [],
+    bonuses: bonusDetails,
     advances_total: Math.round(advances_total * 100) / 100,
     net_amount,
   })

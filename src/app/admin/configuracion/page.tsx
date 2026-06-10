@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useEffect, useRef } from 'react'
 import { AdminLayoutClient } from '@/components/admin/AdminLayoutClient'
-import { Settings, Upload, Trash2, Image as ImageIcon, RefreshCw } from 'lucide-react'
+import { Settings, Upload, Trash2, Image as ImageIcon, RefreshCw, Plus, X } from 'lucide-react'
 import { type TicketConfig, DEFAULT_TICKET_CONFIG } from '@/types/ticket-config'
 
 export default function AdminConfiguracionPage() {
@@ -52,6 +52,14 @@ export default function AdminConfiguracionPage() {
   const [ticketConfig, setTicketConfig] = useState<TicketConfig>(DEFAULT_TICKET_CONFIG)
   const [ticketConfigLoading, setTicketConfigLoading] = useState(true)
   const [ticketConfigSaving, setTicketConfigSaving] = useState(false)
+
+  // ── Bonus configs ────────────────────────────────────────────────────────
+  type BonusConfig = { id: string; name: string; daily_amount: number; active: boolean }
+  const [bonusConfigs, setBonusConfigs] = useState<BonusConfig[]>([])
+  const [bonusLoading, setBonusLoading] = useState(true)
+  const [bonusName, setBonusName] = useState('')
+  const [bonusDaily, setBonusDaily] = useState('')
+  const [bonusSaving, setBonusSaving] = useState(false)
 
   const fetchLogo = useCallback(async () => {
     setLoading(true)
@@ -146,6 +154,49 @@ export default function AdminConfiguracionPage() {
       })
       .catch(() => setOpenTablesLoading(false))
   }, [])
+
+  // ── Bonus configs fetch ─────────────────────────────────────────────────────
+  const fetchBonusConfigs = useCallback(async () => {
+    setBonusLoading(true)
+    const res = await fetch('/api/admin/bonus-configs')
+    if (res.ok) setBonusConfigs(await res.json())
+    setBonusLoading(false)
+  }, [])
+  useEffect(() => { fetchBonusConfigs() }, [fetchBonusConfigs])
+
+  const handleAddBonus = async () => {
+    if (!bonusName.trim() || !bonusDaily) return
+    setBonusSaving(true)
+    const res = await fetch('/api/admin/bonus-configs', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: bonusName.trim(), daily_amount: Number(bonusDaily) }),
+    })
+    if (res.ok) {
+      setBonusName('')
+      setBonusDaily('')
+      await fetchBonusConfigs()
+    }
+    setBonusSaving(false)
+  }
+
+  const handleToggleBonus = async (id: string, active: boolean) => {
+    await fetch('/api/admin/bonus-configs', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id, active }),
+    })
+    await fetchBonusConfigs()
+  }
+
+  const handleDeleteBonus = async (id: string) => {
+    await fetch('/api/admin/bonus-configs', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id }),
+    })
+    await fetchBonusConfigs()
+  }
 
   const handleSaveTip = async () => {
     setTipSaving(true)
@@ -1139,6 +1190,79 @@ export default function AdminConfiguracionPage() {
                 {openTablesSaving ? 'Guardando...' : 'Guardar configuración de mesas'}
               </button>
             </div>
+          )}
+        </section>
+
+        {/* ── Bonos ──────────────────────────────────────────────────────────── */}
+        <section className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6">
+          <h2 className="font-serif text-lg font-bold text-sumak-brown mb-4 flex items-center gap-2">
+            <Settings size={18} />
+            Bonos recurrentes
+          </h2>
+          <p className="text-xs text-gray-500 mb-4">
+            Configurá bonos con monto diario. Se calculan automáticamente por día trabajado y se suman al sueldo.
+          </p>
+
+          {bonusLoading ? (
+            <p className="text-sm text-gray-400">Cargando...</p>
+          ) : (
+            <>
+              {bonusConfigs.length > 0 && (
+                <div className="space-y-2 mb-4">
+                  {bonusConfigs.map((b) => (
+                    <div key={b.id} className="flex items-center justify-between p-3 rounded-xl border border-gray-200 bg-gray-50">
+                      <div className="flex items-center gap-3">
+                        <button
+                          onClick={() => handleToggleBonus(b.id, !b.active)}
+                          className={`w-5 h-5 rounded border-2 flex items-center justify-center text-xs font-bold transition-colors ${b.active ? 'border-emerald-400 bg-emerald-100 text-emerald-600' : 'border-gray-300 bg-gray-100 text-gray-400'}`}
+                        >
+                          {b.active ? '✓' : '✕'}
+                        </button>
+                        <div>
+                          <span className="text-sm font-medium text-gray-800">{b.name}</span>
+                          <span className="text-xs text-gray-400 ml-2">${b.daily_amount.toLocaleString('es-AR')}/día</span>
+                        </div>
+                      </div>
+                      <button onClick={() => handleDeleteBonus(b.id)} className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors">
+                        <X size={14} />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <div className="flex items-end gap-3">
+                <div className="flex-1">
+                  <label className="block text-xs font-medium text-gray-500 mb-1">Motivo</label>
+                  <input
+                    type="text"
+                    value={bonusName}
+                    onChange={(e) => setBonusName(e.target.value)}
+                    placeholder="Ej: Presentismo"
+                    className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400"
+                  />
+                </div>
+                <div className="w-32">
+                  <label className="block text-xs font-medium text-gray-500 mb-1">$/día</label>
+                  <input
+                    type="number"
+                    value={bonusDaily}
+                    onChange={(e) => setBonusDaily(e.target.value)}
+                    placeholder="5000"
+                    min="1"
+                    className="w-full border border-gray-200 rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-400"
+                  />
+                </div>
+                <button
+                  onClick={handleAddBonus}
+                  disabled={bonusSaving || !bonusName.trim() || !bonusDaily}
+                  className="px-4 py-2.5 bg-emerald-600 text-white text-sm font-medium rounded-xl hover:bg-emerald-700 disabled:opacity-50 flex items-center gap-1.5"
+                >
+                  <Plus size={14} />
+                  Agregar
+                </button>
+              </div>
+            </>
           )}
         </section>
       </div>
