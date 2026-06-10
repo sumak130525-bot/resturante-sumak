@@ -3132,7 +3132,41 @@ function pmLabelPOS(pm: 'cash' | 'transfer' | 'mixed' | null): string {
   return 'Efectivo'
 }
 
-function printAdvancePOS(payment: POSPayment, empName: string, empRole: string) {
+function buildAdvanceReceiptText(payment: POSPayment, empName: string, empRole: string): string {
+  const dateStr = toArgDateTimePOS(payment.created_at)
+  const pmLabel = pmLabelPOS(payment.payment_method)
+  let text = ''
+  text += '[CENTER][BOLD]SUMAK RESTAURANTE[/BOLD][/CENTER]\n'
+  text += '[CENTER]RECIBO DE ADELANTO[/CENTER]\n'
+  text += '[SEP]\n'
+  text += `Fecha: ${dateStr}\n`
+  text += `Empleado: ${empName}\n`
+  text += `Cargo: ${empRole || '—'}\n`
+  text += '[SEP]\n'
+  text += `[BOLD]MONTO ADELANTADO: ${formatARSPOS(payment.amount)}[/BOLD]\n`
+  if (payment.description) text += `Concepto: ${payment.description}\n`
+  text += `Método de pago: ${pmLabel}\n`
+  if (payment.payment_method === 'mixed') {
+    text += `  Efectivo: ${formatARSPOS(payment.cash_amount ?? 0)}\n`
+    text += `  Transferencia: ${formatARSPOS(payment.transfer_amount ?? 0)}\n`
+  }
+  text += '[SEP]\n'
+  text += '\n\n'
+  text += '[CENTER]________________________[/CENTER]\n'
+  text += '[CENTER]Firma del empleado[/CENTER]\n'
+  return text
+}
+
+async function printAdvancePOS(payment: POSPayment, empName: string, empRole: string, printServerUrl?: string | null) {
+  const text = buildAdvanceReceiptText(payment, empName, empRole)
+
+  // Intentar print-server primero (térmica)
+  if (printServerUrl) {
+    const ok = await tryPrintServer(text, printServerUrl)
+    if (ok) return
+  }
+
+  // Fallback: abrir página de recibo para window.print()
   const dateStr = toArgDateTimePOS(payment.created_at)
   const pmLabel = pmLabelPOS(payment.payment_method)
   const mixedRows = payment.payment_method === 'mixed'
@@ -3179,7 +3213,7 @@ function printAdvancePOS(payment: POSPayment, empName: string, empRole: string) 
   window.open('/pos/receipt', '_blank')
 }
 
-function EmployeePOSModal({ onClose }: { onClose: () => void }) {
+function EmployeePOSModal({ onClose, printServerUrl }: { onClose: () => void; printServerUrl: string | null }) {
   // Phase: 'pin' | 'main'
   const [phase, setPhase] = useState<'pin' | 'main'>('pin')
   const [pinInput, setPinInput] = useState('')
@@ -3283,7 +3317,7 @@ function EmployeePOSModal({ onClose }: { onClose: () => void }) {
         setShowAdvForm(false)
         setAdvAmount(''); setAdvDesc(''); setAdvPM('cash'); setAdvCash(''); setAdvTransfer('')
         await loadPayments(selectedEmp)
-        printAdvancePOS(pmt, emp?.name ?? '', emp?.role ?? '')
+        printAdvancePOS(pmt, emp?.name ?? '', emp?.role ?? '', printServerUrl)
       } else {
         const d = await res.json()
         setAdvError(d.error ?? 'Error al registrar')
@@ -3563,7 +3597,7 @@ function EmployeePOSModal({ onClose }: { onClose: () => void }) {
                           </p>
                         </div>
                         <button
-                          onClick={() => printAdvancePOS(pmt, emp?.name ?? '', emp?.role ?? '')}
+                          onClick={() => printAdvancePOS(pmt, emp?.name ?? '', emp?.role ?? '', printServerUrl)}
                           className="shrink-0 px-3 py-1.5 rounded-lg font-bold text-xs transition-all active:scale-95"
                           style={{ background: 'rgba(255,255,255,0.08)', color: 'rgba(255,255,255,0.7)' }}
                           title="Imprimir recibo"
@@ -5282,7 +5316,7 @@ export default function POSPage() {
 
       {/* ── Employee Payments Modal ── */}
       {showEmpPayModal && (
-        <EmployeePOSModal onClose={() => setShowEmpPayModal(false)} />
+        <EmployeePOSModal onClose={() => setShowEmpPayModal(false)} printServerUrl={printServerUrl} />
       )}
 
       {/* ── Mesas abiertas panel ── */}
