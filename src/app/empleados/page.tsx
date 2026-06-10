@@ -1542,7 +1542,10 @@ async function getPrintServerUrl(): Promise<string | null> {
 
 async function printViaThermal(text: string): Promise<boolean> {
   const url = await getPrintServerUrl()
-  if (!url) { console.error('print: no print_server_url configurada'); return false }
+  if (!url) {
+    alert('Error: no se encontró la URL del print-server en configuración')
+    return false
+  }
   try {
     const controller = new AbortController()
     const timeout = setTimeout(() => controller.abort(), 8000)
@@ -1553,9 +1556,15 @@ async function printViaThermal(text: string): Promise<boolean> {
       signal: controller.signal,
     })
     clearTimeout(timeout)
-    if (!res.ok) console.error('print: server responded', res.status)
-    return res.ok
-  } catch (err) { console.error('print: error', err); return false }
+    if (!res.ok) {
+      alert(`Error impresora: respondió ${res.status}`)
+      return false
+    }
+    return true
+  } catch (err) {
+    alert(`Error conexión impresora: ${err instanceof Error ? err.message : 'timeout/red'}`)
+    return false
+  }
 }
 
 async function printAdvanceReceipt(payment: EmployeePayment, empName: string, empRole: string) {
@@ -1582,8 +1591,7 @@ async function printAdvanceReceipt(payment: EmployeePayment, empName: string, em
   text += '[CENTER]________________________[/CENTER]\n'
   text += '[CENTER]Firma del empleado[/CENTER]\n'
 
-  const ok = await printViaThermal(text)
-  if (!ok) alert('No se pudo imprimir. Verificá que la impresora esté encendida y la app ESC POS activa.')
+  await printViaThermal(text)
 }
 
 async function printSalaryReceipt(payment: EmployeePayment, empName: string, empRole: string) {
@@ -1619,8 +1627,7 @@ async function printSalaryReceipt(payment: EmployeePayment, empName: string, emp
   text += '[CENTER]________________________[/CENTER]\n'
   text += '[CENTER]Firma del empleado[/CENTER]\n'
 
-  const ok = await printViaThermal(text)
-  if (!ok) alert('No se pudo imprimir. Verificá que la impresora esté encendida y la app ESC POS activa.')
+  await printViaThermal(text)
 }
 
 // ─── Tab: Pagos ───────────────────────────────────────────────────────────────
