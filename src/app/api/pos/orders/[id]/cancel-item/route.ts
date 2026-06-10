@@ -42,7 +42,7 @@ export async function PATCH(
     // 2. Get the order item
     const { data: orderItem, error: itemErr } = await supabase
       .from('order_items')
-      .select('id, menu_item_id, quantity, price')
+      .select('id, menu_item_id, quantity, unit_price')
       .eq('id', order_item_id)
       .eq('order_id', id)
       .single()
@@ -51,7 +51,7 @@ export async function PATCH(
       return NextResponse.json({ error: 'Item no encontrado en el pedido' }, { status: 404 })
     }
 
-    const refundAmount = Number(orderItem.price) * Number(orderItem.quantity)
+    const refundAmount = Number(orderItem.unit_price) * Number(orderItem.quantity)
 
     // 3. Delete the order item
     const { error: deleteErr } = await supabase
