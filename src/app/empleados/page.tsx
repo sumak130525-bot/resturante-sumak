@@ -1531,49 +1531,23 @@ function paymentMethodLabel(pm: 'cash' | 'transfer' | 'mixed' | null): string {
 }
 
 function printViaIframe(html: string) {
-  // Usar nueva ventana en lugar de iframe — más compatible con móviles
-  const printWindow = window.open('', '_blank', 'width=400,height=600')
-  if (!printWindow) {
-    // Fallback: intentar con iframe si popup bloqueado
-    const iframe = document.createElement('iframe')
-    iframe.style.position = 'fixed'
-    iframe.style.right = '0'
-    iframe.style.bottom = '0'
-    iframe.style.width = '0'
-    iframe.style.height = '0'
-    iframe.style.border = '0'
-    document.body.appendChild(iframe)
-    const doc = iframe.contentDocument || iframe.contentWindow?.document
-    if (!doc) { document.body.removeChild(iframe); return }
-    doc.open()
-    doc.write(html)
-    doc.close()
-    setTimeout(() => {
-      iframe.contentWindow?.focus()
-      iframe.contentWindow?.print()
-      setTimeout(() => document.body.removeChild(iframe), 1000)
-    }, 300)
-    return
-  }
-  printWindow.document.open()
-  printWindow.document.write(html)
-  printWindow.document.close()
-  printWindow.onload = () => {
-    setTimeout(() => {
-      printWindow.focus()
-      printWindow.print()
-      printWindow.onafterprint = () => printWindow.close()
-      // Fallback close después de 5s por si onafterprint no dispara
-      setTimeout(() => { try { printWindow.close() } catch {} }, 5000)
-    }, 200)
-  }
-  // Trigger onload manualmente si ya cargó
-  if (printWindow.document.readyState === 'complete') {
-    setTimeout(() => {
-      printWindow.focus()
-      printWindow.print()
-      setTimeout(() => { try { printWindow.close() } catch {} }, 5000)
-    }, 200)
+  const iframe = document.createElement('iframe')
+  iframe.style.position = 'fixed'
+  iframe.style.right = '0'
+  iframe.style.bottom = '0'
+  iframe.style.width = '0'
+  iframe.style.height = '0'
+  iframe.style.border = '0'
+  document.body.appendChild(iframe)
+  const doc = iframe.contentDocument || iframe.contentWindow?.document
+  if (!doc) { document.body.removeChild(iframe); return }
+  doc.open()
+  doc.write(html)
+  doc.close()
+  iframe.onload = () => {
+    iframe.contentWindow?.focus()
+    iframe.contentWindow?.print()
+    setTimeout(() => document.body.removeChild(iframe), 500)
   }
 }
 
