@@ -1530,39 +1530,12 @@ function paymentMethodLabel(pm: 'cash' | 'transfer' | 'mixed' | null): string {
   return 'Efectivo'
 }
 
-// ── Print via thermal printer (print-server) ─────────────────────────────────
-async function getPrintServerUrl(): Promise<string | null> {
-  try {
-    const res = await fetch('/api/admin/settings?key=print_server_url')
-    if (!res.ok) return null
-    const data = await res.json()
-    return Array.isArray(data) && data[0]?.value ? data[0].value as string : null
-  } catch { return null }
-}
-
-async function printViaThermal(text: string): Promise<boolean> {
-  const url = await getPrintServerUrl()
-  if (!url) {
-    alert('Error: no se encontró la URL del print-server en configuración')
-    return false
-  }
-  try {
-    const controller = new AbortController()
-    const timeout = setTimeout(() => controller.abort(), 8000)
-    // Mismo formato exacto que usa el POS en tryPrintServer
-    const res = await fetch(`${url}/print`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text, cut: true, feedLines: 3, config: {} }),
-      signal: controller.signal,
-    })
-    clearTimeout(timeout)
-    return res.ok
-  } catch (err) {
-    // Si falla, mostrar URL para debug
-    alert(`No se pudo conectar a ${url}/print — ¿La app ESC POS está activa?\n\n${err instanceof Error ? err.message : 'error desconocido'}`)
-    return false
-  }
+// ── Print via thermal printer (through /pos/receipt page) ─────────────────────
+function printViaReceipt(text: string) {
+  sessionStorage.setItem('pos_receipt_thermal', text)
+  sessionStorage.setItem('pos_receipt_return', '/empleados')
+  sessionStorage.removeItem('pos_receipt_html')
+  window.location.href = '/pos/receipt'
 }
 
 async function printAdvanceReceipt(payment: EmployeePayment, empName: string, empRole: string) {
@@ -1589,7 +1562,7 @@ async function printAdvanceReceipt(payment: EmployeePayment, empName: string, em
   text += '[CENTER]________________________[/CENTER]\n'
   text += '[CENTER]Firma del empleado[/CENTER]\n'
 
-  await printViaThermal(text)
+  printViaReceipt(text)
 }
 
 async function printSalaryReceipt(payment: EmployeePayment, empName: string, empRole: string) {
@@ -1625,7 +1598,7 @@ async function printSalaryReceipt(payment: EmployeePayment, empName: string, emp
   text += '[CENTER]________________________[/CENTER]\n'
   text += '[CENTER]Firma del empleado[/CENTER]\n'
 
-  await printViaThermal(text)
+  printViaReceipt(text)
 }
 
 // ─── Tab: Pagos ───────────────────────────────────────────────────────────────
