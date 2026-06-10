@@ -291,6 +291,19 @@ export default function InvoiceScanPage() {
     const results: SaveResult[] = []
 
     try {
+      // 0. Persist scanned invoice to DB for future MP linking
+      await fetch('/api/admin/scanned-invoices', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          supplier: invoiceData.supplier,
+          invoice_date: invoiceData.date,
+          total: invoiceData.total,
+          items: invoiceData.items,
+          image_url: imagePreview || null,
+        }),
+      }).catch(() => {}) // non-blocking — if fails, inventory still saves
+
       // 1. Fetch existing ingredients (now includes linked_menu_item_id via recipe_items)
       const ingRes = await fetch('/api/admin/ingredients')
       if (!ingRes.ok) {

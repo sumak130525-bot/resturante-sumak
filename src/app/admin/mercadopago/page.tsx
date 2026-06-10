@@ -4,7 +4,7 @@ import React, { useState, useEffect, useCallback } from 'react'
 import { AdminLayoutClient } from '@/components/admin/AdminLayoutClient'
 import { formatPrice } from '@/lib/utils'
 import {
-  CreditCard, Download, Check, X, Tag, Package, RefreshCw, ChevronDown, PlusCircle,
+  CreditCard, Download, Check, X, Tag, Package, RefreshCw, ChevronDown, PlusCircle, FileText,
 } from 'lucide-react'
 
 interface MPPayment {
@@ -28,6 +28,16 @@ interface Ingredient {
   unit: string
 }
 
+interface ScannedInvoice {
+  id: string
+  supplier: string | null
+  invoice_date: string | null
+  total: number | null
+  items: Array<{ name: string; quantity: number; unit: string; unit_price: number; total: number }>
+  status: string
+  created_at: string
+}
+
 export default function MercadoPagoExpensesPage() {
   const [payments, setPayments] = useState<MPPayment[]>([])
   const [categories, setCategories] = useState<ExpenseCategory[]>([])
@@ -48,6 +58,13 @@ export default function MercadoPagoExpensesPage() {
   const [customDesc, setCustomDesc] = useState('')
   const [showItems, setShowItems] = useState(false)
   const [items, setItems] = useState<Array<{ ingredient_id: string; quantity: number; unit_price: number }>>([])
+
+  // Link invoice state
+  const [linkPayment, setLinkPayment] = useState<MPPayment | null>(null)
+  const [invoices, setInvoices] = useState<ScannedInvoice[]>([])
+  const [loadingInvoices, setLoadingInvoices] = useState(false)
+  const [linking, setLinking] = useState(false)
+  const [linkedPayments, setLinkedPayments] = useState<Set<number>>(new Set())
 
   const fetchPayments = useCallback(async () => {
     setLoading(true)
@@ -147,6 +164,35 @@ export default function MercadoPagoExpensesPage() {
       console.error(err)
     }
     setImporting(null)
+  }
+
+  // ── Link invoice handlers ─────────────────────────────────────────────────
+  const openLinkModal = async (payment: MPPayment) => {
+    setLinkPayment(payment)
+    setLoadingInvoices(true)
+    try {
+      const res = await fetch('/api/admin/scanned-invoices?status=unlinked')
+      const data = await res.json()
+      setInvoices(Array.isArray(data) ? data : [])
+    } catch { setInvoices([]) }
+    setLoadingInvoices(false)
+  }
+
+  const handleLink = async (invoiceId: string) => {
+    if (!linkPayment) return
+    setLinking(true)
+    try {
+      const res = await fetch('/api/admin/scanned-invoices/link', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ invoice_id: invoiceId, mp_payment_id: String(linkPayment.id) }),
+      })
+      if (res.ok) {
+        setLinkedPayments(prev => { const next = new Set(prev); next.add(linkPayment.id); return next })
+        setLinkPayment(null)
+      }
+    } catch (err) { console.error(err) }
+    setLinking(false)
   }
 
   // Manual expense modal state
@@ -297,11 +343,21 @@ export default function MercadoPagoExpensesPage() {
                     <span className="flex items-center gap-1 text-green-600 text-xs font-medium">
                       <Check className="w-4 h-4" /> Importado
                     </span>
+                  ) : linkedPayments.has(p.id) ? (
+                    <span className="flex items-center gap-1 text-purple-600 text-xs font-medium">
+                      <FileText className="w-4 h-4" /> Vinculado
+                    </span>
                   ) : (
-                    <button onClick={() => openImportModal(p)}
-                      className="flex items-center gap-1 px-3 py-1.5 bg-blue-600 text-white text-xs font-medium rounded-lg hover:bg-blue-700">
-                      <Download className="w-3.5 h-3.5" /> Importar
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <button onClick={() => openLinkModal(p)}
+                        className="flex items-center gap-1 px-3 py-1.5 bg-purple-600 text-white text-xs font-medium rounded-lg hover:bg-purple-700">
+                        <FileText className="w-3.5 h-3.5" /> Asociar factura
+                      </button>
+                      <button onClick={() => openImportModal(p)}
+                        className="flex items-center gap-1 px-3 py-1.5 bg-blue-600 text-white text-xs font-medium rounded-lg hover:bg-blue-700">
+                        <Download className="w-3.5 h-3.5" /> Importar
+                      </button>
+                    </div>
                   )}
                 </div>
               </div>
@@ -539,6 +595,56 @@ export default function MercadoPagoExpensesPage() {
                   {savingManual ? 'Guardando...' : 'Guardar gasto'}
                 </button>
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* Link Invoice Modal */}
+        {linkPayment && (
+          <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
+            <div className="bg-white rounded-2xl shadow-xl max-w-lg w-full p-6 max-h-[80vh] overflow-auto">
+              <div className="flex items-center justify-between mb-4">
+                <h2 className="text-lg font-bold text-gray-800">Asociar factura escaneada</h2>
+                <button onClick={() => setLinkPayment(null)} className="p-1 rounded hover:bg-gray-100">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+              <p className="text-sm text-gray-500 mb-1">
+                Pago: <span className="font-medium text-gray-800">{linkPayment.description}</span>
+              </p>
+              <p className="text-sm text-gray-500 mb-4">
+                Monto: <span className="font-bold text-red-600">{formatPrice(linkPayment.amount)}</span> • {formatDate(linkPayment.date)}
+              </p>
+
+              {loadingInvoices ? (
+                <p className="text-sm text-gray-400 text-center py-8">Cargando facturas...</p>
+              ) : invoices.length === 0 ? (
+                <div className="text-center py-8">
+                  <p className="text-sm text-gray-400">No hay facturas sin vincular</p>
+                  <p className="text-xs text-gray-300 mt-1">Escaneá una factura primero en /admin/invoice-scan</p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {invoices.map(inv => (
+                    <div key={inv.id} className="flex items-center justify-between p-3 rounded-xl border border-gray-200 hover:border-purple-300 hover:bg-purple-50 transition-colors">
+                      <div>
+                        <p className="text-sm font-medium text-gray-800">{inv.supplier || 'Sin proveedor'}</p>
+                        <p className="text-xs text-gray-400">
+                          {inv.invoice_date || 'Sin fecha'} • {inv.items.length} items
+                          {inv.total && <> • Total: <span className="font-medium">{formatPrice(inv.total)}</span></>}
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => handleLink(inv.id)}
+                        disabled={linking}
+                        className="px-3 py-1.5 bg-purple-600 text-white text-xs font-medium rounded-lg hover:bg-purple-700 disabled:opacity-50"
+                      >
+                        {linking ? '...' : 'Vincular'}
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         )}
