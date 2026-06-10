@@ -1530,127 +1530,96 @@ function paymentMethodLabel(pm: 'cash' | 'transfer' | 'mixed' | null): string {
   return 'Efectivo'
 }
 
-function printViaIframe(html: string) {
-  const iframe = document.createElement('iframe')
-  iframe.style.position = 'fixed'
-  iframe.style.right = '0'
-  iframe.style.bottom = '0'
-  iframe.style.width = '0'
-  iframe.style.height = '0'
-  iframe.style.border = '0'
-  document.body.appendChild(iframe)
-  const doc = iframe.contentDocument || iframe.contentWindow?.document
-  if (!doc) { document.body.removeChild(iframe); return }
-  doc.open()
-  doc.write(html)
-  doc.close()
-  iframe.onload = () => {
-    iframe.contentWindow?.focus()
-    iframe.contentWindow?.print()
-    setTimeout(() => document.body.removeChild(iframe), 500)
-  }
+// ── Print via thermal printer (print-server) ─────────────────────────────────
+async function getPrintServerUrl(): Promise<string | null> {
+  try {
+    const res = await fetch('/api/admin/settings?key=print_server_url')
+    if (!res.ok) return null
+    const data = await res.json()
+    return Array.isArray(data) && data[0]?.value ? data[0].value as string : null
+  } catch { return null }
 }
 
-function printAdvanceReceipt(payment: EmployeePayment, empName: string, empRole: string) {
+async function printViaThermal(text: string): Promise<boolean> {
+  const url = await getPrintServerUrl()
+  if (!url) return false
+  try {
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), 4000)
+    const res = await fetch(`${url}/print`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text, cut: true, feedLines: 3, config: {} }),
+      signal: controller.signal,
+    })
+    clearTimeout(timeout)
+    return res.ok
+  } catch { return false }
+}
+
+async function printAdvanceReceipt(payment: EmployeePayment, empName: string, empRole: string) {
   const dateStr = toArgDateTime(payment.created_at)
   const pmLabel = paymentMethodLabel(payment.payment_method)
-  const mixedRows = payment.payment_method === 'mixed'
-    ? `<div class="row"><span>  Efectivo:</span><span>${formatARS(payment.cash_amount ?? 0)}</span></div>
-  <div class="row"><span>  Transferencia:</span><span>${formatARS(payment.transfer_amount ?? 0)}</span></div>`
-    : ''
-  const html = `<!DOCTYPE html>
-<html lang="es">
-<head>
-<meta charset="UTF-8">
-<title>Recibo Adelanto</title>
-<style>
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-  body { font-family: 'Courier New', Courier, monospace; font-size: 11px; width: 72mm; padding: 4mm; }
-  .center { text-align: center; }
-  .bold { font-weight: bold; }
-  .separator { border-top: 1px dashed #000; margin: 3mm 0; }
-  .row { display: flex; justify-content: space-between; margin: 1mm 0; }
-  .title { font-size: 13px; font-weight: bold; margin-bottom: 2mm; }
-  .subtitle { font-size: 10px; margin-bottom: 1mm; }
-  .firma { margin-top: 10mm; border-top: 1px solid #000; padding-top: 2mm; width: 50mm; margin-left: auto; margin-right: auto; text-align: center; font-size: 10px; }
-  @media print { @page { margin: 0; size: 72mm auto; } body { padding: 2mm; } }
-</style>
-</head>
-<body>
-  <div class="center">
-    <div class="title">SUMAK RESTAURANTE</div>
-    <div class="subtitle">RECIBO DE ADELANTO</div>
-  </div>
-  <div class="separator"></div>
-  <div class="row"><span>Fecha:</span><span>${dateStr}</span></div>
-  <div class="row"><span>Empleado:</span><span>${empName}</span></div>
-  <div class="row"><span>Cargo:</span><span>${empRole || '—'}</span></div>
-  <div class="separator"></div>
-  <div class="row bold"><span>MONTO ADELANTADO:</span><span>${formatARS(payment.amount)}</span></div>
-  ${payment.description ? `<div class="row"><span>Concepto:</span><span>${payment.description}</span></div>` : ''}
-  <div class="row"><span>Método de pago:</span><span>${pmLabel}</span></div>
-  ${mixedRows}
-  <div class="separator"></div>
-  <div class="firma">Firma del empleado</div>
-</body>
-</html>`
-  printViaIframe(html)
+
+  let text = ''
+  text += '[CENTER][BOLD]SUMAK RESTAURANTE[/BOLD][/CENTER]\n'
+  text += '[CENTER]RECIBO DE ADELANTO[/CENTER]\n'
+  text += '[SEP]\n'
+  text += `Fecha: ${dateStr}\n`
+  text += `Empleado: ${empName}\n`
+  text += `Cargo: ${empRole || '—'}\n`
+  text += '[SEP]\n'
+  text += `[BOLD]MONTO: ${formatARS(payment.amount)}[/BOLD]\n`
+  if (payment.description) text += `Concepto: ${payment.description}\n`
+  text += `Método: ${pmLabel}\n`
+  if (payment.payment_method === 'mixed') {
+    text += `  Efectivo: ${formatARS(payment.cash_amount ?? 0)}\n`
+    text += `  Transferencia: ${formatARS(payment.transfer_amount ?? 0)}\n`
+  }
+  text += '[SEP]\n'
+  text += '\n\n'
+  text += '[CENTER]________________________[/CENTER]\n'
+  text += '[CENTER]Firma del empleado[/CENTER]\n'
+
+  const ok = await printViaThermal(text)
+  if (!ok) alert('No se pudo imprimir. Verificá que la impresora esté encendida y la app ESC POS activa.')
 }
 
-function printSalaryReceipt(payment: EmployeePayment, empName: string, empRole: string) {
+async function printSalaryReceipt(payment: EmployeePayment, empName: string, empRole: string) {
   const dateStr = toArgDateTime(payment.created_at)
   const periodStr = payment.period_from && payment.period_to
     ? `${formatDate(payment.period_from)} al ${formatDate(payment.period_to)}`
     : '—'
   const pmLabel = paymentMethodLabel(payment.payment_method)
-  const mixedRows = payment.payment_method === 'mixed'
-    ? `<div class="row"><span>  Efectivo:</span><span>${formatARS(payment.cash_amount ?? 0)}</span></div>
-  <div class="row"><span>  Transferencia:</span><span>${formatARS(payment.transfer_amount ?? 0)}</span></div>`
-    : ''
-  const html = `<!DOCTYPE html>
-<html lang="es">
-<head>
-<meta charset="UTF-8">
-<title>Recibo Sueldo</title>
-<style>
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-  body { font-family: 'Courier New', Courier, monospace; font-size: 11px; width: 72mm; padding: 4mm; }
-  .center { text-align: center; }
-  .bold { font-weight: bold; }
-  .separator { border-top: 1px dashed #000; margin: 3mm 0; }
-  .row { display: flex; justify-content: space-between; margin: 1mm 0; }
-  .title { font-size: 13px; font-weight: bold; margin-bottom: 2mm; }
-  .subtitle { font-size: 10px; margin-bottom: 1mm; }
-  .firma { margin-top: 10mm; border-top: 1px solid #000; padding-top: 2mm; width: 50mm; margin-left: auto; margin-right: auto; text-align: center; font-size: 10px; }
-  .deduccion { color: #c00; }
-  @media print { @page { margin: 0; size: 72mm auto; } body { padding: 2mm; } }
-</style>
-</head>
-<body>
-  <div class="center">
-    <div class="title">SUMAK RESTAURANTE</div>
-    <div class="subtitle">RECIBO DE SUELDO</div>
-  </div>
-  <div class="separator"></div>
-  <div class="row"><span>Fecha:</span><span>${dateStr}</span></div>
-  <div class="row"><span>Empleado:</span><span>${empName}</span></div>
-  <div class="row"><span>Cargo:</span><span>${empRole || '—'}</span></div>
-  <div class="separator"></div>
-  <div class="row"><span>Período:</span><span>${periodStr}</span></div>
-  <div class="row"><span>Horas trabajadas:</span><span>${formatHours(payment.hours_worked ?? 0)}</span></div>
-  <div class="row"><span>Tarifa/hora:</span><span>${formatARS(payment.employees?.hourly_rate ?? 0)}</span></div>
-  <div class="separator"></div>
-  <div class="row"><span>Bruto:</span><span>${formatARS(payment.gross_amount ?? 0)}</span></div>
-  <div class="row deduccion"><span>(-) Adelantos:</span><span>${formatARS(payment.advances_deducted ?? 0)}</span></div>
-  <div class="separator"></div>
-  <div class="row bold"><span>NETO A PAGAR:</span><span>${formatARS(payment.amount)}</span></div>
-  <div class="row"><span>Método de pago:</span><span>${pmLabel}</span></div>
-  ${mixedRows}
-  <div class="separator"></div>
-  <div class="firma">Firma del empleado</div>
-</body>
-</html>`
-  printViaIframe(html)
+
+  let text = ''
+  text += '[CENTER][BOLD]SUMAK RESTAURANTE[/BOLD][/CENTER]\n'
+  text += '[CENTER]RECIBO DE SUELDO[/CENTER]\n'
+  text += '[SEP]\n'
+  text += `Fecha: ${dateStr}\n`
+  text += `Empleado: ${empName}\n`
+  text += `Cargo: ${empRole || '—'}\n`
+  text += '[SEP]\n'
+  text += `Período: ${periodStr}\n`
+  text += `Horas: ${formatHours(payment.hours_worked ?? 0)}\n`
+  text += `Tarifa/h: ${formatARS(payment.employees?.hourly_rate ?? 0)}\n`
+  text += '[SEP]\n'
+  text += `Bruto: ${formatARS(payment.gross_amount ?? 0)}\n`
+  text += `(-) Adelantos: ${formatARS(payment.advances_deducted ?? 0)}\n`
+  text += '[SEP]\n'
+  text += `[BOLD]NETO: ${formatARS(payment.amount)}[/BOLD]\n`
+  text += `Método: ${pmLabel}\n`
+  if (payment.payment_method === 'mixed') {
+    text += `  Efectivo: ${formatARS(payment.cash_amount ?? 0)}\n`
+    text += `  Transferencia: ${formatARS(payment.transfer_amount ?? 0)}\n`
+  }
+  text += '[SEP]\n'
+  text += '\n\n'
+  text += '[CENTER]________________________[/CENTER]\n'
+  text += '[CENTER]Firma del empleado[/CENTER]\n'
+
+  const ok = await printViaThermal(text)
+  if (!ok) alert('No se pudo imprimir. Verificá que la impresora esté encendida y la app ESC POS activa.')
 }
 
 // ─── Tab: Pagos ───────────────────────────────────────────────────────────────
