@@ -101,15 +101,21 @@ export async function POST(request: NextRequest) {
 
     if (shift) {
       shiftId = shift.id
+      // Ensure cash_shifts row exists (FK constraint) — upsert for existing shifts that weren't synced
+      await supabase.from('cash_shifts').upsert({ id: shift.id, opening_amount: 0, status: 'open' }, { onConflict: 'id' })
     } else {
       // Auto-create shift if none open
       const { data: newShift, error: shiftErr } = await supabase
         .from('shifts')
         .insert({ opening_amount: 0, status: 'open' })
-        .select('id')
+        .select('id, opened_at')
         .single()
       if (shiftErr) throw new Error(shiftErr.message)
       shiftId = newShift?.id ?? null
+      // Sync to cash_shifts with same ID (FK constraint)
+      if (newShift) {
+        await supabase.from('cash_shifts').insert({ id: newShift.id, opening_amount: 0, status: 'open', opened_at: newShift.opened_at })
+      }
     }
 
     const { data: movement, error } = await supabase

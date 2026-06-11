@@ -43,10 +43,10 @@ export async function POST(request: NextRequest) {
 
     if (error) throw new Error(error.message)
 
-    // Sync: also create in 'cash_shifts'
+    // Sync: also create in 'cash_shifts' with SAME ID (cash_movements FK references cash_shifts)
     await supabase
       .from('cash_shifts')
-      .insert({ opening_amount, status: 'open', opened_at: shift.opened_at })
+      .insert({ id: shift.id, opening_amount, status: 'open', opened_at: shift.opened_at })
 
     return NextResponse.json({ shift }, { status: 201 })
   } catch (err) {

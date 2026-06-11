@@ -206,14 +206,18 @@ export async function POST(request: NextRequest) {
 
       if (openShift) {
         shiftId = openShift.id
+        await supabase.from('cash_shifts').upsert({ id: openShift.id, opening_amount: 0, status: 'open' }, { onConflict: 'id' })
       } else {
         // Auto-create shift so sales are always tracked
         const { data: newShift } = await supabase
           .from('shifts')
           .insert({ opening_amount: 0, status: 'open' })
-          .select('id')
+          .select('id, opened_at')
           .single()
         shiftId = newShift?.id ?? null
+        if (newShift) {
+          await supabase.from('cash_shifts').insert({ id: newShift.id, opening_amount: 0, status: 'open', opened_at: newShift.opened_at })
+        }
       }
 
       await supabase.from('cash_movements').insert({

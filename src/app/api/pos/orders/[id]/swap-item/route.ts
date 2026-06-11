@@ -82,6 +82,9 @@ export async function PATCH(
         .single()
 
       const shiftId = shift?.id ?? null
+      if (shift) {
+        await supabase.from('cash_shifts').upsert({ id: shift.id, opening_amount: 0, status: 'open' }, { onConflict: 'id' })
+      }
 
       if (difference < 0) {
         // Cheaper: create egreso (devolution)
