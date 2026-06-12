@@ -300,6 +300,7 @@ export async function handleMessage(text: string, phone?: string): Promise<strin
   }
 
   // ── AI mode: AI handles ALL conversations including ordering ─────────────────
+  console.log(`[DEBUG] isAIAvailable=${isAIAvailable()}, AI_API_KEY=${process.env.AI_API_KEY ? 'SET' : 'MISSING'}, GEMINI=${process.env.GEMINI_API_KEY ? 'SET' : 'MISSING'}`);
   if (!isAIAvailable()) {
     console.log('⚠️  Groq no configurado, usando respuestas estáticas');
     return handleMessageFallback(text);

@@ -7,7 +7,7 @@ import { MenuItemForm } from '@/components/admin/MenuItemForm'
 import { QuantityEditor } from '@/components/admin/QuantityEditor'
 import { formatPrice, cn } from '@/lib/utils'
 import type { MenuItem, Category } from '@/lib/types'
-import { Plus, Pencil, Trash2, RefreshCw } from 'lucide-react'
+import { Plus, Pencil, Trash2, RefreshCw, Languages } from 'lucide-react'
 
 export default function AdminMenuPage() {
   const [items, setItems] = useState<MenuItem[]>([])
@@ -15,6 +15,8 @@ export default function AdminMenuPage() {
   const [loading, setLoading] = useState(true)
   const [editItem, setEditItem] = useState<MenuItem | null>(null)
   const [filterActive, setFilterActive] = useState<'all' | 'active' | 'inactive'>('active')
+  const [translatingAll, setTranslatingAll] = useState(false)
+  const [translateResult, setTranslateResult] = useState<string | null>(null)
 
   const fetchData = useCallback(async () => {
     setLoading(true)
@@ -42,10 +44,13 @@ export default function AdminMenuPage() {
       throw new Error(err.error)
     }
 
+    let savedId = data.id
+
     // If there's a pending file (new item scenario), upload the image now
     if (pendingFile && !data.id) {
       const created = await res.json()
       const newId: string = created.id ?? created.data?.id
+      savedId = newId
       if (newId) {
         const fd = new FormData()
         fd.append('image', pendingFile)
@@ -60,6 +65,19 @@ export default function AdminMenuPage() {
           })
         }
       }
+    }
+
+    // Traducir automaticamente en background si no vienen traducciones manuales
+    if (savedId && data.name && !data.name_en && !data.name_qu) {
+      fetch('/api/admin/translate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: savedId,
+          name: data.name,
+          description: data.description_es ?? data.description ?? '',
+        }),
+      }).catch((err) => console.error('[menu] Error en traduccion automatica:', err))
     }
 
     await fetchData()
@@ -77,6 +95,29 @@ export default function AdminMenuPage() {
       body: JSON.stringify({ id }),
     })
     await fetchData()
+  }
+
+  const handleTranslateAll = async () => {
+    setTranslatingAll(true)
+    setTranslateResult(null)
+    try {
+      const res = await fetch('/api/admin/translate-all', { method: 'POST' })
+      const data = await res.json()
+      if (res.ok) {
+        const msg = data.remaining > 0
+          ? `Traducidos: ${data.translated}. Faltan ${data.remaining} — dale click de nuevo.`
+          : `Traducidos: ${data.translated} plato${data.translated !== 1 ? 's' : ''}${data.errors > 0 ? ` (${data.errors} errores)` : ''}`
+        setTranslateResult(msg)
+        if (data.translated > 0) await fetchData()
+      } else {
+        setTranslateResult(`Error: ${data.error}`)
+      }
+    } catch {
+      setTranslateResult('Error de conexion')
+    } finally {
+      setTranslatingAll(false)
+      setTimeout(() => setTranslateResult(null), 5000)
+    }
   }
 
   const handleQuantityUpdate = async (id: string, available: number) => {
@@ -102,7 +143,19 @@ export default function AdminMenuPage() {
         {/* Header */}
         <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
           <h1 className="font-serif text-3xl font-bold text-sumak-brown">Gestión del Menú</h1>
-          <div className="flex gap-3">
+          <div className="flex flex-wrap gap-3 items-center">
+            {translateResult && (
+              <span className="text-sm text-green-600 font-medium">{translateResult}</span>
+            )}
+            <button
+              onClick={handleTranslateAll}
+              disabled={translatingAll}
+              className="flex items-center gap-2 text-sm text-gray-500 hover:text-sumak-brown transition-colors border border-gray-200 rounded-lg px-3 py-2 disabled:opacity-50"
+              title="Traducir platos sin traduccion al ingles y quechua"
+            >
+              <Languages size={15} />
+              {translatingAll ? 'Traduciendo...' : 'Traducir todo'}
+            </button>
             <button
               onClick={fetchData}
               className="flex items-center gap-2 text-sm text-gray-500 hover:text-sumak-red transition-colors border border-gray-200 rounded-lg px-3 py-2"

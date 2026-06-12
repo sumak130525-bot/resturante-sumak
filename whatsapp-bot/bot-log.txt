@@ -1,0 +1,14 @@
+
+🌿 ===================================
+   SUMAK WHATSAPP BOT
+   Restaurante Sumak - Mendoza
+🌿 ===================================
+
+✅ Bot conectado exitosamente!
+📞 Número: +5492617526242
+🤖 Sumak Bot está listo para recibir mensajes.
+
+[Kitchen] Iniciando suscripción Realtime a todos los pedidos...
+[Kitchen] Supabase URL: https://zdepdnezwscvkgnxolqk.supabase.co
+[Kitchen] Canal Realtime configurado. Esperando suscripción...
+[Kitchen] ✅ Realtime subscrito — escuchando cambios en todos los pedidos...
