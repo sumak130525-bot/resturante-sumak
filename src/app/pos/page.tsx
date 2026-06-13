@@ -4627,7 +4627,7 @@ export default function POSPage() {
         {/* Language selector */}
         {languagesEnabled && (
         <div className="flex items-center gap-0.5 shrink-0">
-          {(['es', 'en', 'qu'] as Locale[]).map((lang) => (
+          {(['es', 'en'] as Locale[]).map((lang) => (
             <button
               key={lang}
               onClick={() => setLocale(lang)}

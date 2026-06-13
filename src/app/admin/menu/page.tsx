@@ -151,7 +151,7 @@ export default function AdminMenuPage() {
               onClick={handleTranslateAll}
               disabled={translatingAll}
               className="flex items-center gap-2 text-sm text-gray-500 hover:text-sumak-brown transition-colors border border-gray-200 rounded-lg px-3 py-2 disabled:opacity-50"
-              title="Traducir platos sin traduccion al ingles y quechua"
+              title="Traducir platos sin traduccion al ingles"
             >
               <Languages size={15} />
               {translatingAll ? 'Traduciendo...' : 'Traducir todo'}

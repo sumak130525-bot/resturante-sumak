@@ -691,7 +691,7 @@ export default function MenuDisplayPage() {
         <div className="flex items-center gap-2 shrink-0">
           {languagesEnabled && (
           <div className="flex items-center gap-0.5">
-            {(['es', 'en', 'qu'] as Locale[]).map((lang) => (
+            {(['es', 'en'] as Locale[]).map((lang) => (
               <button
                 key={lang}
                 onClick={() => setLocale(lang)}
