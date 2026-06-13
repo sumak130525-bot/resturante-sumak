@@ -143,7 +143,12 @@ export async function POST(request: NextRequest) {
     }
 
     const role = (employee.role ?? '').toLowerCase().trim()
-    const permissions = ROLE_PERMISSIONS[role] ?? DEFAULT_PERMISSIONS
+    // Normalizar roles: moza→mozo, cocinera→cocina, ayudante*→cocina
+    const normalizedRole = role === 'moza' ? 'mozo'
+      : role === 'cocinera' ? 'cocina'
+      : role.startsWith('ayudante') ? 'cocina'
+      : role
+    const permissions = ROLE_PERMISSIONS[normalizedRole] ?? DEFAULT_PERMISSIONS
 
     return NextResponse.json({
       employee: {
