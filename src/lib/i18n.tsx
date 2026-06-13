@@ -4,7 +4,7 @@ import { createContext, useContext, useState, useEffect, useCallback, type React
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-export type Locale = 'es' | 'en' | 'qu'
+export type Locale = 'es' | 'en' | 'qu' // 'qu' mantenido en tipo para compatibilidad con getItemName/getItemDescription
 
 type TranslationDict = {
   // Header / Nav
@@ -413,7 +413,8 @@ export function LanguageProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     try {
       const stored = localStorage.getItem(STORAGE_KEY) as Locale | null
-      if (stored && ['es', 'en', 'qu'].includes(stored)) {
+      // 'qu' deshabilitado temporalmente — solo es/en disponibles en selector
+      if (stored && ['es', 'en'].includes(stored)) {
         setLocaleState(stored)
       }
     } catch {

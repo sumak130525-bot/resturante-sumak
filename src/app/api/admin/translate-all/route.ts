@@ -25,13 +25,15 @@ function sleep(ms: number) {
   return new Promise(resolve => setTimeout(resolve, ms))
 }
 
+// NOTA: quechua (name_qu, description_qu) deshabilitado temporalmente.
+// Para reactivar: restaurar el prompt y el update con los campos [QU-DISABLED]
 async function translateItem(
   groq: Groq,
   name: string,
   description: string | null
-): Promise<{ name_en: string; name_qu: string; description_en: string; description_qu: string }> {
-  const prompt = `Eres un experto en gastronomía latinoamericana y lenguas indígenas andinas.
-Traduce el siguiente plato de restaurante al inglés americano y al quechua boliviano (variante sureña, como se habla en Cochabamba y Potosí — NO quechua peruano).
+): Promise<{ name_en: string; description_en: string }> {
+  const prompt = `Eres un experto en gastronomía latinoamericana.
+Traduce el siguiente plato de restaurante al inglés americano.
 Devuelve SOLO un objeto JSON válido, sin texto adicional, sin markdown, sin explicaciones.
 
 Nombre del plato: ${name}
@@ -40,16 +42,15 @@ Descripción: ${description || ''}
 Formato de respuesta requerido:
 {
   "name_en": "traducción al inglés",
-  "name_qu": "traducción al quechua boliviano",
-  "description_en": "descripción en inglés (vacío si no hay descripción)",
-  "description_qu": "descripción en quechua boliviano (vacío si no hay descripción)"
+  "description_en": "descripción en inglés (vacío si no hay descripción)"
 }`
+  // [QU-DISABLED] Prompt original pedía también name_qu y description_qu en quechua boliviano (variante sureña)
 
   const completion = await groq.chat.completions.create({
     model: 'llama-3.1-8b-instant',
     messages: [{ role: 'user', content: prompt }],
     temperature: 0.3,
-    max_tokens: 512,
+    max_tokens: 300,
   })
 
   const raw = completion.choices[0]?.message?.content?.trim() ?? ''
@@ -102,9 +103,9 @@ export async function POST() {
         .from('menu_items')
         .update({
           name_en: translations.name_en || null,
-          name_qu: translations.name_qu || null,
           description_en: translations.description_en || null,
-          description_qu: translations.description_qu || null,
+          // [QU-DISABLED] name_qu: translations.name_qu || null,
+          // [QU-DISABLED] description_qu: translations.description_qu || null,
         })
         .eq('id', item.id)
 

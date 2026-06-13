@@ -21,7 +21,9 @@ async function getUntypedClient(useServiceRole = false) {
   )
 }
 
-// POST: traducir un plato al ingles y quechua boliviano via Groq
+// POST: traducir un plato al inglés via Groq
+// NOTA: quechua (name_qu, description_qu) deshabilitado temporalmente.
+// Para reactivar: descomentar las líneas marcadas con [QU-DISABLED]
 export async function POST(request: NextRequest) {
   const supabase = await getUntypedClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -38,8 +40,8 @@ export async function POST(request: NextRequest) {
 
   const groq = new Groq({ apiKey: process.env.AI_API_KEY })
 
-  const prompt = `Eres un experto en gastronomía latinoamericana y lenguas indígenas andinas.
-Traduce el siguiente plato de restaurante al inglés americano y al quechua boliviano (variante sureña, como se habla en Cochabamba y Potosí — NO quechua peruano).
+  const prompt = `Eres un experto en gastronomía latinoamericana.
+Traduce el siguiente plato de restaurante al inglés americano.
 Devuelve SOLO un objeto JSON válido, sin texto adicional, sin markdown, sin explicaciones.
 
 Nombre del plato: ${name}
@@ -48,21 +50,20 @@ Descripción: ${description || ''}
 Formato de respuesta requerido:
 {
   "name_en": "traducción al inglés",
-  "name_qu": "traducción al quechua boliviano",
-  "description_en": "descripción en inglés (vacío si no hay descripción)",
-  "description_qu": "descripción en quechua boliviano (vacío si no hay descripción)"
+  "description_en": "descripción en inglés (vacío si no hay descripción)"
 }`
+  // [QU-DISABLED] Prompt original incluía también name_qu y description_qu en quechua boliviano
 
   const completion = await groq.chat.completions.create({
     model: 'llama-3.1-8b-instant',
     messages: [{ role: 'user', content: prompt }],
     temperature: 0.3,
-    max_tokens: 512,
+    max_tokens: 300,
   })
 
   const raw = completion.choices[0]?.message?.content?.trim() ?? ''
 
-  let translations: { name_en: string; name_qu: string; description_en: string; description_qu: string }
+  let translations: { name_en: string; description_en: string }
   try {
     // Extraer JSON aunque haya texto alrededor
     const jsonMatch = raw.match(/\{[\s\S]*\}/)
@@ -81,9 +82,9 @@ Formato de respuesta requerido:
       .from('menu_items')
       .update({
         name_en: translations.name_en || null,
-        name_qu: translations.name_qu || null,
         description_en: translations.description_en || null,
-        description_qu: translations.description_qu || null,
+        // [QU-DISABLED] name_qu: translations.name_qu || null,
+        // [QU-DISABLED] description_qu: translations.description_qu || null,
       })
       .eq('id', id)
 

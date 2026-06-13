@@ -16,7 +16,7 @@ interface PublicHeaderProps {
 const LOCALES: { code: Locale; flag: string; label: string }[] = [
   { code: 'es', flag: '🇪🇸', label: 'ES' },
   { code: 'en', flag: '🇬🇧', label: 'EN' },
-  { code: 'qu', flag: '🏔️', label: 'QU' },
+  // { code: 'qu', flag: '🏔️', label: 'QU' }, // Quechua deshabilitado temporalmente
 ]
 
 export function PublicHeader({ cartCount, onCartOpen, isLive }: PublicHeaderProps) {
