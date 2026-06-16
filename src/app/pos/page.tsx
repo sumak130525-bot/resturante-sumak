@@ -1751,6 +1751,19 @@ function ConfirmModal({
     return Math.abs(ca + ta - total) < 1
   })()
 
+  // Cash denomination helper state
+  const [selectedBill, setSelectedBill] = useState<number | null>(null)
+
+  const handlePaymentChange = (pm: PaymentMethod) => {
+    setSelectedBill(null)
+    onPaymentChange(pm)
+  }
+
+  const BILLS = [1000, 2000, 10000, 20000]
+
+  const formatBillARS = (n: number) =>
+    new Intl.NumberFormat('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(n)
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
@@ -1788,7 +1801,7 @@ function ConfirmModal({
               {(['Efectivo', 'Transferencia', 'Mixto'] as PaymentMethod[]).map((pm) => (
                 <button
                   key={pm}
-                  onClick={() => onPaymentChange(pm)}
+                  onClick={() => handlePaymentChange(pm)}
                   className={`py-2.5 rounded-xl font-bold text-sm transition-all active:scale-95 ${
                     paymentMethod === pm
                       ? 'bg-teal-600 text-white shadow-sm'
@@ -1799,6 +1812,44 @@ function ConfirmModal({
                 </button>
               ))}
             </div>
+
+            {/* Cash denomination helper */}
+            {paymentMethod === 'Efectivo' && (
+              <div className="mt-3">
+                <p className="text-xs font-bold text-gray-400 mb-2">Billete recibido</p>
+                <div className="flex gap-2">
+                  {BILLS.map((bill) => (
+                    <button
+                      key={bill}
+                      onClick={() => setSelectedBill(selectedBill === bill ? null : bill)}
+                      className={`flex-1 py-2 rounded-xl font-bold text-sm transition-all active:scale-95 border ${
+                        selectedBill === bill
+                          ? 'bg-teal-600 text-white border-teal-600 shadow-sm'
+                          : 'bg-gray-50 text-gray-700 border-gray-200 hover:border-teal-400 hover:bg-teal-50'
+                      }`}
+                    >
+                      {formatBillARS(bill)}
+                    </button>
+                  ))}
+                </div>
+                {selectedBill !== null && (
+                  <div className={`mt-2 px-3 py-2 rounded-xl text-sm font-black text-center ${
+                    selectedBill < total
+                      ? 'bg-red-50 text-red-600 border border-red-200'
+                      : selectedBill === total
+                        ? 'bg-blue-50 text-blue-700 border border-blue-200'
+                        : 'bg-green-50 text-green-700 border border-green-200'
+                  }`}>
+                    {selectedBill < total
+                      ? 'No alcanza'
+                      : selectedBill === total
+                        ? 'Pago exacto'
+                        : `Vuelto: $${formatBillARS(selectedBill - total)}`
+                    }
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Mixed payment fields */}
             {paymentMethod === 'Mixto' && (
