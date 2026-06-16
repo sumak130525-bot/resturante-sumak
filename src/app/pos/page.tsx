@@ -396,6 +396,10 @@ function formatARS(price: number): string {
   }).format(price)
 }
 
+function formatBillARS(n: number): string {
+  return new Intl.NumberFormat('es-AR').format(n)
+}
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type TicketItem = {
@@ -1761,9 +1765,6 @@ function ConfirmModal({
 
   const BILLS = [1000, 2000, 10000, 20000]
 
-  const formatBillARS = (n: number) =>
-    new Intl.NumberFormat('es-AR', { minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(n)
-
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
@@ -2815,6 +2816,8 @@ function TicketPanel({
   onRequestBill,
   sendingKitchen,
   activeOpenOrder,
+  selectedBill,
+  onBillSelect,
 }: {
   items: TicketItem[]
   diningOption: DiningOption
@@ -2851,6 +2854,8 @@ function TicketPanel({
   onRequestBill?: () => void
   sendingKitchen?: boolean
   activeOpenOrder?: { id: string; table_number: number; existingItems: TicketItem[] } | null
+  selectedBill?: number | null
+  onBillSelect?: (bill: number) => void
 }) {
   const total = items.reduce((s, i) => {
     if (i.is_bonus) return s
@@ -2951,6 +2956,43 @@ function TicketPanel({
               </button>
             ))}
           </div>
+
+          {/* Cash denomination helper - calculadora de vuelto */}
+          {paymentMethod === 'Efectivo' && (canCharge ?? true) && (
+            <div className="mt-2">
+              <div className="flex gap-1.5">
+                {[1000, 2000, 10000, 20000].map((bill) => (
+                  <button
+                    key={bill}
+                    onClick={() => onBillSelect?.(bill)}
+                    className={`flex-1 py-1.5 rounded-lg font-bold text-[10px] transition-all active:scale-95 border ${
+                      selectedBill === bill
+                        ? 'bg-teal-600 text-white border-teal-600'
+                        : 'bg-gray-50 text-gray-600 border-gray-200'
+                    }`}
+                  >
+                    {formatBillARS(bill)}
+                  </button>
+                ))}
+              </div>
+              {selectedBill != null && (
+                <div className={`mt-1.5 px-2 py-1.5 rounded-lg text-xs font-black text-center ${
+                  selectedBill < total
+                    ? 'bg-red-50 text-red-600'
+                    : selectedBill === total
+                      ? 'bg-blue-50 text-blue-700'
+                      : 'bg-green-50 text-green-700'
+                }`}>
+                  {selectedBill < total
+                    ? '❌ No alcanza'
+                    : selectedBill === total
+                      ? '✅ Pago exacto'
+                      : `💰 Vuelto: $${formatBillARS(selectedBill - total)}`
+                  }
+                </div>
+              )}
+            </div>
+          )}
         </div>
 
         {/* Personas */}
@@ -3701,6 +3743,7 @@ export default function POSPage() {
   }, [])
   // Estado de envío/cobro de mesa abierta
   const [sendingKitchen, setSendingKitchen] = useState(false)
+  const [selectedBill, setSelectedBill] = useState<number | null>(null)
   const [closingTable, setClosingTable] = useState(false)
 
   // Force locale to 'es' when languages are disabled
@@ -5073,6 +5116,8 @@ export default function POSPage() {
               onRequestBill={() => void handleRequestBill()}
               sendingKitchen={sendingKitchen}
               activeOpenOrder={activeOpenOrder}
+              selectedBill={selectedBill}
+              onBillSelect={(bill) => setSelectedBill(selectedBill === bill ? null : bill)}
             />
           )}
         </aside>
