@@ -12,9 +12,20 @@ function getAdminClient() {
 
 // GET /api/pos/orders/open-tables
 // Retorna todas las mesas actualmente abiertas (is_open = true, channel = 'pos')
+// Auto-cierra mesas con más de 24h sin actividad
 export async function GET() {
   try {
     const supabase = getAdminClient()
+
+    // Auto-close tables open for more than 24 hours
+    const staleThreshold = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
+    await supabase
+      .from('orders')
+      .update({ is_open: false, closed_at: new Date().toISOString(), status: 'cancelled' })
+      .eq('is_open', true)
+      .eq('channel', 'pos')
+      .lt('created_at', staleThreshold)
+      .then(() => {}, () => {}) // non-fatal
 
     const { data: orders, error } = await supabase
       .from('orders')

@@ -38,6 +38,7 @@ export async function POST(request: NextRequest) {
       persons,
       is_open,
       employee_id,
+      employee_name,
     } = body
 
     if (!items || !Array.isArray(items) || items.length === 0) {
@@ -82,6 +83,7 @@ export async function POST(request: NextRequest) {
         "ALTER TABLE orders ADD COLUMN IF NOT EXISTS opened_by_employee_id uuid;",
         "ALTER TABLE orders ADD COLUMN IF NOT EXISTS closed_by_employee_id uuid;",
         "ALTER TABLE orders ADD COLUMN IF NOT EXISTS pre_bill_printed_at timestamptz;",
+        "ALTER TABLE orders ADD COLUMN IF NOT EXISTS employee_name text;",
       ].join(' ')
     }).then(() => {}, () => {})
 
@@ -121,6 +123,9 @@ export async function POST(request: NextRequest) {
     if (is_open) {
       orderInsert.is_open = true
       orderInsert.opened_by_employee_id = employee_id ?? null
+    }
+    if (employee_name) {
+      orderInsert.employee_name = employee_name
     }
     const { data: order, error: orderError } = await supabase
       .from('orders')

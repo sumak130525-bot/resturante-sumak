@@ -306,6 +306,7 @@ type KdsOrder = {
   created_at: string
   channel?: 'web' | 'whatsapp' | 'pos'
   customer_phone?: string | null
+  employee_name?: string | null
   orderNumber?: string
   diningOption?: string
   paymentMethod?: string
@@ -476,6 +477,11 @@ function OrderCard({
           {(order.source === 'WEB' || order.source === 'POS') && order.customer && order.customer !== 'POS' && (
             <span className="text-sm font-bold px-2 py-0.5 rounded-full bg-white/40 text-white">
               👤 {order.customer}
+            </span>
+          )}
+          {order.employee_name && (
+            <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-white/30 text-white">
+              🧑‍🍳 {order.employee_name}
             </span>
           )}
         </div>

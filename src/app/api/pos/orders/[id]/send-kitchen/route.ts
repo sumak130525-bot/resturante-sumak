@@ -19,9 +19,14 @@ export async function POST(
   try {
     const { id } = await params
     const body = await request.json().catch(() => ({}))
-    const { employee_id } = body as { employee_id?: string }
+    const { employee_id, employee_name } = body as { employee_id?: string; employee_name?: string }
 
     const supabase = getAdminClient()
+
+    // Ensure employee_name column exists (idempotent)
+    await supabase.rpc('exec_sql', {
+      query: "ALTER TABLE orders ADD COLUMN IF NOT EXISTS employee_name text;"
+    }).then(() => {}, () => {})
 
     // Verificar que la orden existe y está abierta
     const { data: order, error: orderErr } = await supabase
@@ -100,6 +105,15 @@ export async function POST(
     })
 
     void employee_id
+
+    // Store employee_name on the order (who sent to kitchen)
+    if (employee_name) {
+      await supabase
+        .from('orders')
+        .update({ employee_name })
+        .eq('id', id)
+        .then(() => {}, () => {}) // non-fatal
+    }
 
     return NextResponse.json({
       success: true,

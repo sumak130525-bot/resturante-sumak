@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { cn } from '@/lib/utils'
-import { UtensilsCrossed, Clock, ChefHat, X } from 'lucide-react'
+import { UtensilsCrossed, Clock, ChefHat, X, DollarSign, Trash2 } from 'lucide-react'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -19,7 +19,9 @@ export type OpenTable = {
 type OpenTablesPanelProps = {
   onSelectTable: (table: OpenTable) => void
   onClose: () => void
-  refreshTrigger?: number  // incrementar para forzar refresh
+  onCloseTable?: (orderId: string, tableNumber: number) => void
+  onCancelTable?: (orderId: string, tableNumber: number) => void
+  refreshTrigger?: number
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -39,7 +41,7 @@ function formatARS(n: number) {
 
 // ─── Componente ───────────────────────────────────────────────────────────────
 
-export default function OpenTablesPanel({ onSelectTable, onClose, refreshTrigger }: OpenTablesPanelProps) {
+export default function OpenTablesPanel({ onSelectTable, onClose, onCloseTable, onCancelTable, refreshTrigger }: OpenTablesPanelProps) {
   const [tables, setTables] = useState<OpenTable[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -104,45 +106,79 @@ export default function OpenTablesPanel({ onSelectTable, onClose, refreshTrigger
           )}
 
           {tables.map((table) => (
-            <button
+            <div
               key={table.order_id}
-              onClick={() => { onSelectTable(table); onClose() }}
               className={cn(
-                'w-full text-left rounded-xl p-3 transition-all',
-                'bg-gray-800 hover:bg-gray-700 border border-gray-700 hover:border-amber-500',
+                'w-full text-left rounded-xl overflow-hidden',
+                'bg-gray-800 border border-gray-700',
               )}
             >
-              <div className="flex items-center justify-between mb-2">
-                <div className="flex items-center gap-2">
-                  <span className="text-amber-400 font-bold text-lg">Mesa {table.table_number}</span>
-                  <span className="bg-amber-500/20 text-amber-400 text-xs font-bold px-2 py-0.5 rounded-full border border-amber-500/40">
-                    ABIERTA
-                  </span>
+              {/* Main card row — click to load */}
+              <button
+                onClick={() => { onSelectTable(table); onClose() }}
+                className="w-full text-left px-3 pt-3 pb-2 hover:bg-gray-700 transition-all"
+              >
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-amber-400 font-bold text-lg">Mesa {table.table_number}</span>
+                    <span className="bg-amber-500/20 text-amber-400 text-xs font-bold px-2 py-0.5 rounded-full border border-amber-500/40">
+                      ABIERTA
+                    </span>
+                  </div>
+                  <span className="text-white font-semibold">{formatARS(table.total)}</span>
                 </div>
-                <span className="text-white font-semibold">{formatARS(table.total)}</span>
-              </div>
 
-              <div className="flex items-center gap-4 text-xs text-gray-400">
-                <span className="flex items-center gap-1">
-                  <Clock size={12} />
-                  {formatElapsed(table.opened_at)}
-                </span>
-                <span className="flex items-center gap-1">
-                  <UtensilsCrossed size={12} />
-                  {table.item_count} items
-                </span>
-                {table.items_pending_kitchen > 0 && (
-                  <span className="flex items-center gap-1 text-orange-400 font-semibold">
-                    <ChefHat size={12} />
-                    {table.items_pending_kitchen} sin enviar
+                <div className="flex items-center gap-4 text-xs text-gray-400">
+                  <span className="flex items-center gap-1">
+                    <Clock size={12} />
+                    {formatElapsed(table.opened_at)}
                   </span>
-                )}
-              </div>
+                  <span className="flex items-center gap-1">
+                    <UtensilsCrossed size={12} />
+                    {table.item_count} items
+                  </span>
+                  {table.items_pending_kitchen > 0 && (
+                    <span className="flex items-center gap-1 text-orange-400 font-semibold">
+                      <ChefHat size={12} />
+                      {table.items_pending_kitchen} sin enviar
+                    </span>
+                  )}
+                </div>
 
-              {table.notes && (
-                <p className="mt-1.5 text-xs text-gray-500 truncate">{table.notes}</p>
+                {table.notes && (
+                  <p className="mt-1.5 text-xs text-gray-500 truncate">{table.notes}</p>
+                )}
+              </button>
+
+              {/* Action buttons */}
+              {(onCloseTable || onCancelTable) && (
+                <div className="flex border-t border-gray-700">
+                  {onCloseTable && (
+                    <button
+                      onClick={(e) => { e.stopPropagation(); onCloseTable(table.order_id, table.table_number); onClose() }}
+                      className="flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-bold text-green-400 hover:bg-green-900/40 transition-colors"
+                      title="Cobrar mesa"
+                    >
+                      <DollarSign size={13} />
+                      Cobrar
+                    </button>
+                  )}
+                  {onCloseTable && onCancelTable && (
+                    <div className="w-px bg-gray-700" />
+                  )}
+                  {onCancelTable && (
+                    <button
+                      onClick={(e) => { e.stopPropagation(); onCancelTable(table.order_id, table.table_number); onClose() }}
+                      className="flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-bold text-red-400 hover:bg-red-900/40 transition-colors"
+                      title="Cancelar mesa"
+                    >
+                      <Trash2 size={13} />
+                      Cancelar
+                    </button>
+                  )}
+                </div>
               )}
-            </button>
+            </div>
           ))}
         </div>
       </div>

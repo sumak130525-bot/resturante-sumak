@@ -30,6 +30,7 @@ export type KdsOrder = {
   created_at: string
   channel?: 'web' | 'whatsapp' | 'pos'
   customer_phone?: string | null
+  employee_name?: string | null
   // Campos extra Loyverse (LOCAL)
   orderNumber?: string      // campo 'order' del receipt (ej: 'MESA 8')
   diningOption?: string     // campo 'dining_option' (ej: 'Comer dentro')
@@ -80,6 +81,7 @@ async function getWebOrders(): Promise<KdsOrder[]> {
       status: o.status,
       channel: (o.channel === 'whatsapp' ? 'whatsapp' : o.channel === 'pos' ? 'pos' : 'web') as 'web' | 'whatsapp' | 'pos',
       customer_phone: o.customer_phone ?? null,
+      employee_name: o.employee_name ?? null,
       tableNumber: o.table_number ?? o.mesa ?? (isPOS && o.notes ? (o.notes.match(/Mesa (\d+)/)?.[1] ?? null) : null),
       diningOption: o.dining_option ?? undefined,
       paymentMethod: o.payment_method ?? undefined,
@@ -359,6 +361,7 @@ async function getDeliveredOrdersToday(): Promise<KdsOrder[]> {
       status: o.status,
       channel: (o.channel === 'whatsapp' ? 'whatsapp' : o.channel === 'pos' ? 'pos' : 'web') as 'web' | 'whatsapp' | 'pos',
       customer_phone: o.customer_phone ?? null,
+      employee_name: o.employee_name ?? null,
       tableNumber: o.table_number ?? o.mesa ?? (isPOS && o.notes ? (o.notes.match(/Mesa (\d+)/)?.[1] ?? null) : null),
       diningOption: o.dining_option ?? undefined,
       paymentMethod: o.payment_method ?? undefined,

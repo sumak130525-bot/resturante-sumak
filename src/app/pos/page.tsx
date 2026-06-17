@@ -1961,6 +1961,7 @@ type SentOrder = {
   status?: string | null
   table_number?: number | null
   notes?: string | null
+  employee_name?: string | null
   order_items?: Array<{
     id: string
     menu_item_id: string
@@ -4331,17 +4332,16 @@ export default function POSPage() {
     if (ticketItems.length === 0) return
     setSendingKitchen(true)
 
-    let targetOrderId = activeOpenOrder?.id ?? null
-    let targetTableNumber = activeOpenOrder?.table_number ?? (tableNumber ? parseInt(tableNumber, 10) : null)
+    try {
+      let targetOrderId = activeOpenOrder?.id ?? null
+      let targetTableNumber = activeOpenOrder?.table_number ?? (tableNumber ? parseInt(tableNumber, 10) : null)
 
-    // Si no hay mesa activa, crear nueva orden abierta
-    if (!targetOrderId) {
-      if (!tableNumber) {
-        setToast('Indica número de mesa antes de enviar a cocina')
-        setSendingKitchen(false)
-        return
-      }
-      try {
+      // Si no hay mesa activa, crear nueva orden abierta
+      if (!targetOrderId) {
+        if (!tableNumber) {
+          setToast('Indica número de mesa antes de enviar a cocina')
+          return
+        }
         const newItemsPayload = ticketItems.map((item) => ({
           menu_item_id: item.menu_item_id,
           price: item.is_bonus ? 0 : item.price,
@@ -4365,6 +4365,7 @@ export default function POSPage() {
             persons,
             is_open: true,
             employee_id: session?.employee.id,
+            employee_name: session?.employee.name,
           }),
         })
         if (!createRes.ok) {
@@ -4382,43 +4383,36 @@ export default function POSPage() {
         }
 
         setActiveOpenOrder({ id: targetOrderId, table_number: targetTableNumber!, existingItems: [] })
-      } catch {
-        setToast('Error al crear mesa')
-        setSendingKitchen(false)
-        return
-      }
-    } else {
-      // Mesa ya existe: agregar items
-      const newItemsPayload = ticketItems.map((item) => ({
-        menu_item_id: item.menu_item_id,
-        quantity: item.quantity,
-        unit_price: item.is_bonus ? 0 : item.price,
-        line_note: item.customNote ?? buildLineNote(item.modifiers ?? []),
-        person_number: item.person_number ?? null,
-        is_bonus: item.is_bonus ?? false,
-        bonus_reason: item.bonus_reason ?? null,
-        original_price: item.original_price ?? null,
-      }))
+      } else {
+        // Mesa ya existe: agregar items
+        const newItemsPayload = ticketItems.map((item) => ({
+          menu_item_id: item.menu_item_id,
+          quantity: item.quantity,
+          unit_price: item.is_bonus ? 0 : item.price,
+          line_note: item.customNote ?? buildLineNote(item.modifiers ?? []),
+          person_number: item.person_number ?? null,
+          is_bonus: item.is_bonus ?? false,
+          bonus_reason: item.bonus_reason ?? null,
+          original_price: item.original_price ?? null,
+        }))
 
-      const addRes = await fetch(`/api/pos/orders/${targetOrderId}/items`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ items: newItemsPayload, employee_id: session?.employee.id }),
-      })
-      if (!addRes.ok) {
-        const err = await addRes.json()
-        setToast(err.error ?? 'Error al agregar items')
-        setSendingKitchen(false)
-        return
+        const addRes = await fetch(`/api/pos/orders/${targetOrderId}/items`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ items: newItemsPayload, employee_id: session?.employee.id }),
+        })
+        if (!addRes.ok) {
+          const err = await addRes.json()
+          setToast(err.error ?? 'Error al agregar items')
+          return
+        }
       }
-    }
 
-    try {
       // Marcar items como enviados y obtener datos para comanda
       const sendRes = await fetch(`/api/pos/orders/${targetOrderId}/send-kitchen`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ employee_id: session?.employee.id }),
+        body: JSON.stringify({ employee_id: session?.employee.id, employee_name: session?.employee.name }),
       })
       if (!sendRes.ok) {
         const err = await sendRes.json()
@@ -4527,6 +4521,76 @@ export default function POSPage() {
     setTicketOpen(false)
   }, [])
 
+  // ─── Cobrar mesa abierta (desde panel lateral) ───────────────────────────────
+  const handleCloseOpenTable = useCallback(async (orderId: string, tableNumber: number) => {
+    // Preguntar método de pago con un prompt nativo (simple, rápido)
+    const pm = window.prompt(
+      `Mesa ${tableNumber} — método de pago:\n1 = Efectivo\n2 = Transferencia\n3 = Mixto`,
+      '1'
+    )
+    if (!pm) return
+    const pmMap: Record<string, string> = { '1': 'efectivo', '2': 'transferencia', '3': 'mixto' }
+    const paymentMethod = pmMap[pm.trim()] ?? 'efectivo'
+
+    try {
+      const res = await fetch(`/api/pos/orders/${orderId}/close`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ payment_method: paymentMethod, employee_id: session?.employee.id }),
+      })
+      if (!res.ok) {
+        const err = await res.json()
+        setToast(err.error ?? 'Error al cobrar mesa')
+        return
+      }
+      // Si era la mesa activa, limpiar
+      if (activeOpenOrder?.id === orderId) {
+        setActiveOpenOrder(null)
+        setTicketItems([])
+        setTableNumber('')
+        setTicketOpen(false)
+      }
+      setOpenTablesRefresh((n) => n + 1)
+      setToast(`Mesa ${tableNumber} cobrada`)
+    } catch {
+      setToast('Error al cobrar mesa')
+    }
+  }, [session, activeOpenOrder])
+
+  // ─── Cancelar mesa abierta (desde panel lateral) ─────────────────────────────
+  const handleCancelOpenTable = useCallback(async (orderId: string, tableNumber: number) => {
+    if (!window.confirm(`¿Cancelar mesa ${tableNumber}? Se perderán todos los items.`)) return
+
+    try {
+      const res = await fetch(`/api/pos/orders/${orderId}/cancel`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+      })
+      if (!res.ok) {
+        const err = await res.json()
+        setToast(err.error ?? 'Error al cancelar mesa')
+        return
+      }
+      // Además cerrar la mesa (is_open=false) para que no aparezca en el panel
+      await fetch(`/api/pos/orders/${orderId}/close`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ payment_method: 'efectivo', employee_id: session?.employee.id }),
+      }).catch(() => {})
+      // Si era la mesa activa, limpiar
+      if (activeOpenOrder?.id === orderId) {
+        setActiveOpenOrder(null)
+        setTicketItems([])
+        setTableNumber('')
+        setTicketOpen(false)
+      }
+      setOpenTablesRefresh((n) => n + 1)
+      setToast(`Mesa ${tableNumber} cancelada`)
+    } catch {
+      setToast('Error al cancelar mesa')
+    }
+  }, [session, activeOpenOrder])
+
   const handleSubmit = useCallback(async () => {
     if (ticketItems.length === 0) return
     setSubmitting(true)
@@ -4583,6 +4647,8 @@ export default function POSPage() {
           customer_name: customerName || 'POS',
           notes: finalNotes,
           persons: persons > 1 ? persons : 1,
+          employee_id: session?.employee.id,
+          employee_name: session?.employee.name,
         }),
       })
       const data = await res.json()
@@ -5243,6 +5309,9 @@ export default function POSPage() {
                                 {isDelivered ? `✓ ${timeStr}` : `⏱ ${timeStr}`}
                               </span>
                             )}
+                            {order.employee_name && (
+                              <span className="text-xs text-gray-400 truncate">· {order.employee_name}</span>
+                            )}
                           </div>
                         </div>
                         {!isCancelled && (
@@ -5421,6 +5490,8 @@ export default function POSPage() {
           onSelectTable={handleLoadOpenTable}
           onClose={() => setShowOpenTables(false)}
           refreshTrigger={openTablesRefresh}
+          onCloseTable={permissions.canCharge ? handleCloseOpenTable : undefined}
+          onCancelTable={permissions.canCharge ? handleCancelOpenTable : undefined}
         />
       )}
 
