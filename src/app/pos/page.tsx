@@ -4382,7 +4382,7 @@ export default function POSPage() {
           return
         }
         const createData = await createRes.json()
-        targetOrderId = createData.order?.id ?? null
+        targetOrderId = createData.order_id ?? createData.order?.id ?? null
         targetTableNumber = parseInt(tableNumber, 10)
 
         if (!targetOrderId) {
