@@ -50,7 +50,7 @@ export async function PATCH(
     // ── 2. Mark order as cancelled ────────────────────────────────────────────
     const { error: updateErr } = await supabase
       .from('orders')
-      .update({ status: 'cancelled' })
+      .update({ status: 'cancelled', is_open: false, closed_at: new Date().toISOString() })
       .eq('id', id)
 
     if (updateErr) {

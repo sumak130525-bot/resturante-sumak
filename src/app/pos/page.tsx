@@ -3746,6 +3746,14 @@ export default function POSPage() {
   const [sendingKitchen, setSendingKitchen] = useState(false)
   const [selectedBill, setSelectedBill] = useState<number | null>(null)
   const [closingTable, setClosingTable] = useState(false)
+  // Modal de pre-cuenta
+  const [preBillModal, setPreBillModal] = useState<{
+    table: number
+    total: number
+    items: { name: string; quantity: number; unit_price: number; is_bonus: boolean }[]
+    tipEnabled: boolean
+    tipPercentages: number[]
+  } | null>(null)
 
   // Force locale to 'es' when languages are disabled
   useEffect(() => {
@@ -4496,9 +4504,14 @@ export default function POSPage() {
           return
         }
       }
-      // Fallback: mostrar total en toast
-      void total
-      setToast(`Pre-cuenta mesa ${activeOpenOrder.table_number}: $${total}`)
+      // Fallback: mostrar modal con precuenta
+      setPreBillModal({
+        table: activeOpenOrder.table_number,
+        total,
+        items: preBillItems,
+        tipEnabled: data.tip_enabled ?? false,
+        tipPercentages: data.tip_percentages ?? [],
+      })
     } catch {
       setToast('Error al imprimir pre-cuenta')
     }
@@ -4522,40 +4535,11 @@ export default function POSPage() {
   }, [])
 
   // ─── Cobrar mesa abierta (desde panel lateral) ───────────────────────────────
-  const handleCloseOpenTable = useCallback(async (orderId: string, tableNumber: number) => {
-    // Preguntar método de pago con un prompt nativo (simple, rápido)
-    const pm = window.prompt(
-      `Mesa ${tableNumber} — método de pago:\n1 = Efectivo\n2 = Transferencia\n3 = Mixto`,
-      '1'
-    )
-    if (!pm) return
-    const pmMap: Record<string, string> = { '1': 'efectivo', '2': 'transferencia', '3': 'mixto' }
-    const paymentMethod = pmMap[pm.trim()] ?? 'efectivo'
-
-    try {
-      const res = await fetch(`/api/pos/orders/${orderId}/close`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ payment_method: paymentMethod, employee_id: session?.employee.id }),
-      })
-      if (!res.ok) {
-        const err = await res.json()
-        setToast(err.error ?? 'Error al cobrar mesa')
-        return
-      }
-      // Si era la mesa activa, limpiar
-      if (activeOpenOrder?.id === orderId) {
-        setActiveOpenOrder(null)
-        setTicketItems([])
-        setTableNumber('')
-        setTicketOpen(false)
-      }
-      setOpenTablesRefresh((n) => n + 1)
-      setToast(`Mesa ${tableNumber} cobrada`)
-    } catch {
-      setToast('Error al cobrar mesa')
-    }
-  }, [session, activeOpenOrder])
+  // Carga los items de la mesa en el TicketPanel para que el cajero cobre normalmente
+  const handleCloseOpenTable = useCallback((table: OpenTable) => {
+    setShowOpenTables(false)
+    void handleLoadOpenTable(table)
+  }, [handleLoadOpenTable])
 
   // ─── Cancelar mesa abierta (desde panel lateral) ─────────────────────────────
   const handleCancelOpenTable = useCallback(async (orderId: string, tableNumber: number) => {
@@ -4571,13 +4555,7 @@ export default function POSPage() {
         setToast(err.error ?? 'Error al cancelar mesa')
         return
       }
-      // Además cerrar la mesa (is_open=false) para que no aparezca en el panel
-      await fetch(`/api/pos/orders/${orderId}/close`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ payment_method: 'efectivo', employee_id: session?.employee.id }),
-      }).catch(() => {})
-      // Si era la mesa activa, limpiar
+      // Cancel ya setea is_open=false, solo limpiar si era la mesa activa
       if (activeOpenOrder?.id === orderId) {
         setActiveOpenOrder(null)
         setTicketItems([])
@@ -4589,12 +4567,106 @@ export default function POSPage() {
     } catch {
       setToast('Error al cancelar mesa')
     }
-  }, [session, activeOpenOrder])
+  }, [activeOpenOrder])
 
   const handleSubmit = useCallback(async () => {
     if (ticketItems.length === 0) return
     setSubmitting(true)
     try {
+      // ── COBRAR MESA ABIERTA: cerrar la orden existente ────────────────────────
+      if (activeOpenOrder) {
+        const pmValue =
+          paymentMethod === 'Mixto' ? 'mixto'
+          : paymentMethod === 'Transferencia' ? 'transferencia'
+          : 'efectivo'
+        const totalVal = ticketItems.reduce((s, i) => {
+          if (i.is_bonus) return s
+          const modExtra = (i.modifiers ?? []).reduce((ms: number, m: { price: number }) => ms + m.price, 0)
+          return s + (i.price + modExtra) * i.quantity
+        }, 0)
+        const cashVal = paymentMethod === 'Mixto'
+          ? parseFloat(cashAmount.replace(',', '.') || '0')
+          : paymentMethod === 'Efectivo' ? totalVal : undefined
+        const transferVal = paymentMethod === 'Mixto'
+          ? parseFloat(transferAmount.replace(',', '.') || '0')
+          : paymentMethod === 'Transferencia' ? totalVal : undefined
+
+        const closeRes = await fetch(`/api/pos/orders/${activeOpenOrder.id}/close`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            payment_method: pmValue,
+            cash_amount: cashVal,
+            transfer_amount: transferVal,
+            employee_id: session?.employee.id,
+          }),
+        })
+        if (!closeRes.ok) {
+          const err = await closeRes.json()
+          throw new Error(err.error ?? 'Error al cobrar mesa')
+        }
+        const closeData = await closeRes.json()
+        const orderTotal = (closeData.order?.total ?? totalVal) as number
+
+        // Construir snapshot para imprimir (items actuales en ticket)
+        const now = new Date()
+        const dateStr = now.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: '2-digit' })
+        const timeStr = now.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false })
+        const orderNumber = Date.now() % 1000
+        const allItemsForPrint = [
+          ...activeOpenOrder.existingItems,
+          ...ticketItems,
+        ]
+        const snapshot: PrintData = {
+          orderNumber,
+          dateStr,
+          timeStr,
+          items: allItemsForPrint,
+          total: orderTotal,
+          diningOption,
+          tableNumber,
+          paymentMethod,
+          cashAmount: cashVal,
+          transferAmount: transferVal,
+          customerName: '',
+        }
+
+        // Limpiar estado antes de imprimir
+        const closedTableNumber = activeOpenOrder.table_number
+        setActiveOpenOrder(null)
+        setTicketItems([])
+        setTableNumber('')
+        setCustomerName('')
+        setOrderNotes('')
+        setCashAmount('')
+        setTransferAmount('')
+        setTicketOpen(false)
+        setPersons(1)
+        setActivePerson(1)
+        setOpenTablesRefresh((n) => n + 1)
+        setToast(`Mesa ${closedTableNumber} cobrada`)
+
+        // Imprimir ticket
+        const { cfg: freshCfg, logoUrl: freshLogoUrl } = await fetchFreshPrintConfig()
+        const ticketText = buildTicketText(snapshot, freshCfg, !!printServerUrl)
+        let printed = false
+        if (printServerUrl) {
+          printed = await tryPrintServer(ticketText, printServerUrl, freshCfg, freshLogoUrl)
+          if (printed) {
+            if (paymentMethod === 'Efectivo' || paymentMethod === 'Mixto') {
+              void tryOpenDrawer(printServerUrl)
+            }
+            setToast(`Mesa ${closedTableNumber} cobrada · Ticket impreso`)
+          }
+        }
+        if (!printed) {
+          const fallbackText = buildTicketText(snapshot, freshCfg, false)
+          triggerPrintFallback(fallbackText, freshLogoUrl, freshCfg)
+        }
+        return
+      }
+
+      // ── COBRAR PEDIDO NORMAL (sin mesa abierta) ───────────────────────────────
       const total = ticketItems.reduce((s, i) => {
         if (i.is_bonus) return s
         const modExtra = (i.modifiers ?? []).reduce((ms, m) => ms + m.price, 0)
@@ -4717,7 +4789,7 @@ export default function POSPage() {
     } finally {
       setSubmitting(false)
     }
-  }, [ticketItems, diningOption, tableNumber, paymentMethod, cashAmount, transferAmount, customerName, orderNotes, persons, fetchFreshPrintConfig, printServerUrl])
+  }, [activeOpenOrder, session, ticketItems, diningOption, tableNumber, paymentMethod, cashAmount, transferAmount, customerName, orderNotes, persons, fetchFreshPrintConfig, printServerUrl])
 
   // Direct submit: goes straight if no modal needed; opens mixed modal for Mixto
   const handleDirectSubmit = useCallback(() => {
@@ -5493,6 +5565,50 @@ export default function POSPage() {
           onCloseTable={permissions.canCharge ? handleCloseOpenTable : undefined}
           onCancelTable={permissions.canCharge ? handleCancelOpenTable : undefined}
         />
+      )}
+
+      {/* ── Modal Pre-cuenta ── */}
+      {preBillModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm mx-4 overflow-hidden">
+            <div className="bg-amber-500 px-4 py-3 flex items-center justify-between">
+              <span className="text-white font-bold text-lg">Pre-cuenta Mesa {preBillModal.table}</span>
+              <button onClick={() => setPreBillModal(null)} className="text-white/80 hover:text-white text-xl font-bold leading-none">✕</button>
+            </div>
+            <div className="px-4 py-3 space-y-1 max-h-64 overflow-y-auto">
+              {preBillModal.items.filter(i => !i.is_bonus).map((item, idx) => (
+                <div key={idx} className="flex justify-between text-sm text-gray-700">
+                  <span>{item.quantity}× {item.name}</span>
+                  <span>${new Intl.NumberFormat('es-AR', { minimumFractionDigits: 0 }).format(item.unit_price * item.quantity)}</span>
+                </div>
+              ))}
+            </div>
+            <div className="border-t border-gray-200 px-4 py-3">
+              <div className="flex justify-between font-bold text-gray-900 text-base">
+                <span>TOTAL</span>
+                <span>${new Intl.NumberFormat('es-AR', { minimumFractionDigits: 0 }).format(preBillModal.total)}</span>
+              </div>
+              {preBillModal.tipEnabled && preBillModal.tipPercentages.length > 0 && (
+                <div className="mt-2 space-y-0.5">
+                  {preBillModal.tipPercentages.map(pct => (
+                    <div key={pct} className="flex justify-between text-xs text-gray-500">
+                      <span>Propina {pct}%</span>
+                      <span>${new Intl.NumberFormat('es-AR', { minimumFractionDigits: 0 }).format(Math.round(preBillModal.total * pct / 100))}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div className="px-4 pb-4">
+              <button
+                onClick={() => setPreBillModal(null)}
+                className="w-full bg-amber-500 hover:bg-amber-600 text-white font-bold py-2 rounded-xl transition-colors"
+              >
+                Cerrar
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* ── Banner de mesa abierta activa ── */}

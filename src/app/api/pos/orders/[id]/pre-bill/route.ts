@@ -39,6 +39,7 @@ export async function GET(
           line_note,
           person_number,
           is_bonus,
+          sent_to_kitchen_at,
           menu_items(name, subcategory)
         )
       `)

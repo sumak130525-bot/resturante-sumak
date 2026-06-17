@@ -23,11 +23,6 @@ export async function POST(
 
     const supabase = getAdminClient()
 
-    // Ensure employee_name column exists (idempotent)
-    await supabase.rpc('exec_sql', {
-      query: "ALTER TABLE orders ADD COLUMN IF NOT EXISTS employee_name text;"
-    }).then(() => {}, () => {})
-
     // Verificar que la orden existe y está abierta
     const { data: order, error: orderErr } = await supabase
       .from('orders')
@@ -106,7 +101,7 @@ export async function POST(
 
     void employee_id
 
-    // Store employee_name on the order (who sent to kitchen)
+    // Guardar employee_name en la orden (quién envió a cocina)
     if (employee_name) {
       await supabase
         .from('orders')

@@ -19,7 +19,7 @@ export type OpenTable = {
 type OpenTablesPanelProps = {
   onSelectTable: (table: OpenTable) => void
   onClose: () => void
-  onCloseTable?: (orderId: string, tableNumber: number) => void
+  onCloseTable?: (table: OpenTable) => void
   onCancelTable?: (orderId: string, tableNumber: number) => void
   refreshTrigger?: number
 }
@@ -155,7 +155,7 @@ export default function OpenTablesPanel({ onSelectTable, onClose, onCloseTable, 
                 <div className="flex border-t border-gray-700">
                   {onCloseTable && (
                     <button
-                      onClick={(e) => { e.stopPropagation(); onCloseTable(table.order_id, table.table_number); onClose() }}
+                      onClick={(e) => { e.stopPropagation(); onCloseTable(table) }}
                       className="flex-1 flex items-center justify-center gap-1.5 py-2 text-xs font-bold text-green-400 hover:bg-green-900/40 transition-colors"
                       title="Cobrar mesa"
                     >
