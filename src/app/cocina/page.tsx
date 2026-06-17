@@ -965,6 +965,10 @@ export default function CocinaPage() {
         console.log('[cocina] Realtime INSERT detected:', (payload.new as { id?: string })?.id)
         fetchOrders(true)
       })
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'order_items' }, () => {
+        console.log('[cocina] Realtime INSERT order_items detected')
+        fetchOrders(true)
+      })
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'orders' }, (payload) => {
         // If the updated order is now delivered/cancelled, it's already handled
         // locally by handleDeliver (dismissedIdsRef + setOrders). Calling

@@ -101,14 +101,15 @@ export async function POST(
 
     void employee_id
 
-    // Guardar employee_name en la orden (quién envió a cocina)
-    if (employee_name) {
-      await supabase
-        .from('orders')
-        .update({ employee_name })
-        .eq('id', id)
-        .then(() => {}, () => {}) // non-fatal
-    }
+    // Resetear status a pending (por si la cocina ya lo marcó como delivered en una ronda anterior)
+    // y guardar employee_name
+    const orderUpdate: Record<string, unknown> = { status: 'pending' }
+    if (employee_name) orderUpdate.employee_name = employee_name
+    await supabase
+      .from('orders')
+      .update(orderUpdate)
+      .eq('id', id)
+      .then(() => {}, () => {}) // non-fatal
 
     return NextResponse.json({
       success: true,
