@@ -30,7 +30,7 @@ export async function POST(
   try {
     const { id } = await params
     const body = await request.json()
-    const { items, employee_id } = body as { items: NewItem[]; employee_id?: string }
+    const { items } = body as { items: NewItem[] }
 
     if (!items || !Array.isArray(items) || items.length === 0) {
       return NextResponse.json({ error: 'Se requiere al menos un item.' }, { status: 400 })
@@ -55,9 +55,7 @@ export async function POST(
       return NextResponse.json({ error: 'Solo se pueden agregar items a órdenes POS.' }, { status: 400 })
     }
 
-    const now = new Date().toISOString()
-
-    // Insertar nuevos items con sent_to_kitchen_at = NULL (pendientes de enviar)
+    // Insertar nuevos items (sent_to_kitchen_at queda NULL → pendientes de enviar)
     const newItems = items.map((item) => ({
       order_id: id,
       menu_item_id: item.menu_item_id,
@@ -68,8 +66,6 @@ export async function POST(
       is_bonus: item.is_bonus ?? false,
       bonus_reason: item.bonus_reason ?? null,
       original_price: item.original_price ?? null,
-      sent_to_kitchen_at: null,
-      added_at: now,
     }))
 
     const { data: insertedItems, error: insertErr } = await supabase
@@ -77,7 +73,18 @@ export async function POST(
       .insert(newItems)
       .select('id')
 
-    if (insertErr) throw new Error(`Items insert: ${insertErr.message}`)
+    if (insertErr) {
+      // Retry without optional columns if they don't exist
+      if (insertErr.message.includes('column')) {
+        const fallbackItems = newItems.map(({ line_note, person_number, is_bonus, bonus_reason, original_price, ...rest }) => rest)
+        const { error: fallbackErr } = await supabase
+          .from('order_items')
+          .insert(fallbackItems)
+        if (fallbackErr) throw new Error(`Items insert: ${fallbackErr.message}`)
+      } else {
+        throw new Error(`Items insert: ${insertErr.message}`)
+      }
+    }
 
     // Recalcular total de la orden (suma de todos los subtotales actuales)
     const { data: allItems, error: totalErr } = await supabase
@@ -91,15 +98,6 @@ export async function POST(
         .from('orders')
         .update({ total: newTotal })
         .eq('id', id)
-    }
-
-    // Actualizar empleado que modificó (opcional)
-    if (employee_id) {
-      await supabase
-        .from('orders')
-        .update({ opened_by_employee_id: employee_id })
-        .eq('id', id)
-        .is('opened_by_employee_id', null)
     }
 
     return NextResponse.json({
