@@ -49,18 +49,20 @@ export async function POST(
     const now = new Date().toISOString()
 
     // Cerrar la orden: actualizar payment_method, cerrar mesa, marcar como delivered
+    const updateData: Record<string, unknown> = {
+      is_open: false,
+      closed_at: now,
+      payment_method,
+      cash_amount: cash_amount ?? null,
+      transfer_amount: transfer_amount ?? null,
+      status: 'delivered',
+      delivered_at: now,
+    }
+    if (employee_id) updateData.closed_by_employee_id = employee_id
+
     const { data: closedOrder, error: closeErr } = await supabase
       .from('orders')
-      .update({
-        is_open: false,
-        closed_at: now,
-        closed_by_employee_id: employee_id ?? null,
-        payment_method,
-        cash_amount: cash_amount ?? null,
-        transfer_amount: transfer_amount ?? null,
-        status: 'delivered',
-        delivered_at: now,
-      })
+      .update(updateData)
       .eq('id', id)
       .select()
       .single()

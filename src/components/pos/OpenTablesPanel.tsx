@@ -59,9 +59,9 @@ export default function OpenTablesPanel({ onSelectTable, onClose, onCloseTable, 
     fetchTables()
   }, [fetchTables, refreshTrigger])
 
-  // Refresca cada 30s
+  // Refresca cada 10s (era 30s, muy lento)
   useEffect(() => {
-    const id = setInterval(fetchTables, 30_000)
+    const id = setInterval(fetchTables, 10_000)
     return () => clearInterval(id)
   }, [fetchTables])
 
