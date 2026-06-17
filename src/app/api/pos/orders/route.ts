@@ -72,7 +72,6 @@ export async function POST(request: NextRequest) {
     // Only include open table columns if migration has run
     if (is_open) {
       orderInsert.is_open = true
-      orderInsert.opened_by_employee_id = employee_id ?? null
     }
     if (employee_name) {
       orderInsert.employee_name = employee_name
