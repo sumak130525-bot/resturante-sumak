@@ -35,8 +35,8 @@ export async function GET() {
         created_at,
         total,
         notes,
-        opened_by_employee_id,
-        order_items(id, quantity, unit_price, sent_to_kitchen_at)
+        employee_name,
+        order_items(id, quantity, unit_price)
       `)
       .eq('is_open', true)
       .eq('channel', 'pos')
@@ -46,9 +46,8 @@ export async function GET() {
     if (error) throw new Error(error.message)
 
     const tables = (orders ?? []).map((o) => {
-      const allItems = (o.order_items as { id: string; quantity: number; unit_price: number; sent_to_kitchen_at: string | null }[]) ?? []
+      const allItems = (o.order_items as { id: string; quantity: number; unit_price: number }[]) ?? []
       const itemCount = allItems.reduce((sum, i) => sum + i.quantity, 0)
-      const pendingKitchen = allItems.filter((i) => !i.sent_to_kitchen_at).reduce((sum, i) => sum + i.quantity, 0)
 
       return {
         order_id: o.id,
@@ -56,8 +55,9 @@ export async function GET() {
         opened_at: o.created_at,
         total: o.total,
         notes: o.notes,
+        employee_name: (o as Record<string, unknown>).employee_name ?? null,
         item_count: itemCount,
-        items_pending_kitchen: pendingKitchen,
+        items_pending_kitchen: 0,
       }
     })
 

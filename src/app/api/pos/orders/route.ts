@@ -50,56 +50,6 @@ export async function POST(request: NextRequest) {
 
     const supabase = getAdminClient()
 
-    // Ensure line_note column exists (runs once, idempotent)
-    await supabase.rpc('exec_sql', {
-      query: "ALTER TABLE order_items ADD COLUMN IF NOT EXISTS line_note text;"
-    }).then(() => {}, () => {}) // ignore errors if rpc doesn't exist
-
-    // Ensure persons column exists on orders (SQL: ALTER TABLE orders ADD COLUMN IF NOT EXISTS persons integer DEFAULT 1;)
-    await supabase.rpc('exec_sql', {
-      query: "ALTER TABLE orders ADD COLUMN IF NOT EXISTS persons integer DEFAULT 1;"
-    }).then(() => {}, () => {})
-
-    // Ensure person_number column exists on order_items
-    await supabase.rpc('exec_sql', {
-      query: "ALTER TABLE order_items ADD COLUMN IF NOT EXISTS person_number integer;"
-    }).then(() => {}, () => {})
-
-    // Ensure bonus columns exist on order_items
-    await supabase.rpc('exec_sql', {
-      query: "ALTER TABLE order_items ADD COLUMN IF NOT EXISTS is_bonus boolean DEFAULT false; ALTER TABLE order_items ADD COLUMN IF NOT EXISTS bonus_reason text; ALTER TABLE order_items ADD COLUMN IF NOT EXISTS original_price numeric;"
-    }).then(() => {}, () => {})
-
-    // Ensure cash_amount and transfer_amount columns exist on orders
-    await supabase.rpc('exec_sql', {
-      query: "ALTER TABLE orders ADD COLUMN IF NOT EXISTS cash_amount numeric; ALTER TABLE orders ADD COLUMN IF NOT EXISTS transfer_amount numeric;"
-    }).then(() => {}, () => {})
-
-    // ── Mesa abierta: nuevas columnas en orders ───────────────────────────────
-    await supabase.rpc('exec_sql', {
-      query: [
-        "ALTER TABLE orders ADD COLUMN IF NOT EXISTS is_open boolean DEFAULT false;",
-        "ALTER TABLE orders ADD COLUMN IF NOT EXISTS closed_at timestamptz;",
-        "ALTER TABLE orders ADD COLUMN IF NOT EXISTS opened_by_employee_id uuid;",
-        "ALTER TABLE orders ADD COLUMN IF NOT EXISTS closed_by_employee_id uuid;",
-        "ALTER TABLE orders ADD COLUMN IF NOT EXISTS pre_bill_printed_at timestamptz;",
-        "ALTER TABLE orders ADD COLUMN IF NOT EXISTS employee_name text;",
-      ].join(' ')
-    }).then(() => {}, () => {})
-
-    // ── Mesa abierta: nuevas columnas en order_items ─────────────────────────
-    await supabase.rpc('exec_sql', {
-      query: [
-        "ALTER TABLE order_items ADD COLUMN IF NOT EXISTS sent_to_kitchen_at timestamptz;",
-        "ALTER TABLE order_items ADD COLUMN IF NOT EXISTS added_at timestamptz DEFAULT now();",
-      ].join(' ')
-    }).then(() => {}, () => {})
-
-    // ── Mesa abierta: índice parcial para mesas abiertas ─────────────────────
-    await supabase.rpc('exec_sql', {
-      query: "CREATE INDEX IF NOT EXISTS idx_orders_open_tables ON orders(table_number, is_open) WHERE is_open = true AND channel = 'pos';"
-    }).then(() => {}, () => {})
-
     // Usar nota personalizada del usuario tal cual viene del POS
     const orderNotes = customNotes && String(customNotes).trim() ? String(customNotes).trim() : null
 
