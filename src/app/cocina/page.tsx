@@ -978,13 +978,15 @@ export default function CocinaPage() {
         fetchOrders(true)
       })
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'orders' }, (payload) => {
-        // If the updated order is now delivered/cancelled, it's already handled
-        // locally by handleDeliver (dismissedIdsRef + setOrders). Calling
-        // fetchOrders here would trigger a re-fetch that could race against
-        // the in-flight PATCH and briefly show the dismissed order again.
         const newStatus = (payload.new as { status?: string })?.status
         if (newStatus === 'delivered' || newStatus === 'cancelled') return
-        fetchOrders()
+        // If status changed back to pending (new kitchen round), trigger sound
+        if (newStatus === 'pending') {
+          console.log('[cocina] Realtime UPDATE: order back to pending (new round)')
+          fetchOrders(true)
+        } else {
+          fetchOrders()
+        }
       })
       .on('postgres_changes', { event: 'DELETE', schema: 'public', table: 'orders' }, () => {
         fetchOrders()
