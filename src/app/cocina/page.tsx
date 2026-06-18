@@ -898,6 +898,14 @@ export default function CocinaPage() {
       // Merge: keep anything already in the ref (in-flight dismissals) plus localStorage
       freshDismissed.forEach((id) => dismissedIdsRef.current.add(id))
 
+      // If a dismissed order came back as pending (new kitchen round), un-dismiss it
+      for (const o of raw) {
+        if (o.status === 'pending' && dismissedIdsRef.current.has(o.id)) {
+          dismissedIdsRef.current.delete(o.id)
+          removeDismissed(o.id)
+        }
+      }
+
       const data = raw.filter((o) => !dismissedIdsRef.current.has(o.id))
 
       // Calcular cuántos pedidos de la nueva lista tendrían items visibles en cocina
