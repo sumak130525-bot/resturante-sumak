@@ -63,7 +63,7 @@ async function getWebOrders(): Promise<KdsOrder[]> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data, error } = await (supabase as any)
     .from('orders')
-    .select('*, order_items(quantity, unit_price, line_note, person_number, is_bonus, bonus_reason, menu_items(name, subcategory))')
+    .select('*, order_items(quantity, unit_price, line_note, person_number, is_bonus, bonus_reason, sent_to_kitchen_at, menu_items(name, subcategory))')
     .gte('created_at', since)
     .not('status', 'in', '("delivered","cancelled")')
     .order('created_at', { ascending: true })
@@ -73,6 +73,24 @@ async function getWebOrders(): Promise<KdsOrder[]> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   return (data as any[]).map((o, idx) => {
     const isPOS = o.channel === 'pos'
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let orderItems: any[] = o.order_items ?? []
+
+    // Para mesas abiertas: solo mostrar items de la última ronda de cocina
+    // (los que tienen el sent_to_kitchen_at más reciente)
+    if (o.is_open && orderItems.length > 0) {
+      // Encontrar el sent_to_kitchen_at más reciente
+      const timestamps = orderItems
+        .map((i: { sent_to_kitchen_at: string | null }) => i.sent_to_kitchen_at)
+        .filter(Boolean) as string[]
+      if (timestamps.length > 0) {
+        const latestRound = timestamps.sort().pop()!
+        orderItems = orderItems.filter(
+          (i: { sent_to_kitchen_at: string | null }) => i.sent_to_kitchen_at === latestRound
+        )
+      }
+    }
+
     return {
       id: o.id,
       source: isPOS ? ('POS' as const) : ('WEB' as const),
@@ -86,7 +104,7 @@ async function getWebOrders(): Promise<KdsOrder[]> {
       diningOption: o.dining_option ?? undefined,
       paymentMethod: o.payment_method ?? undefined,
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      items: (o.order_items ?? []).map((i: any) => ({
+      items: orderItems.map((i: any) => ({
         name: i.menu_items?.name ?? 'Ítem',
         quantity: i.quantity,
         price: i.unit_price,
