@@ -5599,7 +5599,26 @@ export default function POSPage() {
                 </div>
               )}
             </div>
-            <div className="px-4 pb-4">
+            <div className="px-4 pb-4 space-y-2">
+              <button
+                onClick={() => {
+                  // Cargar todos los items de la precuenta al ticket para poder cobrar
+                  const billItems: TicketItem[] = preBillModal.items.map((item, idx) => ({
+                    uid: `bill__${idx}__${Date.now()}`,
+                    menu_item_id: '',
+                    name: item.name,
+                    price: item.unit_price,
+                    quantity: item.quantity,
+                    is_bonus: item.is_bonus,
+                  }))
+                  setTicketItems(billItems)
+                  setTicketOpen(true)
+                  setPreBillModal(null)
+                }}
+                className="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-2 rounded-xl transition-colors"
+              >
+                💰 Cobrar
+              </button>
               <button
                 onClick={() => setPreBillModal(null)}
                 className="w-full bg-amber-500 hover:bg-amber-600 text-white font-bold py-2 rounded-xl transition-colors"
