@@ -899,10 +899,12 @@ export default function CocinaPage() {
       freshDismissed.forEach((id) => dismissedIdsRef.current.add(id))
 
       // If a dismissed order came back as pending (new kitchen round), un-dismiss it
+      let undismissedCount = 0
       for (const o of raw) {
         if (o.status === 'pending' && dismissedIdsRef.current.has(o.id)) {
           dismissedIdsRef.current.delete(o.id)
           removeDismissed(o.id)
+          undismissedCount++
         }
       }
 
@@ -920,10 +922,11 @@ export default function CocinaPage() {
       setOrders(data)
 
       const prevVisible = prevCountRef.current
-      if (triggeredByRealtime && visibleCount > prevVisible) {
-        console.log('[cocina] Realtime: nuevos pedidos visibles, reproduciendo sonido')
+      // Sound: new orders appeared, OR a dismissed order came back (new kitchen round)
+      if (triggeredByRealtime && (visibleCount > prevVisible || undismissedCount > 0)) {
+        console.log('[cocina] Realtime: nuevos pedidos o nueva ronda, reproduciendo sonido', { visibleCount, prevVisible, undismissedCount })
         await playBeep()
-        setLastCount((c) => c + (visibleCount - prevVisible))
+        setLastCount((c) => c + Math.max(visibleCount - prevVisible, undismissedCount))
       } else if (!triggeredByRealtime && prevVisible > 0 && visibleCount > prevVisible) {
         console.log('[cocina] Polling fallback: pedidos visibles aumentaron de', prevVisible, 'a', visibleCount)
         await playBeep()
