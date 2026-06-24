@@ -78,14 +78,30 @@ async function startBot() {
 
     if (connection === 'close') {
       const statusCode = (lastDisconnect?.error as Boom)?.output?.statusCode;
-      const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
 
-      if (shouldReconnect) {
-        console.log(`🔄 Reconectando... (código: ${statusCode})`);
-        setTimeout(startBot, 3000);
-      } else {
+      if (statusCode === 515) {
+        // 515 = restart required (normal durante handshake post-QR). Reconectar SIN borrar auth_info.
+        console.log('🔄 Error 515: reinicio requerido (normal post-QR). Reconectando en 5s...');
+        setTimeout(startBot, 5000);
+      } else if (statusCode === 440) {
+        console.log('⚠️ Error 440: sesión corrupta. Limpiando auth_info y reconectando en 10s...');
+        const fs = await import('fs');
+        const path = await import('path');
+        const authDir = path.join(__dirname, '..', 'auth_info');
+        if (fs.existsSync(authDir)) {
+          fs.rmSync(authDir, { recursive: true, force: true });
+          console.log('🗑️ auth_info eliminada');
+        }
+        setTimeout(startBot, 10000);
+      } else if (statusCode === DisconnectReason.loggedOut) {
         console.log('❌ Sesión cerrada. Eliminá la carpeta auth_info y reiniciá el bot para volver a escanear el QR.');
         process.exit(1);
+      } else {
+        const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
+        if (shouldReconnect) {
+          console.log(`🔄 Reconectando... (código: ${statusCode})`);
+          setTimeout(startBot, 5000);
+        }
       }
     }
 
