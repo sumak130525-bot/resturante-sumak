@@ -53,6 +53,11 @@ export default function AdminConfiguracionPage() {
   const [ticketConfigLoading, setTicketConfigLoading] = useState(true)
   const [ticketConfigSaving, setTicketConfigSaving] = useState(false)
 
+  // ── Billetes calculadora vuelto ────────────────────────────────────────
+  const [bills, setBills] = useState('1000,2000,10000,20000')
+  const [billsLoading, setBillsLoading] = useState(true)
+  const [billsSaving, setBillsSaving] = useState(false)
+
   // ── Bonus configs ────────────────────────────────────────────────────────
   type BonusConfig = { id: string; name: string; daily_amount: number; active: boolean }
   const [bonusConfigs, setBonusConfigs] = useState<BonusConfig[]>([])
@@ -153,6 +158,14 @@ export default function AdminConfiguracionPage() {
         setOpenTablesLoading(false)
       })
       .catch(() => setOpenTablesLoading(false))
+
+    fetch('/api/admin/settings?key=pos_bills')
+      .then((r) => r.ok ? r.json() : [])
+      .then((d: { key: string; value: string }[]) => {
+        if (d[0]?.value) setBills(d[0].value)
+        setBillsLoading(false)
+      })
+      .catch(() => setBillsLoading(false))
   }, [])
 
   // ── Bonus configs fetch ─────────────────────────────────────────────────────
@@ -219,6 +232,23 @@ export default function AdminConfiguracionPage() {
       setError('Error al guardar configuración de propina')
     } finally {
       setTipSaving(false)
+    }
+  }
+
+  const handleSaveBills = async () => {
+    setBillsSaving(true)
+    setError(null)
+    try {
+      await fetch('/api/admin/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ key: 'pos_bills', value: bills.trim() }),
+      })
+      showSuccess('Billetes de calculadora guardados')
+    } catch {
+      setError('Error al guardar billetes')
+    } finally {
+      setBillsSaving(false)
     }
   }
 
@@ -1188,6 +1218,45 @@ export default function AdminConfiguracionPage() {
                 className="flex items-center gap-2 bg-green-600 text-white text-sm font-medium px-5 py-2.5 rounded-xl hover:bg-green-700 disabled:opacity-50 transition-colors"
               >
                 {openTablesSaving ? 'Guardando...' : 'Guardar configuración de mesas'}
+              </button>
+            </div>
+          )}
+        </section>
+
+        {/* ── Billetes calculadora de vuelto ──────────────────────────────── */}
+        <section className="bg-white rounded-2xl p-6 shadow-sm border border-gray-100">
+          <h3 className="text-lg font-bold text-gray-800 mb-4">💵 Billetes — Calculadora de vuelto</h3>
+          {billsLoading ? (
+            <p className="text-sm text-gray-400">Cargando…</p>
+          ) : (
+            <div className="space-y-4">
+              <p className="text-xs text-gray-500">
+                Definí los billetes que aparecen en la calculadora de vuelto del POS. Separados por coma.
+              </p>
+              <div>
+                <label className={labelClass}>Billetes (separados por coma)</label>
+                <input
+                  type="text"
+                  className={inputClass}
+                  value={bills}
+                  onChange={(e) => setBills(e.target.value)}
+                  placeholder="1000,2000,10000,20000"
+                />
+                <p className="text-xs text-gray-400 mt-1">Ejemplo: 1000,2000,5000,10000,20000</p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {bills.split(',').filter(Boolean).map((b, i) => (
+                  <span key={i} className="px-3 py-1 bg-green-50 text-green-700 text-sm font-medium rounded-lg border border-green-200">
+                    ${Number(b.trim()).toLocaleString('es-AR')}
+                  </span>
+                ))}
+              </div>
+              <button
+                onClick={handleSaveBills}
+                disabled={billsSaving}
+                className="flex items-center gap-2 bg-green-600 text-white text-sm font-medium px-5 py-2.5 rounded-xl hover:bg-green-700 disabled:opacity-50 transition-colors"
+              >
+                {billsSaving ? 'Guardando...' : 'Guardar billetes'}
               </button>
             </div>
           )}

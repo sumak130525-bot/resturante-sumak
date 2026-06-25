@@ -1728,6 +1728,7 @@ function ConfirmModal({
   onNotesChange,
   onCancel,
   onConfirm,
+  bills = [1000, 2000, 10000, 20000],
 }: {
   diningOption: DiningOption
   tableNumber: string
@@ -1747,6 +1748,7 @@ function ConfirmModal({
   onNotesChange: (v: string) => void
   onCancel: () => void
   onConfirm: () => void
+  bills?: number[]
 }) {
   // Validation for mixed payment
   const mixedValid = paymentMethod !== 'Mixto' || (() => {
@@ -1763,7 +1765,7 @@ function ConfirmModal({
     onPaymentChange(pm)
   }
 
-  const BILLS = [1000, 2000, 10000, 20000]
+  const BILLS = bills
 
   return (
     <div
@@ -2819,6 +2821,7 @@ function TicketPanel({
   activeOpenOrder,
   selectedBill,
   onBillSelect,
+  bills = [1000, 2000, 10000, 20000],
 }: {
   items: TicketItem[]
   diningOption: DiningOption
@@ -2857,6 +2860,7 @@ function TicketPanel({
   activeOpenOrder?: { id: string; table_number: number; existingItems: TicketItem[] } | null
   selectedBill?: number | null
   onBillSelect?: (bill: number) => void
+  bills?: number[]
 }) {
   const total = items.reduce((s, i) => {
     if (i.is_bonus) return s
@@ -2962,7 +2966,7 @@ function TicketPanel({
           {paymentMethod === 'Efectivo' && (canCharge ?? true) && (
             <div className="mt-2">
               <div className="flex gap-1.5">
-                {[1000, 2000, 10000, 20000].map((bill) => (
+                {bills.map((bill) => (
                   <button
                     key={bill}
                     onClick={() => onBillSelect?.(bill)}
@@ -3746,6 +3750,20 @@ export default function POSPage() {
   const [sendingKitchen, setSendingKitchen] = useState(false)
   const [selectedBill, setSelectedBill] = useState<number | null>(null)
   const [closingTable, setClosingTable] = useState(false)
+  const [posBills, setPosBills] = useState<number[]>([1000, 2000, 10000, 20000])
+
+  // Load pos_bills setting
+  useEffect(() => {
+    fetch('/api/admin/settings?key=pos_bills')
+      .then(r => r.ok ? r.json() : [])
+      .then((d: { key: string; value: string }[]) => {
+        if (d[0]?.value) {
+          const parsed = d[0].value.split(',').map(s => Number(s.trim())).filter(n => !isNaN(n) && n > 0)
+          if (parsed.length > 0) setPosBills(parsed)
+        }
+      })
+      .catch(() => {})
+  }, [])
   // Modal de pre-cuenta
   const [preBillModal, setPreBillModal] = useState<{
     table: number
@@ -5256,6 +5274,7 @@ export default function POSPage() {
               activeOpenOrder={activeOpenOrder}
               selectedBill={selectedBill}
               onBillSelect={(bill) => setSelectedBill(selectedBill === bill ? null : bill)}
+              bills={posBills}
             />
           )}
         </aside>
