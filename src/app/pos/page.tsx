@@ -2965,15 +2965,15 @@ function TicketPanel({
           {/* Cash denomination helper - calculadora de vuelto */}
           {paymentMethod === 'Efectivo' && (canCharge ?? true) && (
             <div className="mt-2">
-              <div className="flex gap-1.5">
+              <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
                 {bills.map((bill) => (
                   <button
                     key={bill}
                     onClick={() => onBillSelect?.(bill)}
-                    className={`flex-1 py-1.5 rounded-lg font-bold text-[10px] transition-all active:scale-95 border ${
+                    className={`flex-shrink-0 px-4 py-2 rounded-xl font-bold text-base transition-all active:scale-95 border-2 ${
                       selectedBill === bill
-                        ? 'bg-teal-600 text-white border-teal-600'
-                        : 'bg-gray-50 text-gray-600 border-gray-200'
+                        ? 'bg-teal-600 text-white border-teal-600 shadow-md'
+                        : 'bg-gray-50 text-gray-700 border-gray-200'
                     }`}
                   >
                     {formatBillARS(bill)}
