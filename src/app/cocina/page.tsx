@@ -383,7 +383,8 @@ function OrderCard({
   const toggleStruck = (idx: number) => {
     if (isDelivered) return
     const item = displayItems[idx]
-    console.log('[cocina] toggleStruck', { idx, itemId: item?.id, itemName: item?.name })
+    // v2 - confirmar que este código corre
+    console.log('[cocina-v2] toggleStruck', { idx, itemId: item?.id, itemName: item?.name, hasId: !!item?.id })
     setStruckIndices((prev) => {
       const next = new Set(prev)
       if (next.has(idx)) {
