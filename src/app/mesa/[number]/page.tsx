@@ -376,7 +376,7 @@ export default function MesaTicketPage() {
       </div>
 
       {/* Propina — fuera del ticket */}
-      {(order.is_open || isPaid) && (
+      {order && (
         <div className="max-w-xs mx-auto mt-3 bg-white shadow-md p-4" style={{ fontFamily: "'Courier New', Courier, monospace" }}>
           <div className="text-center font-bold text-xs mb-2">¿Querés dejar propina?</div>
           <div className="flex gap-1.5 mb-2">
