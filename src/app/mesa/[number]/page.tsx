@@ -60,13 +60,23 @@ function formatDate(iso: string): string {
   })
 }
 
-function timeAgo(iso: string): string {
-  const diff = Date.now() - new Date(iso).getTime()
+function timeAgo(iso: string, endIso?: string | null): string {
+  const end = endIso ? new Date(endIso).getTime() : Date.now()
+  const diff = end - new Date(iso).getTime()
   const mins = Math.floor(diff / 60000)
-  if (mins < 1) return 'Hace un momento'
-  if (mins < 60) return `Hace ${mins} min`
+  if (mins < 1) return '< 1 min'
+  if (mins < 60) return `${mins} min`
   const hrs = Math.floor(mins / 60)
-  return `Hace ${hrs}h ${mins % 60}min`
+  return `${hrs}h ${mins % 60}min`
+}
+
+function timeBetween(startIso: string, endIso: string): string {
+  const diff = new Date(endIso).getTime() - new Date(startIso).getTime()
+  const mins = Math.floor(diff / 60000)
+  if (mins < 1) return '< 1 min'
+  if (mins < 60) return `${mins} min`
+  const hrs = Math.floor(mins / 60)
+  return `${hrs}h ${mins % 60}min`
 }
 
 export default function MesaTicketPage() {
@@ -156,6 +166,16 @@ export default function MesaTicketPage() {
     : false
   const isPaid = order?.status === 'delivered' || order?.closed_at
 
+  // Última entrega para parar el reloj
+  const lastDeliveredAt = order?.items
+    ?.map((i) => i.delivered_at)
+    .filter(Boolean)
+    .sort()
+    .pop() ?? null
+
+  // Tiempo total: si todos entregados, tiempo fijo; si no, sigue corriendo
+  const totalTimeEnd = allDelivered ? lastDeliveredAt : null
+
   const handleDownload = async () => {
     if (!ticketRef.current) return
     try {
@@ -239,24 +259,28 @@ export default function MesaTicketPage() {
       <div key={item.id} className="py-1 border-b border-dotted border-gray-200 last:border-b-0">
         <div className="flex text-xs leading-tight">
           <span className="w-6 text-gray-500">{item.quantity}x</span>
-          <span className={`flex-1 ${isDelivered ? 'line-through text-gray-400' : ''}`}>
+          <span className="flex-1">
             {item.is_bonus ? '★ ' : ''}{item.name}
           </span>
-          <span className={`w-20 text-right ${isDelivered ? 'line-through text-gray-400' : ''}`}>
+          <span className="w-20 text-right">
             {item.is_bonus ? 'GRATIS' : `$${subtotal.toLocaleString('es-AR')}`}
           </span>
         </div>
-        {isDelivered && item.delivered_at && (
-          <div className="text-[9px] text-green-600 ml-6">✓ Entregado {formatTime(item.delivered_at)}</div>
+        {isDelivered && item.delivered_at && order && (
+          <div className="text-[9px] text-green-600 ml-6 font-medium">
+            ✅ Entregado en {timeBetween(order.created_at, item.delivered_at)}
+          </div>
         )}
         {!isDelivered && item.sent_to_kitchen_at && (
-          <div className="text-[9px] text-amber-500 ml-6">🔥 En cocina desde {formatTime(item.sent_to_kitchen_at)}</div>
+          <div className="text-[9px] text-amber-500 ml-6">
+            🔥 En cocina
+          </div>
         )}
         {!isDelivered && !item.sent_to_kitchen_at && (
           <div className="text-[9px] text-gray-400 ml-6">⏳ En espera</div>
         )}
         {item.line_note && (
-          <div className={`text-[9px] ml-6 ${isDelivered ? 'text-gray-300' : 'text-amber-600'}`}>→ {item.line_note}</div>
+          <div className="text-[9px] ml-6 text-amber-600">→ {item.line_note}</div>
         )}
         {item.is_bonus && item.bonus_reason && (
           <div className="text-[9px] ml-6 text-purple-500">({item.bonus_reason})</div>
@@ -301,7 +325,7 @@ export default function MesaTicketPage() {
           )}
           <div className="flex justify-between">
             <span className="font-bold text-sm">Mesa: {tableNumber}</span>
-            <span>⏱️ {timeAgo(order.created_at)}</span>
+            <span>⏱️ {allDelivered ? `Total: ${timeAgo(order.created_at, totalTimeEnd)}` : `${timeAgo(order.created_at)} ...`}</span>
           </div>
           {order.dining_option && <div>Modalidad: {order.dining_option}</div>}
           {order.employee_name && <div>Atendió: {order.employee_name}</div>}
@@ -379,22 +403,19 @@ export default function MesaTicketPage() {
       {order && (
         <div className="max-w-xs mx-auto mt-3 bg-white shadow-md p-4" style={{ fontFamily: "'Courier New', Courier, monospace" }}>
           <div className="text-center font-bold text-xs mb-2">¿Querés dejar propina?</div>
-          <div className="flex gap-1.5 mb-2">
-            {[10, 15, 20].map((pct) => (
-              <button
-                key={pct}
-                onClick={() => { setTipPercent(tipPercent === pct ? null : pct); setShowTipInput(false); setCustomTip('') }}
-                className={`flex-1 py-1.5 rounded text-[10px] font-bold transition-all border ${
-                  tipPercent === pct ? 'bg-gray-800 text-white border-gray-800' : 'bg-white text-gray-700 border-gray-300'
-                }`}
-              >
-                {pct}%
-                <div className="text-[9px] font-normal">${Math.round(total * pct / 100).toLocaleString('es-AR')}</div>
-              </button>
-            ))}
+          <div className="flex gap-2 mb-2">
+            <button
+              onClick={() => { setTipPercent(tipPercent === 10 ? null : 10); setShowTipInput(false); setCustomTip('') }}
+              className={`flex-1 py-2 rounded text-xs font-bold transition-all border ${
+                tipPercent === 10 ? 'bg-gray-800 text-white border-gray-800' : 'bg-white text-gray-700 border-gray-300'
+              }`}
+            >
+              10%
+              <div className="text-[9px] font-normal">${Math.round(total * 10 / 100).toLocaleString('es-AR')}</div>
+            </button>
             <button
               onClick={() => { setTipPercent(null); setShowTipInput(!showTipInput) }}
-              className={`flex-1 py-1.5 rounded text-[10px] font-bold transition-all border ${
+              className={`flex-1 py-2 rounded text-xs font-bold transition-all border ${
                 showTipInput ? 'bg-gray-800 text-white border-gray-800' : 'bg-white text-gray-700 border-gray-300'
               }`}
             >
