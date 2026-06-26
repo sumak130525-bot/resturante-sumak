@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { useParams } from 'next/navigation'
 
 type OrderItem = {
@@ -38,6 +38,15 @@ function formatTime(iso: string): string {
   })
 }
 
+function formatDate(iso: string): string {
+  return new Date(iso).toLocaleDateString('es-AR', {
+    day: '2-digit',
+    month: '2-digit',
+    year: '2-digit',
+    timeZone: 'America/Argentina/Mendoza',
+  })
+}
+
 function timeAgo(iso: string): string {
   const diff = Date.now() - new Date(iso).getTime()
   const mins = Math.floor(diff / 60000)
@@ -47,9 +56,18 @@ function timeAgo(iso: string): string {
   return `Hace ${hrs}h ${mins % 60}min`
 }
 
+function padRight(str: string, len: number): string {
+  return str.length >= len ? str.substring(0, len) : str + ' '.repeat(len - str.length)
+}
+
+function padLeft(str: string, len: number): string {
+  return str.length >= len ? str.substring(0, len) : ' '.repeat(len - str.length) + str
+}
+
 export default function MesaTicketPage() {
   const params = useParams()
   const tableNumber = params.number as string
+  const ticketRef = useRef<HTMLDivElement>(null)
 
   const [order, setOrder] = useState<Order | null>(null)
   const [loading, setLoading] = useState(true)
@@ -78,20 +96,17 @@ export default function MesaTicketPage() {
     }
   }, [tableNumber])
 
-  // Fetch inicial y polling cada 10s
   useEffect(() => {
     fetchOrder()
     const interval = setInterval(fetchOrder, 10000)
     return () => clearInterval(interval)
   }, [fetchOrder])
 
-  // Actualizar "Hace X min" cada 30s
   useEffect(() => {
     const interval = setInterval(() => setNow(Date.now()), 30000)
     return () => clearInterval(interval)
   }, [])
 
-  // Forzar re-render para timeAgo
   void now
 
   const total = order?.total ?? 0
@@ -106,136 +121,211 @@ export default function MesaTicketPage() {
     : false
   const isPaid = order?.status === 'delivered' || order?.closed_at
 
+  const handleDownload = async () => {
+    if (!ticketRef.current) return
+    try {
+      const html2canvas = (await import('html2canvas')).default
+      const canvas = await html2canvas(ticketRef.current, {
+        backgroundColor: '#ffffff',
+        scale: 2,
+      })
+      const link = document.createElement('a')
+      link.download = `ticket-mesa-${tableNumber}.png`
+      link.href = canvas.toDataURL('image/png')
+      link.click()
+    } catch {
+      // Fallback: print
+      window.print()
+    }
+  }
+
   if (loading) {
     return (
-      <div className="min-h-screen bg-amber-50 flex items-center justify-center">
-        <div className="animate-pulse text-amber-600 text-lg font-semibold">Cargando...</div>
+      <div className="min-h-screen bg-gray-100 flex items-center justify-center">
+        <div className="animate-pulse text-gray-500 text-lg font-mono">Cargando...</div>
       </div>
     )
   }
 
   if (noOrder || !order) {
     return (
-      <div className="min-h-screen bg-amber-50 flex flex-col items-center justify-center p-6 text-center">
-        <div className="text-6xl mb-4">🍽️</div>
-        <h1 className="text-2xl font-bold text-gray-800 mb-2">Mesa {tableNumber}</h1>
-        <p className="text-gray-500 mb-6">No hay pedidos activos en esta mesa</p>
-        <a
-          href="/"
-          className="bg-amber-600 text-white font-bold px-6 py-3 rounded-xl hover:bg-amber-700 transition-colors"
-        >
-          📋 Ver nuestro menú
-        </a>
+      <div className="min-h-screen bg-gray-100 flex flex-col items-center justify-center p-6 text-center">
+        <div className="bg-white rounded-lg shadow-lg p-8 max-w-xs w-full font-mono">
+          <div className="text-center text-lg font-bold mb-2">RESTAURANTE SUMAK</div>
+          <div className="text-center text-xs text-gray-500 mb-4">Juan B Alberdi 247, Guaymallén</div>
+          <div className="border-t border-dashed border-gray-300 my-3" />
+          <div className="text-center text-sm">Mesa {tableNumber}</div>
+          <div className="text-center text-xs text-gray-400 mt-2">No hay pedidos activos</div>
+          <div className="border-t border-dashed border-gray-300 my-3" />
+          <a
+            href="/"
+            className="block text-center text-amber-600 font-bold text-sm underline"
+          >
+            Ver nuestro menú
+          </a>
+        </div>
       </div>
     )
   }
 
-  return (
-    <div className="min-h-screen bg-amber-50">
-      {/* Header */}
-      <div className="bg-amber-600 text-white px-4 py-4 shadow-md">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-xl font-bold">🪑 Mesa {tableNumber}</h1>
-            <p className="text-amber-100 text-sm">Restaurante Sumak</p>
-          </div>
-          <div className="text-right">
-            <div className="text-sm font-medium">⏱️ {timeAgo(order.created_at)}</div>
-            <div className="text-xs text-amber-200">{formatTime(order.created_at)}</div>
-          </div>
-        </div>
-        {isPaid && (
-          <div className="mt-2 bg-green-500 text-white text-center py-1 rounded-lg text-sm font-bold">
-            ✅ Pedido pagado
-          </div>
-        )}
-        {!isPaid && allDelivered && (
-          <div className="mt-2 bg-blue-500 text-white text-center py-1 rounded-lg text-sm font-bold">
-            ✅ Pedido completo — ¡Buen provecho!
-          </div>
-        )}
-      </div>
+  const orderDate = formatDate(order.created_at)
+  const orderTime = formatTime(order.created_at)
 
-      {/* Items */}
-      <div className="p-4 space-y-2">
-        {order.items.map((item) => {
-          const isDelivered = !!item.delivered_at
-          return (
-            <div
-              key={item.id}
-              className={`bg-white rounded-xl p-3 shadow-sm border flex items-center gap-3 ${
-                isDelivered ? 'border-green-200 bg-green-50/50' : 'border-gray-100'
-              }`}
-            >
-              <div className="flex-1">
-                <div className={`font-semibold ${isDelivered ? 'line-through text-gray-400' : 'text-gray-800'}`}>
-                  {item.name} x{item.quantity}
+  return (
+    <div className="min-h-screen bg-gray-100 py-4 px-3">
+      {/* Ticket con formato recibo */}
+      <div
+        ref={ticketRef}
+        className="max-w-sm mx-auto bg-white shadow-xl rounded-sm overflow-hidden"
+        style={{ fontFamily: "'Courier New', Courier, monospace" }}
+      >
+        {/* Borde superior zigzag */}
+        <div className="h-3 bg-white" style={{
+          backgroundImage: 'linear-gradient(135deg, #f3f4f6 33.33%, transparent 33.33%), linear-gradient(225deg, #f3f4f6 33.33%, transparent 33.33%)',
+          backgroundSize: '12px 12px',
+        }} />
+
+        {/* Header */}
+        <div className="px-5 pt-4 pb-2 text-center">
+          <div className="text-lg font-bold tracking-wider">RESTAURANTE SUMAK</div>
+          <div className="text-[10px] text-gray-500 mt-0.5">Juan B Alberdi 247, Guaymallén, Mendoza</div>
+          <div className="text-[10px] text-gray-500">Tel: +54 9 261 752-6242</div>
+        </div>
+
+        <div className="mx-5 border-t-2 border-dashed border-gray-300" />
+
+        {/* Info pedido */}
+        <div className="px-5 py-2 text-xs">
+          <div className="flex justify-between">
+            <span>MESA: <span className="font-bold text-base">{tableNumber}</span></span>
+            <span>{orderDate} {orderTime}</span>
+          </div>
+          <div className="flex justify-between mt-1">
+            <span>⏱️ {timeAgo(order.created_at)}</span>
+            {order.employee_name && <span>Atendió: {order.employee_name}</span>}
+          </div>
+          {isPaid && (
+            <div className="text-center mt-2 font-bold text-green-700 text-sm bg-green-50 py-1 rounded">
+              ★ PAGADO ★
+            </div>
+          )}
+          {!isPaid && allDelivered && (
+            <div className="text-center mt-2 font-bold text-blue-700 text-sm bg-blue-50 py-1 rounded">
+              ★ PEDIDO COMPLETO ★
+            </div>
+          )}
+        </div>
+
+        <div className="mx-5 border-t border-dashed border-gray-300" />
+
+        {/* Column headers */}
+        <div className="px-5 py-1.5 text-[10px] text-gray-500 flex">
+          <span className="flex-1">{padRight('ITEM', 20)}</span>
+          <span className="w-8 text-center">QTY</span>
+          <span className="w-16 text-right">PRECIO</span>
+          <span className="w-14 text-right">ESTADO</span>
+        </div>
+
+        <div className="mx-5 border-t border-gray-200" />
+
+        {/* Items */}
+        <div className="px-5 py-1">
+          {order.items.map((item) => {
+            const isDelivered = !!item.delivered_at
+            const subtotal = item.unit_price * item.quantity
+            return (
+              <div key={item.id} className="py-1.5 border-b border-gray-50 last:border-b-0">
+                <div className={`flex text-xs ${isDelivered ? 'text-gray-400' : 'text-gray-800'}`}>
+                  <span className={`flex-1 font-medium ${isDelivered ? 'line-through' : ''}`}>
+                    {item.name}
+                  </span>
+                  <span className="w-8 text-center">{item.quantity}</span>
+                  <span className={`w-16 text-right ${isDelivered ? 'line-through' : ''}`}>
+                    ${subtotal.toLocaleString('es-AR')}
+                  </span>
+                  <span className="w-14 text-right text-[10px]">
+                    {isDelivered && item.delivered_at
+                      ? `✓${formatTime(item.delivered_at)}`
+                      : item.sent_to_kitchen_at
+                        ? '🔥cocina'
+                        : '⏳espera'
+                    }
+                  </span>
                 </div>
                 {item.line_note && (
-                  <div className="text-xs text-amber-600 mt-0.5">📝 {item.line_note}</div>
+                  <div className={`text-[10px] ml-2 ${isDelivered ? 'text-gray-300' : 'text-amber-600'}`}>
+                    → {item.line_note}
+                  </div>
                 )}
                 {item.is_bonus && (
-                  <div className="text-xs text-purple-600 mt-0.5">🎁 Bonificado{item.bonus_reason ? `: ${item.bonus_reason}` : ''}</div>
-                )}
-              </div>
-              <div className="text-right">
-                <div className={`font-bold ${isDelivered ? 'text-gray-400' : 'text-gray-800'}`}>
-                  ${(item.unit_price * item.quantity).toLocaleString('es-AR')}
-                </div>
-                {isDelivered && item.delivered_at && (
-                  <div className="text-xs text-green-600 font-medium">
-                    ✅ {formatTime(item.delivered_at)}
-                  </div>
-                )}
-                {!isDelivered && item.sent_to_kitchen_at && (
-                  <div className="text-xs text-amber-500 font-medium">
-                    🔥 En cocina
+                  <div className="text-[10px] ml-2 text-purple-500">
+                    ★ BONIFICADO{item.bonus_reason ? `: ${item.bonus_reason}` : ''}
                   </div>
                 )}
               </div>
-            </div>
-          )
-        })}
-      </div>
-
-      {/* Total */}
-      <div className="mx-4 bg-white rounded-xl p-4 shadow-sm border border-gray-100">
-        <div className="flex justify-between items-center text-lg font-bold text-gray-800">
-          <span>Total</span>
-          <span>${total.toLocaleString('es-AR')}</span>
+            )
+          })}
         </div>
-        {order.payment_method && (
-          <div className="text-xs text-gray-400 mt-1">
-            Pago: {order.payment_method}
+
+        <div className="mx-5 border-t-2 border-dashed border-gray-300" />
+
+        {/* Total */}
+        <div className="px-5 py-3">
+          <div className="flex justify-between text-sm font-bold">
+            <span>TOTAL</span>
+            <span className="text-lg">${total.toLocaleString('es-AR')}</span>
           </div>
-        )}
+          {order.payment_method && (
+            <div className="flex justify-between text-[10px] text-gray-400 mt-1">
+              <span>Método de pago:</span>
+              <span>{order.payment_method}</span>
+            </div>
+          )}
+        </div>
+
+        <div className="mx-5 border-t border-dashed border-gray-300" />
+
+        {/* Footer ticket */}
+        <div className="px-5 py-3 text-center">
+          <div className="text-[10px] text-gray-400">Gracias por su visita</div>
+          <div className="text-[10px] text-gray-400 mt-0.5">restaurante-sumak.vercel.app</div>
+          <div className="text-[10px] text-gray-300 mt-1">
+            {padLeft('', 10)}#{order.id.substring(0, 8).toUpperCase()}{padRight('', 10)}
+          </div>
+        </div>
+
+        {/* Borde inferior zigzag */}
+        <div className="h-3 bg-white" style={{
+          backgroundImage: 'linear-gradient(315deg, #f3f4f6 33.33%, transparent 33.33%), linear-gradient(45deg, #f3f4f6 33.33%, transparent 33.33%)',
+          backgroundSize: '12px 12px',
+        }} />
       </div>
 
-      {/* Propina */}
+      {/* Propina — fuera del ticket para que no se descargue */}
       {(order.is_open || isPaid) && (
-        <div className="mx-4 mt-4 bg-white rounded-xl p-4 shadow-sm border border-amber-200">
-          <h3 className="font-bold text-gray-800 mb-3">💰 ¿Querés dejar propina?</h3>
+        <div className="max-w-sm mx-auto mt-4 bg-white rounded-lg shadow-md p-4" style={{ fontFamily: "'Courier New', Courier, monospace" }}>
+          <div className="text-center font-bold text-sm mb-3">💰 ¿Querés dejar propina?</div>
           <div className="flex gap-2 mb-3">
             {[10, 15, 20].map((pct) => (
               <button
                 key={pct}
                 onClick={() => { setTipPercent(tipPercent === pct ? null : pct); setShowTipInput(false); setCustomTip('') }}
-                className={`flex-1 py-2 rounded-xl font-bold text-sm transition-all border-2 ${
+                className={`flex-1 py-2 rounded text-xs font-bold transition-all border ${
                   tipPercent === pct
                     ? 'bg-amber-600 text-white border-amber-600'
-                    : 'bg-amber-50 text-amber-700 border-amber-200'
+                    : 'bg-white text-gray-700 border-gray-300'
                 }`}
               >
                 {pct}%
-                <div className="text-xs font-normal">${Math.round(total * pct / 100).toLocaleString('es-AR')}</div>
+                <div className="text-[10px] font-normal">${Math.round(total * pct / 100).toLocaleString('es-AR')}</div>
               </button>
             ))}
             <button
               onClick={() => { setTipPercent(null); setShowTipInput(!showTipInput) }}
-              className={`flex-1 py-2 rounded-xl font-bold text-sm transition-all border-2 ${
+              className={`flex-1 py-2 rounded text-xs font-bold transition-all border ${
                 showTipInput
                   ? 'bg-amber-600 text-white border-amber-600'
-                  : 'bg-amber-50 text-amber-700 border-amber-200'
+                  : 'bg-white text-gray-700 border-gray-300'
               }`}
             >
               Otro
@@ -247,7 +337,7 @@ export default function MesaTicketPage() {
               value={customTip}
               onChange={(e) => setCustomTip(e.target.value)}
               placeholder="Monto de propina"
-              className="w-full border border-gray-300 rounded-xl px-3 py-2 text-sm mb-3"
+              className="w-full border border-gray-300 rounded px-3 py-2 text-xs mb-3 font-mono"
             />
           )}
           {tipAmount > 0 && (
@@ -255,21 +345,29 @@ export default function MesaTicketPage() {
               href={`https://www.mercadopago.com.ar/checkout/v1/payment/redirect/?preference-id=propina-${order.id}&amount=${tipAmount}`}
               target="_blank"
               rel="noopener noreferrer"
-              className="block w-full bg-green-600 text-white text-center font-bold py-3 rounded-xl hover:bg-green-700 transition-colors"
+              className="block w-full bg-green-600 text-white text-center font-bold py-2.5 rounded text-sm hover:bg-green-700 transition-colors"
             >
-              Dejar propina de ${tipAmount.toLocaleString('es-AR')} 💚
+              Dejar propina ${tipAmount.toLocaleString('es-AR')} 💚
             </a>
           )}
         </div>
       )}
 
-      {/* Link al menú */}
-      <div className="mx-4 mt-4 mb-8">
+      {/* Acciones — fuera del ticket */}
+      <div className="max-w-sm mx-auto mt-4 space-y-2 pb-8">
+        <button
+          onClick={handleDownload}
+          className="w-full bg-gray-800 text-white text-center font-bold py-3 rounded-lg text-sm hover:bg-gray-900 transition-colors"
+          style={{ fontFamily: "'Courier New', Courier, monospace" }}
+        >
+          📥 Descargar ticket
+        </button>
         <a
           href="/"
-          className="block w-full bg-amber-600 text-white text-center font-bold py-3 rounded-xl hover:bg-amber-700 transition-colors"
+          className="block w-full bg-amber-600 text-white text-center font-bold py-3 rounded-lg text-sm hover:bg-amber-700 transition-colors"
+          style={{ fontFamily: "'Courier New', Courier, monospace" }}
         >
-          📋 Ver nuestro menú completo
+          📋 Ver nuestro menú
         </a>
       </div>
     </div>
