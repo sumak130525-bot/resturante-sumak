@@ -21,16 +21,25 @@ export async function GET(
 
     const supabase = getAdmin()
 
-    // Primero buscar pedido abierto (mesa abierta activa)
+    // Buscar pedido abierto — intentar con el número directo y con "Mesa X"
+    const possibleTableValues = [tableNumber, `Mesa ${tableNumber}`, `mesa ${tableNumber}`]
+
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    let { data: order } = await (supabase as any)
-      .from('orders')
-      .select('id, table_number, status, total, payment_method, employee_name, customer_name, dining_option, notes, persons, order_number, created_at, is_open, closed_at, order_items(id, quantity, unit_price, line_note, person_number, is_bonus, bonus_reason, sent_to_kitchen_at, delivered_at, menu_items(name))')
-      .eq('table_number', tableNumber)
-      .eq('is_open', true)
-      .order('created_at', { ascending: false })
-      .limit(1)
-      .single()
+    let order: any = null
+
+    // Primero buscar pedido abierto (mesa abierta activa)
+    for (const tv of possibleTableValues) {
+      if (order) break
+      const { data } = await (supabase as any)
+        .from('orders')
+        .select('id, table_number, status, total, payment_method, employee_name, customer_name, dining_option, notes, persons, order_number, created_at, is_open, closed_at, order_items(id, quantity, unit_price, line_note, person_number, is_bonus, bonus_reason, sent_to_kitchen_at, delivered_at, menu_items(name))')
+        .eq('table_number', tv)
+        .eq('is_open', true)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .single()
+      if (data) order = data
+    }
 
     // Si no hay pedido abierto, buscar el más reciente de hoy
     if (!order) {
@@ -38,17 +47,19 @@ export async function GET(
       today.setHours(0, 0, 0, 0)
       const since = today.toISOString()
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data } = await (supabase as any)
-        .from('orders')
-        .select('id, table_number, status, total, payment_method, employee_name, customer_name, dining_option, notes, persons, order_number, created_at, is_open, closed_at, order_items(id, quantity, unit_price, line_note, person_number, is_bonus, bonus_reason, sent_to_kitchen_at, delivered_at, menu_items(name))')
-        .eq('table_number', tableNumber)
-        .gte('created_at', since)
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .single()
-
-      order = data
+      for (const tv of possibleTableValues) {
+        if (order) break
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const { data } = await (supabase as any)
+          .from('orders')
+          .select('id, table_number, status, total, payment_method, employee_name, customer_name, dining_option, notes, persons, order_number, created_at, is_open, closed_at, order_items(id, quantity, unit_price, line_note, person_number, is_bonus, bonus_reason, sent_to_kitchen_at, delivered_at, menu_items(name))')
+          .eq('table_number', tv)
+          .gte('created_at', since)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .single()
+        if (data) order = data
+      }
     }
 
     if (!order) {
