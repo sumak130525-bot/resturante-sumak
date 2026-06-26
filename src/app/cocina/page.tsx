@@ -395,8 +395,11 @@ function OrderCard({
   const toggleStruck = (idx: number) => {
     if (isDelivered) return
     const item = displayItems[idx]
-    // v2 - confirmar que este código corre
-    console.log('[cocina-v2] toggleStruck', { idx, itemId: item?.id, itemName: item?.name, hasId: !!item?.id })
+    // v3 - confirmar que este código corre
+    console.log('[cocina-v3] toggleStruck', { idx, itemId: item?.id, itemName: item?.name, hasId: !!item?.id })
+    if (!item?.id) {
+      console.error('[cocina-v3] NO ITEM ID!', { idx, item, displayItemsLength: displayItems.length })
+    }
     setStruckIndices((prev) => {
       const next = new Set(prev)
       if (next.has(idx)) {
