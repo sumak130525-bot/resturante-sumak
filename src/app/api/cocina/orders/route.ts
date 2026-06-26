@@ -63,7 +63,7 @@ async function getWebOrders(): Promise<KdsOrder[]> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data, error } = await (supabase as any)
     .from('orders')
-    .select('*, order_items(id, quantity, unit_price, line_note, person_number, is_bonus, bonus_reason, sent_to_kitchen_at, menu_items(name, subcategory))')
+    .select('*, order_items(id, quantity, unit_price, line_note, person_number, is_bonus, bonus_reason, sent_to_kitchen_at, delivered_at, menu_items(name, subcategory))')
     .gte('created_at', since)
     .not('status', 'in', '("delivered","cancelled")')
     .order('created_at', { ascending: true })
@@ -362,7 +362,7 @@ async function getDeliveredOrdersToday(): Promise<KdsOrder[]> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data, error } = await (supabase as any)
     .from('orders')
-    .select('*, order_items(quantity, unit_price, line_note, person_number, is_bonus, bonus_reason, menu_items(name, subcategory))')
+    .select('*, order_items(id, quantity, unit_price, line_note, person_number, is_bonus, bonus_reason, sent_to_kitchen_at, delivered_at, menu_items(name, subcategory))')
     .eq('status', 'delivered')
     .gte('created_at', todayStart.toISOString())
     .order('created_at', { ascending: false })
