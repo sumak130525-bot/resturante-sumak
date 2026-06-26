@@ -395,39 +395,33 @@ function OrderCard({
   const toggleStruck = (idx: number) => {
     if (isDelivered) return
     const item = displayItems[idx]
-    // v3 - confirmar que este código corre
-    console.log('[cocina-v3] toggleStruck', { idx, itemId: item?.id, itemName: item?.name, hasId: !!item?.id })
-    if (!item?.id) {
-      console.error('[cocina-v3] NO ITEM ID!', { idx, item, displayItemsLength: displayItems.length })
-    }
+    const itemId = item?.id
+    console.log('[cocina-v3] toggleStruck', { idx, itemId, itemName: item?.name })
+
+    const wasStruck = struckIndices.has(idx)
+    
+    // Actualizar UI inmediatamente
     setStruckIndices((prev) => {
-      const next = new Set(prev)
-      if (next.has(idx)) {
+      const next = new Set(Array.from(prev))
+      if (wasStruck) {
         next.delete(idx)
-        // Quitar delivered_at en DB
-        if (item?.id) {
-          console.log('[cocina] Removing delivered_at for item', item.id)
-          fetch('/api/cocina/orders/item-deliver', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ item_id: item.id, delivered: false }),
-          }).then(r => r.json()).then(d => console.log('[cocina] item-deliver response:', d)).catch(e => console.error('[cocina] item-deliver error:', e))
-        }
       } else {
         next.add(idx)
-        // Guardar delivered_at en DB
-        if (item?.id) {
-          console.log('[cocina] Setting delivered_at for item', item.id)
-          fetch('/api/cocina/orders/item-deliver', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ item_id: item.id, delivered: true }),
-          }).then(r => r.json()).then(d => console.log('[cocina] item-deliver response:', d)).catch(e => console.error('[cocina] item-deliver error:', e))
-        }
       }
       saveStruck(order.id, next)
       return next
     })
+
+    // Guardar en DB fuera del setState
+    if (itemId) {
+      const delivered = !wasStruck
+      console.log('[cocina] item-deliver', { itemId, delivered })
+      fetch('/api/cocina/orders/item-deliver', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ item_id: itemId, delivered }),
+      }).then(r => r.json()).then(d => console.log('[cocina] item-deliver response:', d)).catch(e => console.error('[cocina] item-deliver error:', e))
+    }
   }
 
   const headerBg = isDelivered ? 'bg-gray-400' : getHeaderColorByTime(order.created_at)
