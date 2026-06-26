@@ -63,7 +63,7 @@ async function getWebOrders(): Promise<KdsOrder[]> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data, error } = await (supabase as any)
     .from('orders')
-    .select('*, order_items(quantity, unit_price, line_note, person_number, is_bonus, bonus_reason, sent_to_kitchen_at, menu_items(name, subcategory))')
+    .select('*, order_items(id, quantity, unit_price, line_note, person_number, is_bonus, bonus_reason, sent_to_kitchen_at, menu_items(name, subcategory))')
     .gte('created_at', since)
     .not('status', 'in', '("delivered","cancelled")')
     .order('created_at', { ascending: true })
@@ -105,6 +105,7 @@ async function getWebOrders(): Promise<KdsOrder[]> {
       paymentMethod: o.payment_method ?? undefined,
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       items: orderItems.map((i: any) => ({
+        id: i.id ?? null,
         name: i.menu_items?.name ?? 'Ítem',
         quantity: i.quantity,
         price: i.unit_price,

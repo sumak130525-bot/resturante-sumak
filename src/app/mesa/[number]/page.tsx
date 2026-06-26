@@ -173,6 +173,34 @@ export default function MesaTicketPage() {
     }
   }
 
+  const [tipLoading, setTipLoading] = useState(false)
+
+  const handleTip = async () => {
+    if (tipAmount <= 0 || !order) return
+    setTipLoading(true)
+    try {
+      const res = await fetch('/api/mesa/propina', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          amount: tipAmount,
+          order_id: order.id,
+          table_number: tableNumber,
+        }),
+      })
+      const data = await res.json()
+      if (data.init_point) {
+        window.location.href = data.init_point
+      } else {
+        alert('Error al crear propina: ' + (data.error || 'intente de nuevo'))
+      }
+    } catch {
+      alert('Error de conexión')
+    } finally {
+      setTipLoading(false)
+    }
+  }
+
   // Agrupar items por persona
   const hasMultiPerson = order?.items?.some((i) => (i.person_number ?? 0) > 1) ?? false
   const maxPerson = hasMultiPerson
@@ -383,14 +411,13 @@ export default function MesaTicketPage() {
             />
           )}
           {tipAmount > 0 && (
-            <a
-              href={`https://www.mercadopago.com.ar/checkout/v1/payment/redirect/?preference-id=propina-${order.id}&amount=${tipAmount}`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="block w-full bg-green-600 text-white text-center font-bold py-2 rounded text-xs"
+            <button
+              onClick={handleTip}
+              disabled={tipLoading}
+              className="block w-full bg-green-600 text-white text-center font-bold py-2 rounded text-xs disabled:opacity-50"
             >
-              Dejar propina ${tipAmount.toLocaleString('es-AR')}
-            </a>
+              {tipLoading ? 'Procesando...' : `Dejar propina $${tipAmount.toLocaleString('es-AR')}`}
+            </button>
           )}
         </div>
       )}

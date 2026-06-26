@@ -283,6 +283,7 @@ const SILENT_WAV_URI = typeof window !== 'undefined' ? buildSilentWavDataUri() :
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 
 type KdsItem = {
+  id?: string
   name: string
   quantity: number
   price: number
@@ -381,12 +382,29 @@ function OrderCard({
 
   const toggleStruck = (idx: number) => {
     if (isDelivered) return
+    const item = displayItems[idx]
     setStruckIndices((prev) => {
       const next = new Set(prev)
       if (next.has(idx)) {
         next.delete(idx)
+        // Quitar delivered_at en DB
+        if (item?.id) {
+          fetch('/api/cocina/orders/item-deliver', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ item_id: item.id, delivered: false }),
+          }).catch(() => {})
+        }
       } else {
         next.add(idx)
+        // Guardar delivered_at en DB
+        if (item?.id) {
+          fetch('/api/cocina/orders/item-deliver', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ item_id: item.id, delivered: true }),
+          }).catch(() => {})
+        }
       }
       saveStruck(order.id, next)
       return next
