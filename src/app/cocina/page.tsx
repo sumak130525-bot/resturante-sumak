@@ -375,7 +375,7 @@ function OrderCard({
     })
     // Merge: si la DB dice entregado, marcar
     if (fromDB.size > 0) {
-      const merged = new Set([...fromLocal, ...fromDB])
+      const merged = new Set(Array.from(fromLocal).concat(Array.from(fromDB)))
       saveStruck(order.id, merged)
       return merged
     }
