@@ -367,7 +367,19 @@ function OrderCard({
   // ── Estado de items tachados ──
   const [struckIndices, setStruckIndices] = useState<Set<number>>(() => {
     if (typeof window === 'undefined') return new Set()
-    return loadStruck(order.id)
+    // Inicializar desde DB (delivered_at) + localStorage
+    const fromLocal = loadStruck(order.id)
+    const fromDB = new Set<number>()
+    order.items.forEach((item: any, idx: number) => {
+      if (item.delivered_at) fromDB.add(idx)
+    })
+    // Merge: si la DB dice entregado, marcar
+    if (fromDB.size > 0) {
+      const merged = new Set([...fromLocal, ...fromDB])
+      saveStruck(order.id, merged)
+      return merged
+    }
+    return fromLocal
   })
 
   // ── Filtrar bebidas envasadas (Sin alcohol / Con alcohol) en pedidos POS (no WhatsApp) ──
