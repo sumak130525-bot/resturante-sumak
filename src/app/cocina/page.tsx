@@ -383,27 +383,30 @@ function OrderCard({
   const toggleStruck = (idx: number) => {
     if (isDelivered) return
     const item = displayItems[idx]
+    console.log('[cocina] toggleStruck', { idx, itemId: item?.id, itemName: item?.name })
     setStruckIndices((prev) => {
       const next = new Set(prev)
       if (next.has(idx)) {
         next.delete(idx)
         // Quitar delivered_at en DB
         if (item?.id) {
+          console.log('[cocina] Removing delivered_at for item', item.id)
           fetch('/api/cocina/orders/item-deliver', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ item_id: item.id, delivered: false }),
-          }).catch(() => {})
+          }).then(r => r.json()).then(d => console.log('[cocina] item-deliver response:', d)).catch(e => console.error('[cocina] item-deliver error:', e))
         }
       } else {
         next.add(idx)
         // Guardar delivered_at en DB
         if (item?.id) {
+          console.log('[cocina] Setting delivered_at for item', item.id)
           fetch('/api/cocina/orders/item-deliver', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ item_id: item.id, delivered: true }),
-          }).catch(() => {})
+          }).then(r => r.json()).then(d => console.log('[cocina] item-deliver response:', d)).catch(e => console.error('[cocina] item-deliver error:', e))
         }
       }
       saveStruck(order.id, next)
