@@ -25,7 +25,7 @@ export async function GET(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let { data: order } = await (supabase as any)
       .from('orders')
-      .select('id, table_number, status, total, payment_method, employee_name, created_at, is_open, closed_at, order_items(id, quantity, unit_price, line_note, person_number, is_bonus, bonus_reason, sent_to_kitchen_at, delivered_at, menu_items(name))')
+      .select('id, table_number, status, total, payment_method, employee_name, customer_name, dining_option, notes, persons, order_number, created_at, is_open, closed_at, order_items(id, quantity, unit_price, line_note, person_number, is_bonus, bonus_reason, sent_to_kitchen_at, delivered_at, menu_items(name))')
       .eq('table_number', tableNumber)
       .eq('is_open', true)
       .order('created_at', { ascending: false })
@@ -41,7 +41,7 @@ export async function GET(
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data } = await (supabase as any)
         .from('orders')
-        .select('id, table_number, status, total, payment_method, employee_name, created_at, is_open, closed_at, order_items(id, quantity, unit_price, line_note, person_number, is_bonus, bonus_reason, sent_to_kitchen_at, delivered_at, menu_items(name))')
+        .select('id, table_number, status, total, payment_method, employee_name, customer_name, dining_option, notes, persons, order_number, created_at, is_open, closed_at, order_items(id, quantity, unit_price, line_note, person_number, is_bonus, bonus_reason, sent_to_kitchen_at, delivered_at, menu_items(name))')
         .eq('table_number', tableNumber)
         .gte('created_at', since)
         .order('created_at', { ascending: false })
@@ -77,6 +77,11 @@ export async function GET(
         total: order.total,
         payment_method: order.payment_method,
         employee_name: order.employee_name,
+        customer_name: order.customer_name ?? null,
+        dining_option: order.dining_option ?? null,
+        notes: order.notes ?? null,
+        persons: order.persons ?? null,
+        order_number: order.order_number ?? null,
         created_at: order.created_at,
         is_open: order.is_open,
         closed_at: order.closed_at,

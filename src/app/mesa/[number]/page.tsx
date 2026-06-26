@@ -23,10 +23,23 @@ type Order = {
   total: number
   payment_method: string | null
   employee_name: string | null
+  customer_name: string | null
+  dining_option: string | null
+  notes: string | null
+  persons: number | null
   created_at: string
   is_open: boolean
   closed_at: string | null
   items: OrderItem[]
+  order_number: number | null
+}
+
+type TicketConfig = {
+  header1: string
+  header2: string
+  footer1: string
+  footer2: string
+  showLogo: boolean
 }
 
 function formatTime(iso: string): string {
@@ -56,14 +69,6 @@ function timeAgo(iso: string): string {
   return `Hace ${hrs}h ${mins % 60}min`
 }
 
-function padRight(str: string, len: number): string {
-  return str.length >= len ? str.substring(0, len) : str + ' '.repeat(len - str.length)
-}
-
-function padLeft(str: string, len: number): string {
-  return str.length >= len ? str.substring(0, len) : ' '.repeat(len - str.length) + str
-}
-
 export default function MesaTicketPage() {
   const params = useParams()
   const tableNumber = params.number as string
@@ -76,6 +81,14 @@ export default function MesaTicketPage() {
   const [tipPercent, setTipPercent] = useState<number | null>(null)
   const [customTip, setCustomTip] = useState('')
   const [showTipInput, setShowTipInput] = useState(false)
+  const [ticketCfg, setTicketCfg] = useState<TicketConfig>({
+    header1: 'RESTAURANTE SUMAK',
+    header2: 'Juan B Alberdi 247, Guaymallén',
+    footer1: 'Gracias por su visita',
+    footer2: '',
+    showLogo: true,
+  })
+  const [logoUrl, setLogoUrl] = useState<string | null>(null)
 
   const fetchOrder = useCallback(async () => {
     try {
@@ -95,6 +108,28 @@ export default function MesaTicketPage() {
       setLoading(false)
     }
   }, [tableNumber])
+
+  // Cargar config del ticket
+  useEffect(() => {
+    fetch('/api/admin/settings?key=ticket_config')
+      .then((r) => r.ok ? r.json() : [])
+      .then((d: { key: string; value: string }[]) => {
+        if (d[0]?.value) {
+          try {
+            const cfg = JSON.parse(d[0].value)
+            setTicketCfg((prev) => ({ ...prev, ...cfg }))
+          } catch { /* ignore */ }
+        }
+      })
+      .catch(() => {})
+
+    fetch('/api/admin/settings?key=ticket_logo_url')
+      .then((r) => r.ok ? r.json() : [])
+      .then((d: { key: string; value: string }[]) => {
+        if (d[0]?.value) setLogoUrl(d[0].value)
+      })
+      .catch(() => {})
+  }, [])
 
   useEffect(() => {
     fetchOrder()
@@ -134,14 +169,19 @@ export default function MesaTicketPage() {
       link.href = canvas.toDataURL('image/png')
       link.click()
     } catch {
-      // Fallback: print
       window.print()
     }
   }
 
+  // Agrupar items por persona
+  const hasMultiPerson = order?.items?.some((i) => (i.person_number ?? 0) > 1) ?? false
+  const maxPerson = hasMultiPerson
+    ? Math.max(...(order?.items ?? []).map((i) => i.person_number ?? 1))
+    : 1
+
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-100 flex items-center justify-center">
+      <div className="min-h-screen bg-gray-200 flex items-center justify-center">
         <div className="animate-pulse text-gray-500 text-lg font-mono">Cargando...</div>
       </div>
     )
@@ -149,183 +189,185 @@ export default function MesaTicketPage() {
 
   if (noOrder || !order) {
     return (
-      <div className="min-h-screen bg-gray-100 flex flex-col items-center justify-center p-6 text-center">
-        <div className="bg-white rounded-lg shadow-lg p-8 max-w-xs w-full font-mono">
-          <div className="text-center text-lg font-bold mb-2">RESTAURANTE SUMAK</div>
-          <div className="text-center text-xs text-gray-500 mb-4">Juan B Alberdi 247, Guaymallén</div>
-          <div className="border-t border-dashed border-gray-300 my-3" />
-          <div className="text-center text-sm">Mesa {tableNumber}</div>
-          <div className="text-center text-xs text-gray-400 mt-2">No hay pedidos activos</div>
-          <div className="border-t border-dashed border-gray-300 my-3" />
-          <a
-            href="/"
-            className="block text-center text-amber-600 font-bold text-sm underline"
-          >
-            Ver nuestro menú
-          </a>
+      <div className="min-h-screen bg-gray-200 flex flex-col items-center justify-center p-4">
+        <div className="bg-white shadow-xl max-w-xs w-full font-mono text-center px-6 py-8" style={{ fontFamily: "'Courier New', Courier, monospace" }}>
+          {logoUrl && <img src={logoUrl} alt="Logo" className="w-16 h-16 mx-auto mb-2 object-contain" />}
+          <div className="font-bold text-sm">{ticketCfg.header1}</div>
+          <div className="text-[10px] text-gray-500">{ticketCfg.header2}</div>
+          <div className="border-t border-dashed border-gray-300 my-4" />
+          <div className="text-sm">Mesa {tableNumber}</div>
+          <div className="text-xs text-gray-400 mt-2">Sin pedidos activos</div>
+          <div className="border-t border-dashed border-gray-300 my-4" />
+          <a href="/" className="text-amber-600 font-bold text-sm underline">Ver menú</a>
         </div>
       </div>
     )
   }
 
-  const orderDate = formatDate(order.created_at)
-  const orderTime = formatTime(order.created_at)
+  const renderItems = (items: OrderItem[]) => items.map((item) => {
+    const isDelivered = !!item.delivered_at
+    const subtotal = item.unit_price * item.quantity
+    return (
+      <div key={item.id} className="py-1 border-b border-dotted border-gray-200 last:border-b-0">
+        <div className="flex text-xs leading-tight">
+          <span className="w-6 text-gray-500">{item.quantity}x</span>
+          <span className={`flex-1 ${isDelivered ? 'line-through text-gray-400' : ''}`}>
+            {item.is_bonus ? '★ ' : ''}{item.name}
+          </span>
+          <span className={`w-20 text-right ${isDelivered ? 'line-through text-gray-400' : ''}`}>
+            {item.is_bonus ? 'GRATIS' : `$${subtotal.toLocaleString('es-AR')}`}
+          </span>
+        </div>
+        {isDelivered && item.delivered_at && (
+          <div className="text-[9px] text-green-600 ml-6">✓ Entregado {formatTime(item.delivered_at)}</div>
+        )}
+        {!isDelivered && item.sent_to_kitchen_at && (
+          <div className="text-[9px] text-amber-500 ml-6">🔥 En cocina desde {formatTime(item.sent_to_kitchen_at)}</div>
+        )}
+        {!isDelivered && !item.sent_to_kitchen_at && (
+          <div className="text-[9px] text-gray-400 ml-6">⏳ En espera</div>
+        )}
+        {item.line_note && (
+          <div className={`text-[9px] ml-6 ${isDelivered ? 'text-gray-300' : 'text-amber-600'}`}>→ {item.line_note}</div>
+        )}
+        {item.is_bonus && item.bonus_reason && (
+          <div className="text-[9px] ml-6 text-purple-500">({item.bonus_reason})</div>
+        )}
+      </div>
+    )
+  })
 
   return (
-    <div className="min-h-screen bg-gray-100 py-4 px-3">
-      {/* Ticket con formato recibo */}
+    <div className="min-h-screen bg-gray-200 py-4 px-3">
+      {/* Ticket */}
       <div
         ref={ticketRef}
-        className="max-w-sm mx-auto bg-white shadow-xl rounded-sm overflow-hidden"
+        className="max-w-xs mx-auto bg-white shadow-xl"
         style={{ fontFamily: "'Courier New', Courier, monospace" }}
       >
-        {/* Borde superior zigzag */}
-        <div className="h-3 bg-white" style={{
-          backgroundImage: 'linear-gradient(135deg, #f3f4f6 33.33%, transparent 33.33%), linear-gradient(225deg, #f3f4f6 33.33%, transparent 33.33%)',
-          backgroundSize: '12px 12px',
+        {/* Zigzag top */}
+        <div className="h-3" style={{
+          backgroundImage: 'linear-gradient(135deg, #e5e7eb 33.33%, transparent 33.33%), linear-gradient(225deg, #e5e7eb 33.33%, transparent 33.33%)',
+          backgroundSize: '10px 10px',
         }} />
 
         {/* Header */}
-        <div className="px-5 pt-4 pb-2 text-center">
-          <div className="text-lg font-bold tracking-wider">RESTAURANTE SUMAK</div>
-          <div className="text-[10px] text-gray-500 mt-0.5">Juan B Alberdi 247, Guaymallén, Mendoza</div>
-          <div className="text-[10px] text-gray-500">Tel: +54 9 261 752-6242</div>
+        <div className="px-4 pt-3 pb-1 text-center">
+          {logoUrl && ticketCfg.showLogo && (
+            <img src={logoUrl} alt="Logo" className="w-14 h-14 mx-auto mb-1 object-contain" />
+          )}
+          <div className="font-bold text-sm tracking-wide">{ticketCfg.header1}</div>
+          {ticketCfg.header2 && <div className="text-[9px] text-gray-500">{ticketCfg.header2}</div>}
         </div>
 
-        <div className="mx-5 border-t-2 border-dashed border-gray-300" />
+        <div className="mx-4 border-t border-dashed border-gray-300" />
 
-        {/* Info pedido */}
-        <div className="px-5 py-2 text-xs">
+        {/* Datos del pedido */}
+        <div className="px-4 py-2 text-[10px] space-y-0.5">
           <div className="flex justify-between">
-            <span>MESA: <span className="font-bold text-base">{tableNumber}</span></span>
-            <span>{orderDate} {orderTime}</span>
+            <span>Fecha: {formatDate(order.created_at)}</span>
+            <span>Hora: {formatTime(order.created_at)}</span>
           </div>
-          <div className="flex justify-between mt-1">
+          {order.order_number && (
+            <div>Pedido: P-{String(order.order_number).padStart(3, '0')}</div>
+          )}
+          <div className="flex justify-between">
+            <span className="font-bold text-sm">Mesa: {tableNumber}</span>
             <span>⏱️ {timeAgo(order.created_at)}</span>
-            {order.employee_name && <span>Atendió: {order.employee_name}</span>}
           </div>
-          {isPaid && (
-            <div className="text-center mt-2 font-bold text-green-700 text-sm bg-green-50 py-1 rounded">
-              ★ PAGADO ★
-            </div>
+          {order.dining_option && <div>Modalidad: {order.dining_option}</div>}
+          {order.employee_name && <div>Atendió: {order.employee_name}</div>}
+          {order.customer_name && order.customer_name !== 'POS' && (
+            <div>Cliente: {order.customer_name}</div>
           )}
-          {!isPaid && allDelivered && (
-            <div className="text-center mt-2 font-bold text-blue-700 text-sm bg-blue-50 py-1 rounded">
-              ★ PEDIDO COMPLETO ★
-            </div>
-          )}
+          {hasMultiPerson && <div>Personas: {maxPerson}</div>}
+          {order.notes && <div>Nota: {order.notes}</div>}
         </div>
 
-        <div className="mx-5 border-t border-dashed border-gray-300" />
+        {/* Status */}
+        {isPaid && (
+          <div className="mx-4 text-center font-bold text-[10px] bg-gray-100 py-1 border border-gray-300">
+            ★ ★ ★  PAGADO  ★ ★ ★
+          </div>
+        )}
+        {!isPaid && allDelivered && (
+          <div className="mx-4 text-center font-bold text-[10px] bg-gray-100 py-1 border border-gray-300">
+            ★ PEDIDO COMPLETO ★
+          </div>
+        )}
 
-        {/* Column headers */}
-        <div className="px-5 py-1.5 text-[10px] text-gray-500 flex">
-          <span className="flex-1">{padRight('ITEM', 20)}</span>
-          <span className="w-8 text-center">QTY</span>
-          <span className="w-16 text-right">PRECIO</span>
-          <span className="w-14 text-right">ESTADO</span>
-        </div>
-
-        <div className="mx-5 border-t border-gray-200" />
+        <div className="mx-4 border-t border-dashed border-gray-300 mt-1" />
 
         {/* Items */}
-        <div className="px-5 py-1">
-          {order.items.map((item) => {
-            const isDelivered = !!item.delivered_at
-            const subtotal = item.unit_price * item.quantity
-            return (
-              <div key={item.id} className="py-1.5 border-b border-gray-50 last:border-b-0">
-                <div className={`flex text-xs ${isDelivered ? 'text-gray-400' : 'text-gray-800'}`}>
-                  <span className={`flex-1 font-medium ${isDelivered ? 'line-through' : ''}`}>
-                    {item.name}
-                  </span>
-                  <span className="w-8 text-center">{item.quantity}</span>
-                  <span className={`w-16 text-right ${isDelivered ? 'line-through' : ''}`}>
-                    ${subtotal.toLocaleString('es-AR')}
-                  </span>
-                  <span className="w-14 text-right text-[10px]">
-                    {isDelivered && item.delivered_at
-                      ? `✓${formatTime(item.delivered_at)}`
-                      : item.sent_to_kitchen_at
-                        ? '🔥cocina'
-                        : '⏳espera'
-                    }
-                  </span>
+        <div className="px-4 py-1">
+          {hasMultiPerson ? (
+            Array.from({ length: maxPerson }, (_, i) => i + 1).map((p) => {
+              const personItems = order.items.filter((i) => (i.person_number ?? 1) === p)
+              if (personItems.length === 0) return null
+              return (
+                <div key={p}>
+                  <div className="text-[10px] text-gray-500 text-center my-1">-- P{p} --</div>
+                  {renderItems(personItems)}
                 </div>
-                {item.line_note && (
-                  <div className={`text-[10px] ml-2 ${isDelivered ? 'text-gray-300' : 'text-amber-600'}`}>
-                    → {item.line_note}
-                  </div>
-                )}
-                {item.is_bonus && (
-                  <div className="text-[10px] ml-2 text-purple-500">
-                    ★ BONIFICADO{item.bonus_reason ? `: ${item.bonus_reason}` : ''}
-                  </div>
-                )}
-              </div>
-            )
-          })}
+              )
+            })
+          ) : (
+            renderItems(order.items)
+          )}
         </div>
 
-        <div className="mx-5 border-t-2 border-dashed border-gray-300" />
+        <div className="mx-4 border-t-2 border-dashed border-gray-400" />
 
         {/* Total */}
-        <div className="px-5 py-3">
-          <div className="flex justify-between text-sm font-bold">
-            <span>TOTAL</span>
-            <span className="text-lg">${total.toLocaleString('es-AR')}</span>
+        <div className="px-4 py-2">
+          <div className="flex justify-between font-bold text-sm">
+            <span>TOTAL:</span>
+            <span>${total.toLocaleString('es-AR')}</span>
           </div>
           {order.payment_method && (
-            <div className="flex justify-between text-[10px] text-gray-400 mt-1">
-              <span>Método de pago:</span>
-              <span>{order.payment_method}</span>
+            <div className="text-[10px] text-gray-500 mt-0.5">
+              Pago: {order.payment_method === 'Transferencia' ? 'TRANSFER' : order.payment_method === 'Mixto' ? 'MIXTO' : order.payment_method.toUpperCase()}
             </div>
           )}
         </div>
 
-        <div className="mx-5 border-t border-dashed border-gray-300" />
+        <div className="mx-4 border-t border-dashed border-gray-300" />
 
-        {/* Footer ticket */}
-        <div className="px-5 py-3 text-center">
-          <div className="text-[10px] text-gray-400">Gracias por su visita</div>
-          <div className="text-[10px] text-gray-400 mt-0.5">restaurante-sumak.vercel.app</div>
-          <div className="text-[10px] text-gray-300 mt-1">
-            {padLeft('', 10)}#{order.id.substring(0, 8).toUpperCase()}{padRight('', 10)}
-          </div>
+        {/* Footer */}
+        <div className="px-4 py-2 text-center text-[9px] text-gray-400">
+          {ticketCfg.footer1 && <div>{ticketCfg.footer1}</div>}
+          {ticketCfg.footer2 && <div>{ticketCfg.footer2}</div>}
+          <div className="mt-1 text-gray-300">#{order.id.substring(0, 8).toUpperCase()}</div>
         </div>
 
-        {/* Borde inferior zigzag */}
-        <div className="h-3 bg-white" style={{
-          backgroundImage: 'linear-gradient(315deg, #f3f4f6 33.33%, transparent 33.33%), linear-gradient(45deg, #f3f4f6 33.33%, transparent 33.33%)',
-          backgroundSize: '12px 12px',
+        {/* Zigzag bottom */}
+        <div className="h-3" style={{
+          backgroundImage: 'linear-gradient(315deg, #e5e7eb 33.33%, transparent 33.33%), linear-gradient(45deg, #e5e7eb 33.33%, transparent 33.33%)',
+          backgroundSize: '10px 10px',
         }} />
       </div>
 
-      {/* Propina — fuera del ticket para que no se descargue */}
+      {/* Propina — fuera del ticket */}
       {(order.is_open || isPaid) && (
-        <div className="max-w-sm mx-auto mt-4 bg-white rounded-lg shadow-md p-4" style={{ fontFamily: "'Courier New', Courier, monospace" }}>
-          <div className="text-center font-bold text-sm mb-3">💰 ¿Querés dejar propina?</div>
-          <div className="flex gap-2 mb-3">
+        <div className="max-w-xs mx-auto mt-3 bg-white shadow-md p-4" style={{ fontFamily: "'Courier New', Courier, monospace" }}>
+          <div className="text-center font-bold text-xs mb-2">¿Querés dejar propina?</div>
+          <div className="flex gap-1.5 mb-2">
             {[10, 15, 20].map((pct) => (
               <button
                 key={pct}
                 onClick={() => { setTipPercent(tipPercent === pct ? null : pct); setShowTipInput(false); setCustomTip('') }}
-                className={`flex-1 py-2 rounded text-xs font-bold transition-all border ${
-                  tipPercent === pct
-                    ? 'bg-amber-600 text-white border-amber-600'
-                    : 'bg-white text-gray-700 border-gray-300'
+                className={`flex-1 py-1.5 rounded text-[10px] font-bold transition-all border ${
+                  tipPercent === pct ? 'bg-gray-800 text-white border-gray-800' : 'bg-white text-gray-700 border-gray-300'
                 }`}
               >
                 {pct}%
-                <div className="text-[10px] font-normal">${Math.round(total * pct / 100).toLocaleString('es-AR')}</div>
+                <div className="text-[9px] font-normal">${Math.round(total * pct / 100).toLocaleString('es-AR')}</div>
               </button>
             ))}
             <button
               onClick={() => { setTipPercent(null); setShowTipInput(!showTipInput) }}
-              className={`flex-1 py-2 rounded text-xs font-bold transition-all border ${
-                showTipInput
-                  ? 'bg-amber-600 text-white border-amber-600'
-                  : 'bg-white text-gray-700 border-gray-300'
+              className={`flex-1 py-1.5 rounded text-[10px] font-bold transition-all border ${
+                showTipInput ? 'bg-gray-800 text-white border-gray-800' : 'bg-white text-gray-700 border-gray-300'
               }`}
             >
               Otro
@@ -336,8 +378,8 @@ export default function MesaTicketPage() {
               type="number"
               value={customTip}
               onChange={(e) => setCustomTip(e.target.value)}
-              placeholder="Monto de propina"
-              className="w-full border border-gray-300 rounded px-3 py-2 text-xs mb-3 font-mono"
+              placeholder="Monto"
+              className="w-full border border-gray-300 rounded px-2 py-1.5 text-xs mb-2 font-mono"
             />
           )}
           {tipAmount > 0 && (
@@ -345,29 +387,27 @@ export default function MesaTicketPage() {
               href={`https://www.mercadopago.com.ar/checkout/v1/payment/redirect/?preference-id=propina-${order.id}&amount=${tipAmount}`}
               target="_blank"
               rel="noopener noreferrer"
-              className="block w-full bg-green-600 text-white text-center font-bold py-2.5 rounded text-sm hover:bg-green-700 transition-colors"
+              className="block w-full bg-green-600 text-white text-center font-bold py-2 rounded text-xs"
             >
-              Dejar propina ${tipAmount.toLocaleString('es-AR')} 💚
+              Dejar propina ${tipAmount.toLocaleString('es-AR')}
             </a>
           )}
         </div>
       )}
 
-      {/* Acciones — fuera del ticket */}
-      <div className="max-w-sm mx-auto mt-4 space-y-2 pb-8">
+      {/* Botones */}
+      <div className="max-w-xs mx-auto mt-3 space-y-2 pb-6" style={{ fontFamily: "'Courier New', Courier, monospace" }}>
         <button
           onClick={handleDownload}
-          className="w-full bg-gray-800 text-white text-center font-bold py-3 rounded-lg text-sm hover:bg-gray-900 transition-colors"
-          style={{ fontFamily: "'Courier New', Courier, monospace" }}
+          className="w-full bg-gray-800 text-white text-center font-bold py-2.5 rounded text-xs"
         >
-          📥 Descargar ticket
+          📥 DESCARGAR TICKET
         </button>
         <a
           href="/"
-          className="block w-full bg-amber-600 text-white text-center font-bold py-3 rounded-lg text-sm hover:bg-amber-700 transition-colors"
-          style={{ fontFamily: "'Courier New', Courier, monospace" }}
+          className="block w-full bg-amber-600 text-white text-center font-bold py-2.5 rounded text-xs"
         >
-          📋 Ver nuestro menú
+          📋 VER MENÚ COMPLETO
         </a>
       </div>
     </div>
