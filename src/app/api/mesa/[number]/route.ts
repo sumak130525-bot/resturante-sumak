@@ -81,8 +81,13 @@ export async function GET(
       delivered_at: i.delivered_at,
     }))
 
+    // Debug: log raw order_items delivered_at
+    const rawDelivered = (order.order_items ?? []).map((i: any) => ({ id: i.id?.slice(0,8), delivered_at: i.delivered_at }))
+    console.log('[mesa-api-v2] raw order_items delivered_at:', JSON.stringify(rawDelivered))
+
     return NextResponse.json({
-      _v: 2,
+      _v: 3,
+      _debug_raw: (order.order_items ?? []).map((i: any) => ({ id: i.id?.slice(0,8), d: i.delivered_at, s: i.sent_to_kitchen_at })),
       order: {
         id: order.id,
         table_number: order.table_number,
