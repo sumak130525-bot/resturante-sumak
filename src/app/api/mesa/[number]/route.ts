@@ -85,9 +85,17 @@ export async function GET(
     const rawDelivered = (order.order_items ?? []).map((i: any) => ({ id: i.id?.slice(0,8), delivered_at: i.delivered_at }))
     console.log('[mesa-api-v2] raw order_items delivered_at:', JSON.stringify(rawDelivered))
 
+    // Debug: query directa a PostgREST para comparar
+    const directRes = await fetch(
+      `${process.env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1/order_items?order_id=eq.${order.id}&select=id,delivered_at`,
+      { headers: { apikey: process.env.SUPABASE_SERVICE_ROLE_KEY!, Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY!}` } }
+    )
+    const directItems = await directRes.json()
+
     return NextResponse.json({
-      _v: 3,
+      _v: 4,
       _debug_raw: (order.order_items ?? []).map((i: any) => ({ id: i.id?.slice(0,8), d: i.delivered_at, s: i.sent_to_kitchen_at })),
+      _debug_direct: directItems,
       order: {
         id: order.id,
         table_number: order.table_number,
