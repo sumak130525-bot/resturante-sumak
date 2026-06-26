@@ -6,7 +6,8 @@ export const dynamic = 'force-dynamic'
 function getAdmin() {
   return createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    { auth: { persistSession: false } }
   )
 }
 
@@ -81,6 +82,7 @@ export async function GET(
     }))
 
     return NextResponse.json({
+      _v: 2,
       order: {
         id: order.id,
         table_number: order.table_number,
@@ -98,6 +100,8 @@ export async function GET(
         closed_at: order.closed_at,
         items,
       },
+    }, {
+      headers: { 'Cache-Control': 'no-store, no-cache, must-revalidate', 'CDN-Cache-Control': 'no-store' },
     })
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Error interno'
