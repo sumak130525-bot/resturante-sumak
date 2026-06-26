@@ -16,14 +16,26 @@ export async function POST(request: NextRequest) {
     { auth: { persistSession: false } }
   )
 
+  const now = new Date().toISOString()
+
+  // Marcar orden como delivered
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data, error } = await (supabase as any)
     .from('orders')
-    .update({ status: 'delivered' })
+    .update({ status: 'delivered', delivered_at: now })
     .eq('id', id)
     .select()
     .single()
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+  // Marcar todos los items como delivered_at (los que no lo tengan aún)
+  await supabase
+    .from('order_items')
+    .update({ delivered_at: now })
+    .eq('order_id', id)
+    .is('delivered_at', null)
+    .then(() => {}, () => {}) // non-fatal
+
   return NextResponse.json(data)
 }

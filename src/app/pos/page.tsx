@@ -2821,6 +2821,7 @@ function TicketPanel({
   activeOpenOrder,
   selectedBill,
   onBillSelect,
+  onForcePrint,
   bills = [1000, 2000, 10000, 20000],
 }: {
   items: TicketItem[]
@@ -2860,6 +2861,7 @@ function TicketPanel({
   activeOpenOrder?: { id: string; table_number: number; existingItems: TicketItem[] } | null
   selectedBill?: number | null
   onBillSelect?: (bill: number) => void
+  onForcePrint?: (v: boolean) => void
   bills?: number[]
 }) {
   const total = items.reduce((s, i) => {
@@ -3140,9 +3142,37 @@ function TicketPanel({
             )}
 
             {/* Cobrar — solo cajero/gerente/dueño */}
-            {(canCharge ?? true) && (
+            {(canCharge ?? true) && paymentMethod === 'Transferencia' && (
+              <div className="flex gap-2">
+                <button
+                  onClick={() => { onForcePrint?.(false); onDirectSubmit() }}
+                  disabled={isEmpty || submitting}
+                  className={`flex-1 py-4 rounded-2xl font-black text-base tracking-wide transition-all active:scale-95 shadow-md ${
+                    isEmpty || submitting
+                      ? 'bg-gray-300 text-gray-400 cursor-not-allowed'
+                      : 'bg-green-500 hover:bg-green-600 text-white cursor-pointer'
+                  }`}
+                  style={{ minHeight: 56 }}
+                >
+                  {submitting ? 'Cobrando...' : '✅ COBRAR'}
+                </button>
+                <button
+                  onClick={() => { onForcePrint?.(true); onDirectSubmit() }}
+                  disabled={isEmpty || submitting}
+                  className={`flex-1 py-4 rounded-2xl font-black text-base tracking-wide transition-all active:scale-95 shadow-md ${
+                    isEmpty || submitting
+                      ? 'bg-gray-300 text-gray-400 cursor-not-allowed'
+                      : 'bg-blue-500 hover:bg-blue-600 text-white cursor-pointer'
+                  }`}
+                  style={{ minHeight: 56 }}
+                >
+                  {submitting ? 'Cobrando...' : '🖨️ COBRAR + TICKET'}
+                </button>
+              </div>
+            )}
+            {(canCharge ?? true) && paymentMethod !== 'Transferencia' && (
               <button
-                onClick={onDirectSubmit}
+                onClick={() => { onForcePrint?.(true); onDirectSubmit() }}
                 disabled={isEmpty || submitting}
                 className={`w-full py-4 rounded-2xl font-black text-lg tracking-wide transition-all active:scale-95 shadow-md ${
                   isEmpty || submitting
@@ -4587,6 +4617,7 @@ export default function POSPage() {
     }
   }, [activeOpenOrder])
 
+  const [forceprint, setForceprint] = useState(false)
   const handleSubmit = useCallback(async () => {
     if (ticketItems.length === 0) return
     setSubmitting(true)
@@ -4664,22 +4695,25 @@ export default function POSPage() {
         setOpenTablesRefresh((n) => n + 1)
         setToast(`Mesa ${closedTableNumber} cobrada`)
 
-        // Imprimir ticket
-        const { cfg: freshCfg, logoUrl: freshLogoUrl } = await fetchFreshPrintConfig()
-        const ticketText = buildTicketText(snapshot, freshCfg, !!printServerUrl)
-        let printed = false
-        if (printServerUrl) {
-          printed = await tryPrintServer(ticketText, printServerUrl, freshCfg, freshLogoUrl)
-          if (printed) {
-            if (paymentMethod === 'Efectivo' || paymentMethod === 'Mixto') {
-              void tryOpenDrawer(printServerUrl)
+        // Imprimir ticket (Efectivo/Mixto siempre, Transfer opcional)
+        const shouldPrintOpen = paymentMethod === 'Efectivo' || paymentMethod === 'Mixto' || forceprint
+        if (shouldPrintOpen) {
+          const { cfg: freshCfg, logoUrl: freshLogoUrl } = await fetchFreshPrintConfig()
+          const ticketText = buildTicketText(snapshot, freshCfg, !!printServerUrl)
+          let printed = false
+          if (printServerUrl) {
+            printed = await tryPrintServer(ticketText, printServerUrl, freshCfg, freshLogoUrl)
+            if (printed) {
+              if (paymentMethod === 'Efectivo' || paymentMethod === 'Mixto') {
+                void tryOpenDrawer(printServerUrl)
+              }
+              setToast(`Mesa ${closedTableNumber} cobrada · Ticket impreso`)
             }
-            setToast(`Mesa ${closedTableNumber} cobrada · Ticket impreso`)
           }
-        }
-        if (!printed) {
-          const fallbackText = buildTicketText(snapshot, freshCfg, false)
-          triggerPrintFallback(fallbackText, freshLogoUrl, freshCfg)
+          if (!printed) {
+            const fallbackText = buildTicketText(snapshot, freshCfg, false)
+            triggerPrintFallback(fallbackText, freshLogoUrl, freshCfg)
+          }
         }
         return
       }
@@ -4781,24 +4815,27 @@ export default function POSPage() {
       setToast(toastMsg)
 
       // Print ticket directly (print-server + fallback)
-      // Fetch fresh config so admin changes are applied immediately — no cache
-      const { cfg: freshCfg, logoUrl: freshLogoUrl } = await fetchFreshPrintConfig()
-      const ticketText = buildTicketText(snapshot, freshCfg, !!printServerUrl)
-      let printed = false
-      if (printServerUrl) {
-        printed = await tryPrintServer(ticketText, printServerUrl, freshCfg, freshLogoUrl)
-        if (printed) {
-          // Open cash drawer for cash or mixed
-          if (paymentMethod === 'Efectivo' || paymentMethod === 'Mixto') {
-            void tryOpenDrawer(printServerUrl)
+      // Efectivo/Mixto: siempre imprime (necesita abrir caja)
+      // Transferencia: solo imprime si el usuario lo pidió
+      const shouldPrint = paymentMethod === 'Efectivo' || paymentMethod === 'Mixto' || forceprint
+      if (shouldPrint) {
+        const { cfg: freshCfg, logoUrl: freshLogoUrl } = await fetchFreshPrintConfig()
+        const ticketText = buildTicketText(snapshot, freshCfg, !!printServerUrl)
+        let printed = false
+        if (printServerUrl) {
+          printed = await tryPrintServer(ticketText, printServerUrl, freshCfg, freshLogoUrl)
+          if (printed) {
+            // Open cash drawer for cash or mixed
+            if (paymentMethod === 'Efectivo' || paymentMethod === 'Mixto') {
+              void tryOpenDrawer(printServerUrl)
+            }
+            setToast('Pedido enviado · Ticket impreso')
           }
-          setToast('Pedido enviado · Ticket impreso')
         }
-      }
-      if (!printed) {
-        // Regenerate text WITHOUT print-server markers for HTML fallback
-        const fallbackText = buildTicketText(snapshot, freshCfg, false)
-        triggerPrintFallback(fallbackText, freshLogoUrl, freshCfg)
+        if (!printed) {
+          const fallbackText = buildTicketText(snapshot, freshCfg, false)
+          triggerPrintFallback(fallbackText, freshLogoUrl, freshCfg)
+        }
       }
       setShowPrintBtn(false)
     } catch (err) {
@@ -4807,7 +4844,7 @@ export default function POSPage() {
     } finally {
       setSubmitting(false)
     }
-  }, [activeOpenOrder, session, ticketItems, diningOption, tableNumber, paymentMethod, cashAmount, transferAmount, customerName, orderNotes, persons, fetchFreshPrintConfig, printServerUrl])
+  }, [activeOpenOrder, session, ticketItems, diningOption, tableNumber, paymentMethod, cashAmount, transferAmount, customerName, orderNotes, persons, fetchFreshPrintConfig, printServerUrl, forceprint])
 
   // Direct submit: goes straight if no modal needed; opens mixed modal for Mixto
   const handleDirectSubmit = useCallback(() => {
@@ -5274,6 +5311,7 @@ export default function POSPage() {
               activeOpenOrder={activeOpenOrder}
               selectedBill={selectedBill}
               onBillSelect={(bill) => setSelectedBill(selectedBill === bill ? null : bill)}
+              onForcePrint={setForceprint}
               bills={posBills}
             />
           )}
