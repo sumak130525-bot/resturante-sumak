@@ -23,16 +23,6 @@ function MenuIcon() {
 function TicketIcon() {
   return (
     <svg width="32" height="32" viewBox="0 0 48 48" fill="none">
-      <circle cx="24" cy="24" r="22" fill="#EAB308" />
-      <path d="M20 14l8 0M15 20l18 0M15 26l18 0M15 32l12 0" stroke="white" strokeWidth="2" strokeLinecap="round" />
-      <polygon points="24,10 26.5,17 34,17 28,21.5 30,29 24,24.5 18,29 20,21.5 14,17 21.5,17" fill="white" />
-    </svg>
-  )
-}
-
-function LocationIcon() {
-  return (
-    <svg width="32" height="32" viewBox="0 0 48 48" fill="none">
       <circle cx="24" cy="24" r="22" fill="#16A34A" />
       <rect x="13" y="10" width="22" height="28" rx="2" stroke="white" strokeWidth="2" fill="none" />
       <line x1="17" y1="16" x2="31" y2="16" stroke="white" strokeWidth="1.5" />
@@ -40,6 +30,15 @@ function LocationIcon() {
       <line x1="17" y1="24" x2="31" y2="24" stroke="white" strokeWidth="1.5" />
       <line x1="13" y1="30" x2="35" y2="30" stroke="white" strokeWidth="1.5" strokeDasharray="3 2" />
       <line x1="17" y1="34" x2="31" y2="34" stroke="white" strokeWidth="1.5" />
+    </svg>
+  )
+}
+
+function StarIcon() {
+  return (
+    <svg width="32" height="32" viewBox="0 0 48 48" fill="none">
+      <circle cx="24" cy="24" r="22" fill="#EAB308" />
+      <polygon points="24,8 28.5,18 39,19.5 31.5,27 33.5,38 24,32.5 14.5,38 16.5,27 9,19.5 19.5,18" fill="white" />
     </svg>
   )
 }
@@ -69,19 +68,19 @@ function MesaCard({ mesa }: { mesa: number }) {
         {mesa}
       </div>
 
-      {/* Icons + QR codes */}
+      {/* Icons + QR codes: 1-Rojo Menú, 2-Amarillo Ubicación, 3-Verde Ticket */}
       <div style={{ display: 'flex', justifyContent: 'center', gap: 6, flex: 1, alignItems: 'flex-start' }}>
         <div style={{ textAlign: 'center' }}>
           <div style={{ marginBottom: 2 }}><MenuIcon /></div>
           <QRCodeSVG value={menuUrl} size={110} bgColor="#ffffff" fgColor="#000000" level="M" />
         </div>
         <div style={{ textAlign: 'center' }}>
-          <div style={{ marginBottom: 2 }}><TicketIcon /></div>
-          <QRCodeSVG value={ticketUrl} size={110} bgColor="#ffffff" fgColor="#000000" level="M" />
+          <div style={{ marginBottom: 2 }}><StarIcon /></div>
+          <QRCodeSVG value={mapsUrl} size={110} bgColor="#ffffff" fgColor="#000000" level="M" />
         </div>
         <div style={{ textAlign: 'center' }}>
-          <div style={{ marginBottom: 2 }}><LocationIcon /></div>
-          <QRCodeSVG value={mapsUrl} size={110} bgColor="#ffffff" fgColor="#000000" level="M" />
+          <div style={{ marginBottom: 2 }}><TicketIcon /></div>
+          <QRCodeSVG value={ticketUrl} size={110} bgColor="#ffffff" fgColor="#000000" level="M" />
         </div>
       </div>
     </div>
