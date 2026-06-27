@@ -10,7 +10,7 @@ const BASE_URL =
     ? `${window.location.origin}`
     : process.env.NEXT_PUBLIC_BASE_URL ?? 'http://localhost:3000'
 
-const MAPS_URL = 'https://www.google.com/maps/place/-32.8949528,-68.8286573'
+const MAPS_URL = 'https://www.google.com/maps/place/SUMAK/@-32.8949139,-68.8292403,19z/data=!4m6!3m5!1s0x967e09a1dd6eefdd:0x698ad41b5908215c!8m2!3d-32.8949528!4d-68.8286573!16s%2Fg%2F11xgssdlt9?entry=ttu&g_ep=EgoyMDI2MDYyNC4wIKXMDSoASAFQAw%3D%3D'
 
 interface QREntry {
   id: number
@@ -61,17 +61,14 @@ export default function AdminQRPage() {
               border-radius: 16px;
               padding: 20px 16px;
               text-align: center;
-              width: 280px;
+              width: 420px;
               page-break-inside: avoid;
             }
             .qr-card h2 { font-size: 22px; font-weight: bold; color: #3B2B1A; margin-bottom: 16px; }
-            .qr-row { display: flex; justify-content: center; gap: 12px; margin-bottom: 8px; }
+            .qr-row { display: flex; justify-content: center; gap: 16px; }
             .qr-item { text-align: center; }
             .qr-item svg { display: block; margin: 0 auto; }
-            .qr-label { font-size: 10px; font-weight: bold; color: #3B2B1A; margin-top: 4px; }
-            .qr-big { margin-bottom: 12px; }
-            .qr-big svg { display: block; margin: 0 auto; }
-            .qr-big-label { font-size: 13px; font-weight: bold; color: #3B2B1A; margin-top: 6px; }
+            .qr-label { font-size: 11px; font-weight: bold; color: #3B2B1A; margin-bottom: 6px; }
             @media print {
               @page { margin: 1cm; }
               .qr-card { break-inside: avoid; }
@@ -132,58 +129,53 @@ export default function AdminQRPage() {
               <div
                 key={entry.id}
                 className="qr-card bg-white rounded-2xl border-2 border-sumak-brown p-5 text-center"
-                style={{ width: 280 }}
+                style={{ width: 420 }}
               >
                 {/* Nombre de mesa */}
                 <h2 className="font-serif text-xl font-bold text-sumak-brown mb-4">
                   Mesa {mesa}
                 </h2>
 
-                {/* QR grande: Ticket */}
-                <div className="qr-big mb-3">
-                  <QRCodeSVG
-                    value={getTicketUrl(mesa)}
-                    size={140}
-                    bgColor="#ffffff"
-                    fgColor="#3B2B1A"
-                    level="M"
-                    includeMargin
-                  />
-                  <p className="qr-big-label text-sm font-bold text-sumak-brown mt-1">
-                    🎫 Tu Ticket
-                  </p>
-                </div>
-
-                {/* Separador */}
-                <div className="border-t border-dashed border-gray-300 my-3" />
-
-                {/* QR chicos: Menú y Maps */}
+                {/* 3 QR en fila horizontal: Menú, Ticket, Ubicación */}
                 <div className="qr-row flex justify-center gap-4">
                   <div className="qr-item text-center">
-                    <QRCodeSVG
-                      value={getMenuUrl()}
-                      size={80}
-                      bgColor="#ffffff"
-                      fgColor="#3B2B1A"
-                      level="M"
-                      includeMargin
-                    />
-                    <p className="qr-label text-[10px] font-bold text-sumak-brown mt-1">
+                    <p className="qr-label text-[11px] font-bold text-sumak-brown mb-2">
                       📋 Menú
                     </p>
-                  </div>
-                  <div className="qr-item text-center">
                     <QRCodeSVG
-                      value={MAPS_URL}
-                      size={80}
+                      value={getMenuUrl()}
+                      size={110}
                       bgColor="#ffffff"
                       fgColor="#3B2B1A"
                       level="M"
                       includeMargin
                     />
-                    <p className="qr-label text-[10px] font-bold text-sumak-brown mt-1">
+                  </div>
+                  <div className="qr-item text-center">
+                    <p className="qr-label text-[11px] font-bold text-sumak-brown mb-2">
+                      🎫 Ticket
+                    </p>
+                    <QRCodeSVG
+                      value={getTicketUrl(mesa)}
+                      size={110}
+                      bgColor="#ffffff"
+                      fgColor="#3B2B1A"
+                      level="M"
+                      includeMargin
+                    />
+                  </div>
+                  <div className="qr-item text-center">
+                    <p className="qr-label text-[11px] font-bold text-sumak-brown mb-2">
                       📍 Ubicación
                     </p>
+                    <QRCodeSVG
+                      value={MAPS_URL}
+                      size={110}
+                      bgColor="#ffffff"
+                      fgColor="#3B2B1A"
+                      level="M"
+                      includeMargin
+                    />
                   </div>
                 </div>
               </div>
