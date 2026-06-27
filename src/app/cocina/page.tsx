@@ -396,8 +396,6 @@ function OrderCard({
     if (isDelivered) return
     const item = displayItems[idx]
     const itemId = item?.id
-    console.log('[cocina-v3] toggleStruck', { idx, itemId, itemName: item?.name })
-
     const wasStruck = struckIndices.has(idx)
     
     // Actualizar UI inmediatamente
@@ -415,12 +413,11 @@ function OrderCard({
     // Guardar en DB fuera del setState
     if (itemId) {
       const delivered = !wasStruck
-      console.log('[cocina] item-deliver', { itemId, delivered })
       fetch('/api/cocina/orders/item-deliver', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ item_id: itemId, delivered }),
-      }).then(r => r.json()).then(d => console.log('[cocina] item-deliver response:', d)).catch(e => console.error('[cocina] item-deliver error:', e))
+      }).catch(() => {})
     }
   }
 
