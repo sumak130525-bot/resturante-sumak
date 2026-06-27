@@ -67,11 +67,18 @@ export async function GET(
       return NextResponse.json({ order: null, message: 'No hay pedidos para esta mesa' })
     }
 
-    // Query directa de order_items para obtener delivered_at (workaround schema cache PostgREST)
-    const { data: freshItems } = await supabase
-      .from('order_items')
-      .select('id, quantity, unit_price, line_note, person_number, is_bonus, bonus_reason, sent_to_kitchen_at, delivered_at, menu_items(name)')
-      .eq('order_id', order.id)
+    // Query directa a PostgREST (bypass Supabase JS schema cache)
+    const itemsRes = await fetch(
+      `${process.env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1/order_items?order_id=eq.${order.id}&select=id,quantity,unit_price,line_note,person_number,is_bonus,bonus_reason,sent_to_kitchen_at,delivered_at,menu_items(name)`,
+      {
+        headers: {
+          apikey: process.env.SUPABASE_SERVICE_ROLE_KEY!,
+          Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY!}`,
+        },
+        cache: 'no-store',
+      }
+    )
+    const freshItems = await itemsRes.json()
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const items = (freshItems ?? []).map((i: any) => ({
