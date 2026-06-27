@@ -4618,6 +4618,7 @@ export default function POSPage() {
   }, [activeOpenOrder])
 
   const [forceprint, setForceprint] = useState(false)
+  const forceprintRef = useRef(false)
   const handleSubmit = useCallback(async () => {
     if (ticketItems.length === 0) return
     setSubmitting(true)
@@ -4696,7 +4697,7 @@ export default function POSPage() {
         setToast(`Mesa ${closedTableNumber} cobrada`)
 
         // Imprimir ticket (Efectivo/Mixto siempre, Transfer opcional)
-        const shouldPrintOpen = paymentMethod === 'Efectivo' || paymentMethod === 'Mixto' || forceprint
+        const shouldPrintOpen = paymentMethod === 'Efectivo' || paymentMethod === 'Mixto' || forceprintRef.current
         if (shouldPrintOpen) {
           const { cfg: freshCfg, logoUrl: freshLogoUrl } = await fetchFreshPrintConfig()
           const ticketText = buildTicketText(snapshot, freshCfg, !!printServerUrl)
@@ -4817,7 +4818,7 @@ export default function POSPage() {
       // Print ticket directly (print-server + fallback)
       // Efectivo/Mixto: siempre imprime (necesita abrir caja)
       // Transferencia: solo imprime si el usuario lo pidió
-      const shouldPrint = paymentMethod === 'Efectivo' || paymentMethod === 'Mixto' || forceprint
+      const shouldPrint = paymentMethod === 'Efectivo' || paymentMethod === 'Mixto' || forceprintRef.current
       if (shouldPrint) {
         const { cfg: freshCfg, logoUrl: freshLogoUrl } = await fetchFreshPrintConfig()
         const ticketText = buildTicketText(snapshot, freshCfg, !!printServerUrl)
@@ -4843,6 +4844,8 @@ export default function POSPage() {
       setToast(`Error: ${msg}`)
     } finally {
       setSubmitting(false)
+      setForceprint(false)
+      forceprintRef.current = false
     }
   }, [activeOpenOrder, session, ticketItems, diningOption, tableNumber, paymentMethod, cashAmount, transferAmount, customerName, orderNotes, persons, fetchFreshPrintConfig, printServerUrl, forceprint])
 
@@ -5311,7 +5314,7 @@ export default function POSPage() {
               activeOpenOrder={activeOpenOrder}
               selectedBill={selectedBill}
               onBillSelect={(bill) => setSelectedBill(selectedBill === bill ? null : bill)}
-              onForcePrint={setForceprint}
+              onForcePrint={(v: boolean) => { setForceprint(v); forceprintRef.current = v }}
               bills={posBills}
             />
           )}
