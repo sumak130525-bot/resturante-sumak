@@ -10,38 +10,37 @@ const BASE_URL =
     ? `${window.location.origin}`
     : process.env.NEXT_PUBLIC_BASE_URL ?? 'http://localhost:3000'
 
+const MAPS_URL = 'https://www.google.com/maps/place/-32.8949528,-68.8286573'
+
 interface QREntry {
   id: number
   mesa: string
-  url: string
-}
-
-function buildUrl(mesa: string): string {
-  if (!mesa.trim()) return BASE_URL
-  return `${BASE_URL}?mesa=${encodeURIComponent(mesa.trim())}`
 }
 
 export default function AdminQRPage() {
   const [entries, setEntries] = useState<QREntry[]>([
-    { id: 1, mesa: '', url: BASE_URL },
+    { id: 1, mesa: '1' },
   ])
   const [nextId, setNextId] = useState(2)
   const printRef = useRef<HTMLDivElement>(null)
 
   const handleMesaChange = (id: number, value: string) => {
     setEntries((prev) =>
-      prev.map((e) => (e.id === id ? { ...e, mesa: value, url: buildUrl(value) } : e))
+      prev.map((e) => (e.id === id ? { ...e, mesa: value } : e))
     )
   }
 
   const addEntry = () => {
-    setEntries((prev) => [...prev, { id: nextId, mesa: '', url: BASE_URL }])
+    setEntries((prev) => [...prev, { id: nextId, mesa: String(nextId) }])
     setNextId((n) => n + 1)
   }
 
   const removeEntry = (id: number) => {
     setEntries((prev) => prev.filter((e) => e.id !== id))
   }
+
+  const getTicketUrl = (mesa: string) => `${BASE_URL}/mesa/${encodeURIComponent(mesa.trim())}`
+  const getMenuUrl = () => BASE_URL
 
   const handlePrint = () => {
     if (!printRef.current) return
@@ -56,20 +55,26 @@ export default function AdminQRPage() {
           <style>
             * { box-sizing: border-box; margin: 0; padding: 0; }
             body { font-family: sans-serif; background: white; }
-            .qr-grid { display: flex; flex-wrap: wrap; gap: 24px; padding: 24px; }
+            .qr-grid { display: flex; flex-wrap: wrap; gap: 24px; padding: 24px; justify-content: center; }
             .qr-card {
-              border: 2px dashed #ccc;
-              border-radius: 12px;
-              padding: 20px;
+              border: 2px solid #3B2B1A;
+              border-radius: 16px;
+              padding: 20px 16px;
               text-align: center;
-              width: 200px;
+              width: 280px;
               page-break-inside: avoid;
             }
-            .qr-card h3 { font-size: 14px; font-weight: bold; margin-top: 10px; }
-            .qr-card p { font-size: 11px; color: #666; margin-top: 4px; word-break: break-all; }
-            svg { display: block; margin: 0 auto; }
+            .qr-card h2 { font-size: 22px; font-weight: bold; color: #3B2B1A; margin-bottom: 16px; }
+            .qr-row { display: flex; justify-content: center; gap: 12px; margin-bottom: 8px; }
+            .qr-item { text-align: center; }
+            .qr-item svg { display: block; margin: 0 auto; }
+            .qr-label { font-size: 10px; font-weight: bold; color: #3B2B1A; margin-top: 4px; }
+            .qr-big { margin-bottom: 12px; }
+            .qr-big svg { display: block; margin: 0 auto; }
+            .qr-big-label { font-size: 13px; font-weight: bold; color: #3B2B1A; margin-top: 6px; }
             @media print {
               @page { margin: 1cm; }
+              .qr-card { break-inside: avoid; }
             }
           </style>
         </head>
@@ -113,34 +118,77 @@ export default function AdminQRPage() {
         </div>
 
         <p className="text-gray-500 text-sm mb-6">
-          Cada QR apunta a la página pública del menú. Si ingresás un número de mesa,
-          el QR incluirá el parámetro <code className="bg-gray-100 px-1 rounded">?mesa=N</code> y
-          se mostrará en la página al cliente.
+          Cada tarjeta incluye 3 códigos QR: <strong>Ticket digital</strong> de la mesa,
+          <strong> Menú</strong> del restaurante y <strong>Google Maps</strong> para compartir ubicación.
+          Imprimí y pegá en cada mesa.
         </p>
 
         {/* Printable grid */}
-        <div ref={printRef} className="qr-grid flex flex-wrap gap-6">
-          {entries.map((entry) => (
-            <div
-              key={entry.id}
-              className="qr-card bg-white rounded-2xl border-2 border-dashed border-gray-200 p-5 text-center w-[220px]"
-            >
-              <QRCodeSVG
-                value={entry.url}
-                size={160}
-                bgColor="#ffffff"
-                fgColor="#3B2B1A"
-                level="M"
-                includeMargin
-              />
-              {entry.mesa ? (
-                <h3 className="font-bold text-sumak-brown mt-3 text-base">Mesa {entry.mesa}</h3>
-              ) : (
-                <h3 className="font-bold text-sumak-brown mt-3 text-base">Menú General</h3>
-              )}
-              <p className="text-[11px] text-gray-400 mt-1 break-all">{entry.url}</p>
-            </div>
-          ))}
+        <div ref={printRef} className="qr-grid flex flex-wrap gap-6 justify-center">
+          {entries.map((entry) => {
+            const mesa = entry.mesa.trim()
+            if (!mesa) return null
+            return (
+              <div
+                key={entry.id}
+                className="qr-card bg-white rounded-2xl border-2 border-sumak-brown p-5 text-center"
+                style={{ width: 280 }}
+              >
+                {/* Nombre de mesa */}
+                <h2 className="font-serif text-xl font-bold text-sumak-brown mb-4">
+                  Mesa {mesa}
+                </h2>
+
+                {/* QR grande: Ticket */}
+                <div className="qr-big mb-3">
+                  <QRCodeSVG
+                    value={getTicketUrl(mesa)}
+                    size={140}
+                    bgColor="#ffffff"
+                    fgColor="#3B2B1A"
+                    level="M"
+                    includeMargin
+                  />
+                  <p className="qr-big-label text-sm font-bold text-sumak-brown mt-1">
+                    🎫 Tu Ticket
+                  </p>
+                </div>
+
+                {/* Separador */}
+                <div className="border-t border-dashed border-gray-300 my-3" />
+
+                {/* QR chicos: Menú y Maps */}
+                <div className="qr-row flex justify-center gap-4">
+                  <div className="qr-item text-center">
+                    <QRCodeSVG
+                      value={getMenuUrl()}
+                      size={80}
+                      bgColor="#ffffff"
+                      fgColor="#3B2B1A"
+                      level="M"
+                      includeMargin
+                    />
+                    <p className="qr-label text-[10px] font-bold text-sumak-brown mt-1">
+                      📋 Menú
+                    </p>
+                  </div>
+                  <div className="qr-item text-center">
+                    <QRCodeSVG
+                      value={MAPS_URL}
+                      size={80}
+                      bgColor="#ffffff"
+                      fgColor="#3B2B1A"
+                      level="M"
+                      includeMargin
+                    />
+                    <p className="qr-label text-[10px] font-bold text-sumak-brown mt-1">
+                      📍 Ubicación
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )
+          })}
         </div>
 
         {/* Config (not printed) */}
@@ -162,10 +210,9 @@ export default function AdminQRPage() {
                     type="text"
                     value={entry.mesa}
                     onChange={(e) => handleMesaChange(entry.id, e.target.value)}
-                    placeholder="Ej: 1, 2, Terraza…"
+                    placeholder="Ej: 1, 2, 3…"
                     className="w-full border border-gray-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-sumak-gold/50"
                   />
-                  <p className="text-[11px] text-gray-400 mt-1 truncate">{entry.url}</p>
                 </div>
                 {entries.length > 1 && (
                   <button
