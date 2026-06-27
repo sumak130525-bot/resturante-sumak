@@ -12,33 +12,34 @@ const TOTAL_MESAS = 20
 // SVG icons matching the reference design
 function MenuIcon() {
   return (
-    <svg width="48" height="48" viewBox="0 0 48 48" fill="none">
-      <circle cx="24" cy="24" r="22" fill="#2D5A27" />
+    <svg width="32" height="32" viewBox="0 0 48 48" fill="none">
+      <circle cx="24" cy="24" r="22" fill="#DC2626" />
       <path d="M14 30h20M16 28c0-6 3.5-10 8-10s8 4 8 10" stroke="white" strokeWidth="2.5" strokeLinecap="round" fill="none" />
-      <circle cx="24" cy="16" r="1.5" fill="white" />
+      <path d="M24 18v-4" stroke="white" strokeWidth="2" strokeLinecap="round" />
     </svg>
   )
 }
 
 function TicketIcon() {
   return (
-    <svg width="48" height="48" viewBox="0 0 48 48" fill="none">
-      <rect x="4" y="4" width="40" height="40" rx="6" fill="#2A2A2A" />
-      <rect x="12" y="10" width="24" height="28" rx="3" stroke="white" strokeWidth="2" fill="none" />
-      <line x1="16" y1="17" x2="32" y2="17" stroke="white" strokeWidth="1.5" />
-      <line x1="16" y1="21" x2="32" y2="21" stroke="white" strokeWidth="1.5" />
-      <line x1="16" y1="25" x2="28" y2="25" stroke="white" strokeWidth="1.5" />
-      <line x1="16" y1="29" x2="26" y2="29" stroke="white" strokeWidth="1.5" />
-      <line x1="12" y1="33" x2="36" y2="33" stroke="white" strokeWidth="1" strokeDasharray="2 2" />
+    <svg width="32" height="32" viewBox="0 0 48 48" fill="none">
+      <circle cx="24" cy="24" r="22" fill="#EAB308" />
+      <path d="M20 14l8 0M15 20l18 0M15 26l18 0M15 32l12 0" stroke="white" strokeWidth="2" strokeLinecap="round" />
+      <polygon points="24,10 26.5,17 34,17 28,21.5 30,29 24,24.5 18,29 20,21.5 14,17 21.5,17" fill="white" />
     </svg>
   )
 }
 
 function LocationIcon() {
   return (
-    <svg width="48" height="48" viewBox="0 0 48 48" fill="none">
-      <path d="M24 4C16.268 4 10 10.268 10 18c0 10.5 14 26 14 26s14-15.5 14-26c0-7.732-6.268-14-14-14z" fill="#B91C1C" />
-      <circle cx="24" cy="18" r="6" fill="white" />
+    <svg width="32" height="32" viewBox="0 0 48 48" fill="none">
+      <circle cx="24" cy="24" r="22" fill="#16A34A" />
+      <rect x="13" y="10" width="22" height="28" rx="2" stroke="white" strokeWidth="2" fill="none" />
+      <line x1="17" y1="16" x2="31" y2="16" stroke="white" strokeWidth="1.5" />
+      <line x1="17" y1="20" x2="31" y2="20" stroke="white" strokeWidth="1.5" />
+      <line x1="17" y1="24" x2="31" y2="24" stroke="white" strokeWidth="1.5" />
+      <line x1="13" y1="30" x2="35" y2="30" stroke="white" strokeWidth="1.5" strokeDasharray="3 2" />
+      <line x1="17" y1="34" x2="31" y2="34" stroke="white" strokeWidth="1.5" />
     </svg>
   )
 }
@@ -52,42 +53,35 @@ function MesaCard({ mesa }: { mesa: number }) {
     <div
       className="mesa-card"
       style={{
-        border: '2px dashed #999',
-        borderRadius: 12,
-        padding: '16px 12px 12px',
-        width: 340,
-        height: 220,
+        border: '1.5px solid #ccc',
+        borderRadius: 8,
+        padding: '8px 10px 6px',
+        width: 350,
+        height: 175,
         display: 'flex',
         flexDirection: 'column',
-        alignItems: 'center',
         background: 'white',
+        position: 'relative',
       }}
     >
-      {/* Mesa number */}
-      <div style={{ fontSize: 14, fontWeight: 800, color: '#222', marginBottom: 8, letterSpacing: 1 }}>
-        MESA {mesa}
+      {/* Mesa number top-left */}
+      <div style={{ fontSize: 18, fontWeight: 900, color: '#111', marginBottom: 2 }}>
+        {mesa}
       </div>
 
-      {/* Icons row */}
-      <div style={{ display: 'flex', justifyContent: 'center', gap: 50, marginBottom: 6 }}>
-        <MenuIcon />
-        <TicketIcon />
-        <LocationIcon />
-      </div>
-
-      {/* QR codes row */}
-      <div style={{ display: 'flex', justifyContent: 'center', gap: 20, alignItems: 'flex-start' }}>
+      {/* Icons + QR codes */}
+      <div style={{ display: 'flex', justifyContent: 'center', gap: 6, flex: 1, alignItems: 'flex-start' }}>
         <div style={{ textAlign: 'center' }}>
-          <QRCodeSVG value={menuUrl} size={90} bgColor="#ffffff" fgColor="#000000" level="M" />
-          <div style={{ fontSize: 8, fontWeight: 700, color: '#444', marginTop: 2 }}>MENÚ</div>
+          <div style={{ marginBottom: 2 }}><MenuIcon /></div>
+          <QRCodeSVG value={menuUrl} size={110} bgColor="#ffffff" fgColor="#000000" level="M" />
         </div>
         <div style={{ textAlign: 'center' }}>
-          <QRCodeSVG value={ticketUrl} size={90} bgColor="#ffffff" fgColor="#000000" level="M" />
-          <div style={{ fontSize: 8, fontWeight: 700, color: '#444', marginTop: 2 }}>TICKET</div>
+          <div style={{ marginBottom: 2 }}><TicketIcon /></div>
+          <QRCodeSVG value={ticketUrl} size={110} bgColor="#ffffff" fgColor="#000000" level="M" />
         </div>
         <div style={{ textAlign: 'center' }}>
-          <QRCodeSVG value={mapsUrl} size={90} bgColor="#ffffff" fgColor="#000000" level="M" />
-          <div style={{ fontSize: 8, fontWeight: 700, color: '#444', marginTop: 2 }}>UBICACIÓN</div>
+          <div style={{ marginBottom: 2 }}><LocationIcon /></div>
+          <QRCodeSVG value={mapsUrl} size={110} bgColor="#ffffff" fgColor="#000000" level="M" />
         </div>
       </div>
     </div>
@@ -157,16 +151,16 @@ export default function QRPrintPage() {
         ref={containerRef}
         style={{
           background: 'white',
-          width: 740,
+          width: 760,
           margin: '0 auto',
-          padding: '20px 16px',
+          padding: '16px 12px',
         }}
       >
         <div
           style={{
             display: 'grid',
             gridTemplateColumns: '1fr 1fr',
-            gap: 16,
+            gap: 12,
             justifyItems: 'center',
           }}
         >
