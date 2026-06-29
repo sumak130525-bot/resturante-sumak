@@ -31,11 +31,13 @@ export async function GET() {
     const openedAt = shift.opened_at
 
     // Get all non-cancelled orders in this shift period
-    const { data: orders } = await supabase
+    const { data: orders, error: ordersErr } = await supabase
       .from('orders')
       .select('total, payment_method, cash_amount, transfer_amount, status')
       .gte('created_at', openedAt)
       .neq('status', 'cancelled')
+
+    console.log('[shifts/preview] openedAt:', openedAt, 'orders count:', orders?.length, 'ordersErr:', ordersErr)
 
     let totalCashSales = 0
     let totalTransferSales = 0
@@ -94,6 +96,8 @@ export async function GET() {
     const expectedAmount = opening + totalCashSales + mixedCashTotal + totalIncome - totalExpense - totalRefunds
 
     return NextResponse.json({
+      _debug_orders_count: orders?.length ?? 0,
+      _debug_orders_err: ordersErr?.message ?? null,
       opening_amount: opening,
       expected_amount: expectedAmount,
       total_cash_sales: totalCashSales,
