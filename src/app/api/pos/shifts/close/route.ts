@@ -40,24 +40,31 @@ export async function POST(request: NextRequest) {
     const openedAt = shift.opened_at
 
     // Get all non-cancelled orders in this shift period (from opened_at to now)
-    const { data: orders } = await supabase
-      .from('orders')
-      .select('total, payment_method, cash_amount, transfer_amount, status')
-      .gte('created_at', openedAt)
-      .neq('status', 'cancelled')
+    // Use direct PostgREST fetch to bypass Supabase JS schema cache
+    const ordersRes = await fetch(
+      `${process.env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1/orders?created_at=gte.${encodeURIComponent(openedAt)}&status=neq.cancelled&select=total,payment_method,cash_amount,transfer_amount,status`,
+      {
+        headers: {
+          apikey: process.env.SUPABASE_SERVICE_ROLE_KEY!,
+          Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY!}`,
+        },
+        cache: 'no-store',
+      }
+    )
+    const orders = await ordersRes.json()
 
     let totalCashSales = 0
     let totalTransferSales = 0
     let totalMixedSales = 0
 
     for (const order of (orders ?? [])) {
-      const pm = order.payment_method
+      const pm = (order.payment_method ?? '').toLowerCase()
       const total = Number(order.total ?? 0)
-      if (pm === 'cash') {
+      if (pm === 'cash' || pm === 'efectivo') {
         totalCashSales += total
-      } else if (pm === 'transfer') {
+      } else if (pm === 'transfer' || pm === 'transferencia') {
         totalTransferSales += total
-      } else if (pm === 'mixed') {
+      } else if (pm === 'mixed' || pm === 'mixto') {
         totalMixedSales += total
       }
     }
@@ -81,18 +88,24 @@ export async function POST(request: NextRequest) {
     }
 
     // Get refunds from cancelled orders (cash portion only affects physical drawer)
-    const { data: cancelledOrders } = await supabase
-      .from('orders')
-      .select('total, payment_method, cash_amount')
-      .gte('created_at', openedAt)
-      .eq('status', 'cancelled')
+    const cancelledRes = await fetch(
+      `${process.env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1/orders?created_at=gte.${encodeURIComponent(openedAt)}&status=eq.cancelled&select=total,payment_method,cash_amount`,
+      {
+        headers: {
+          apikey: process.env.SUPABASE_SERVICE_ROLE_KEY!,
+          Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY!}`,
+        },
+        cache: 'no-store',
+      }
+    )
+    const cancelledOrders = await cancelledRes.json()
 
     let totalRefunds = 0
     for (const order of (cancelledOrders ?? [])) {
-      const pm = order.payment_method
-      if (pm === 'cash') {
+      const pm = (order.payment_method ?? '').toLowerCase()
+      if (pm === 'cash' || pm === 'efectivo') {
         totalRefunds += Number(order.total ?? 0)
-      } else if (pm === 'mixed') {
+      } else if (pm === 'mixed' || pm === 'mixto') {
         totalRefunds += Number(order.cash_amount ?? 0)
       }
     }
@@ -100,7 +113,7 @@ export async function POST(request: NextRequest) {
     // For mixed orders, the cash portion is what physically enters the drawer
     let mixedCashTotal = 0
     for (const order of (orders ?? [])) {
-      if (order.payment_method === 'mixed') {
+      if ((order.payment_method ?? '').toLowerCase() === 'mixed' || (order.payment_method ?? '').toLowerCase() === 'mixto') {
         mixedCashTotal += Number(order.cash_amount ?? 0)
       }
     }

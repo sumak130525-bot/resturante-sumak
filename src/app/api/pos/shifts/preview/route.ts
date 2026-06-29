@@ -31,13 +31,18 @@ export async function GET() {
     const openedAt = shift.opened_at
 
     // Get all non-cancelled orders in this shift period
-    const { data: orders, error: ordersErr } = await supabase
-      .from('orders')
-      .select('total, payment_method, cash_amount, transfer_amount, status')
-      .gte('created_at', openedAt)
-      .neq('status', 'cancelled')
-
-    console.log('[shifts/preview] openedAt:', openedAt, 'orders count:', orders?.length, 'ordersErr:', ordersErr)
+    // Use direct PostgREST fetch to bypass Supabase JS schema cache
+    const ordersRes = await fetch(
+      `${process.env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1/orders?created_at=gte.${encodeURIComponent(openedAt)}&status=neq.cancelled&select=total,payment_method,cash_amount,transfer_amount,status`,
+      {
+        headers: {
+          apikey: process.env.SUPABASE_SERVICE_ROLE_KEY!,
+          Authorization: `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY!}`,
+        },
+        cache: 'no-store',
+      }
+    )
+    const orders = await ordersRes.json()
 
     let totalCashSales = 0
     let totalTransferSales = 0
@@ -45,13 +50,13 @@ export async function GET() {
     let mixedCashTotal = 0
 
     for (const order of (orders ?? [])) {
-      const pm = order.payment_method
+      const pm = (order.payment_method ?? '').toLowerCase()
       const total = Number(order.total ?? 0)
-      if (pm === 'cash') {
+      if (pm === 'cash' || pm === 'efectivo') {
         totalCashSales += total
-      } else if (pm === 'transfer') {
+      } else if (pm === 'transfer' || pm === 'transferencia') {
         totalTransferSales += total
-      } else if (pm === 'mixed') {
+      } else if (pm === 'mixed' || pm === 'mixto') {
         totalMixedSales += total
         mixedCashTotal += Number(order.cash_amount ?? 0)
       }
@@ -96,8 +101,6 @@ export async function GET() {
     const expectedAmount = opening + totalCashSales + mixedCashTotal + totalIncome - totalExpense - totalRefunds
 
     return NextResponse.json({
-      _debug_orders_count: orders?.length ?? 0,
-      _debug_orders_err: ordersErr?.message ?? null,
       opening_amount: opening,
       expected_amount: expectedAmount,
       total_cash_sales: totalCashSales,
