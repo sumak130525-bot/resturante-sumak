@@ -32,7 +32,7 @@ export async function GET() {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data, error } = await (supabase as any)
     .from('orders')
-    .select('*, order_items(*, menu_items(name, price))')
+    .select('id, order_number, table_number, status, total, payment_method, source, channel, customer_name, employee_name, dining_option, notes, persons, is_open, closed_at, created_at, order_items(id, quantity, unit_price, line_note, person_number, is_bonus, bonus_reason, delivered_at, menu_items(name, price))')
     .order('created_at', { ascending: false })
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
