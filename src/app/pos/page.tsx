@@ -2732,7 +2732,13 @@ function MixedPaymentModal({
               inputMode="decimal"
               min={0}
               value={cashAmount}
-              onChange={(e) => onCashAmountChange(e.target.value)}
+              onChange={(e) => {
+                onCashAmountChange(e.target.value)
+                const cash = parseFloat(e.target.value.replace(',', '.') || '0')
+                if (cash >= 0 && cash <= total) {
+                  onTransferAmountChange(String(Math.round(total - cash)))
+                }
+              }}
               placeholder="$ 0"
               autoFocus
               className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-lg font-bold text-gray-900 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-teal-400 tabular-nums"
