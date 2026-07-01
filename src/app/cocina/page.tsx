@@ -927,12 +927,17 @@ export default function CocinaPage() {
       freshDismissed.forEach((id) => dismissedIdsRef.current.add(id))
 
       // If a dismissed order came back as pending (new kitchen round), un-dismiss it
+      // But only if it has a newer sent_to_kitchen_at than when it was dismissed
       let undismissedCount = 0
       for (const o of raw) {
         if (o.status === 'pending' && dismissedIdsRef.current.has(o.id)) {
-          dismissedIdsRef.current.delete(o.id)
-          removeDismissed(o.id)
-          undismissedCount++
+          // Check if this is a genuinely new kitchen round (has recent items not yet delivered)
+          const hasNewItems = (o.items ?? []).some((i: any) => !i.delivered_at && i.sent_to_kitchen_at)
+          if (hasNewItems) {
+            dismissedIdsRef.current.delete(o.id)
+            removeDismissed(o.id)
+            undismissedCount++
+          }
         }
       }
 
@@ -1060,19 +1065,24 @@ export default function CocinaPage() {
     dismissedIdsRef.current.delete(id)
     removeDismissed(id)
 
-    const recoveredOrder = { ...order, status: order.source === 'WEB' || order.source === 'POS' ? 'ready' : 'confirmed' }
+    const recoveredOrder = { ...order, status: 'pending' }
     setDeliveredOrders((prev) => prev.filter((o) => o.id !== id))
     setOrders((prev) => [...prev, recoveredOrder].sort(
       (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
     ))
 
-    if (order.source === 'WEB' || order.source === 'POS') {
-      fetch('/api/admin/orders', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id, status: 'ready' }),
-      }).catch(() => {})
-    }
+    // Update status back to pending in DB
+    fetch('/api/cocina/orders/recover', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id }),
+    }).catch(() => {
+      // Revert on failure
+      dismissedIdsRef.current.add(id)
+      addDismissed(id)
+      setOrders((prev) => prev.filter((o) => o.id !== id))
+      setDeliveredOrders((prev) => [order, ...prev])
+    })
   }, [deliveredOrders])
 
   // ── Filtros ────────────────────────────────────────────────────────────────
