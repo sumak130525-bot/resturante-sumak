@@ -804,6 +804,26 @@ export default function CocinaPage() {
     }
   }, [])
 
+  // Mantener AudioContext vivo reproduciendo silencio cada 25s
+  useEffect(() => {
+    const keepAlive = setInterval(async () => {
+      try {
+        if (!audioCtxRef.current || !audioUnlockedRef.current) return
+        const ctx = audioCtxRef.current
+        if (ctx.state === 'suspended') {
+          await ctx.resume()
+        }
+        // Reproducir buffer silencioso para evitar que el browser suspenda el audio
+        const buf = ctx.createBuffer(1, 1, 22050)
+        const src = ctx.createBufferSource()
+        src.buffer = buf
+        src.connect(ctx.destination)
+        src.start(0)
+      } catch {}
+    }, 25000)
+    return () => clearInterval(keepAlive)
+  }, [])
+
   // Cargar dismissedIds y preferencia de sonido desde localStorage al montar
   useEffect(() => {
     dismissedIdsRef.current = loadDismissed()
