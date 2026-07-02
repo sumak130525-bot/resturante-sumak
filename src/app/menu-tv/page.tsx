@@ -76,11 +76,11 @@ function DishCard({ item }: { item: MenuItem }) {
   )
 }
 
-// ─── Swipe indicator arrows ───────────────────────────────────────────────────
+// ─── Swipe indicator ──────────────────────────────────────────────────────────
 function SwipeIndicator({ direction }: { direction: 'left' | 'right' }) {
   return (
     <div
-      className={`fixed top-1/2 -translate-y-1/2 z-50 pointer-events-none transition-opacity duration-300 ${
+      className={`fixed top-1/2 -translate-y-1/2 z-50 pointer-events-none ${
         direction === 'left' ? 'left-4' : 'right-4'
       }`}
     >
@@ -93,136 +93,174 @@ function SwipeIndicator({ direction }: { direction: 'left' | 'right' }) {
   )
 }
 
-// ─── MediaPipe Hand Tracking ──────────────────────────────────────────────────
+// ─── Hand Tracking with webcam ────────────────────────────────────────────────
 function useHandSwipe(onSwipe: (direction: 'left' | 'right') => void) {
-  const videoRef = useRef<HTMLVideoElement | null>(null)
-  const canvasRef = useRef<HTMLCanvasElement | null>(null)
-  const [cameraActive, setCameraActive] = useState(false)
+  const [status, setStatus] = useState<'loading' | 'active' | 'error' | 'no-camera'>('loading')
   const [swipeDirection, setSwipeDirection] = useState<'left' | 'right' | null>(null)
-
-  // Track wrist position over time
-  const posHistory = useRef<{ x: number; t: number }[]>([])
-  const cooldown = useRef(false)
-
-  const processFrame = useCallback(() => {
-    // This is handled by the MediaPipe callback
-  }, [])
+  const [debugInfo, setDebugInfo] = useState('')
 
   useEffect(() => {
-    let animId: number
-    let hands: any = null
-    let camera: any = null
+    let stopped = false
+    let stream: MediaStream | null = null
+    let rafId: number
 
     async function init() {
+      // 1. Get camera
       try {
-        // Load MediaPipe scripts dynamically
+        stream = await navigator.mediaDevices.getUserMedia({
+          video: { width: 320, height: 240, facingMode: 'user' },
+        })
+      } catch {
+        setStatus('no-camera')
+        setDebugInfo('No se pudo acceder a la cámara. Permití el acceso.')
+        return
+      }
+
+      if (stopped) { stream.getTracks().forEach(t => t.stop()); return }
+
+      // 2. Create hidden video
+      const video = document.createElement('video')
+      video.srcObject = stream
+      video.setAttribute('playsinline', '')
+      video.muted = true
+      video.style.position = 'fixed'
+      video.style.bottom = '10px'
+      video.style.right = '10px'
+      video.style.width = '160px'
+      video.style.height = '120px'
+      video.style.borderRadius = '8px'
+      video.style.border = '2px solid rgba(255,255,255,0.3)'
+      video.style.zIndex = '100'
+      video.style.opacity = '0.6'
+      video.style.transform = 'scaleX(-1)'
+      document.body.appendChild(video)
+      await video.play()
+
+      if (stopped) { video.remove(); stream.getTracks().forEach(t => t.stop()); return }
+
+      // 3. Load MediaPipe Hands
+      setDebugInfo('Cargando MediaPipe...')
+      try {
         const loadScript = (src: string) =>
           new Promise<void>((resolve, reject) => {
-            if (document.querySelector(`script[src="${src}"]`)) {
-              resolve()
-              return
-            }
+            if (document.querySelector(`script[src="${src}"]`)) { resolve(); return }
             const s = document.createElement('script')
             s.src = src
             s.crossOrigin = 'anonymous'
             s.onload = () => resolve()
-            s.onerror = reject
+            s.onerror = () => reject(new Error(`Failed to load ${src}`))
             document.head.appendChild(s)
           })
 
-        await loadScript('https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js')
-        await loadScript('https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js')
+        await loadScript('https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1675469240/hands.js')
+      } catch {
+        setStatus('error')
+        setDebugInfo('Error cargando MediaPipe. Usá flechas del teclado.')
+        return
+      }
 
-        const mp = (window as any)
+      if (stopped) { video.remove(); stream.getTracks().forEach(t => t.stop()); return }
 
-        // Create video element (hidden)
-        const video = document.createElement('video')
-        video.style.display = 'none'
-        document.body.appendChild(video)
-        videoRef.current = video
+      // 4. Init Hands
+      const mp = (window as any)
+      if (!mp.Hands) {
+        setStatus('error')
+        setDebugInfo('MediaPipe Hands no disponible')
+        return
+      }
 
-        // Init MediaPipe Hands
-        hands = new mp.Hands({
-          locateFile: (file: string) =>
-            `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`,
-        })
+      const hands = new mp.Hands({
+        locateFile: (file: string) =>
+          `https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1675469240/${file}`,
+      })
 
-        hands.setOptions({
-          maxNumHands: 1,
-          modelComplexity: 0, // Fastest
-          minDetectionConfidence: 0.6,
-          minTrackingConfidence: 0.5,
-        })
+      hands.setOptions({
+        maxNumHands: 1,
+        modelComplexity: 0,
+        minDetectionConfidence: 0.5,
+        minTrackingConfidence: 0.4,
+      })
 
-        hands.onResults((results: any) => {
-          if (!results.multiHandLandmarks || results.multiHandLandmarks.length === 0) {
-            posHistory.current = []
-            return
-          }
+      // Track wrist X position
+      const history: { x: number; t: number }[] = []
+      let cooldown = false
 
-          // Wrist = landmark 0
-          const wrist = results.multiHandLandmarks[0][0]
-          const now = Date.now()
-          posHistory.current.push({ x: wrist.x, t: now })
+      hands.onResults((results: any) => {
+        if (!results.multiHandLandmarks || results.multiHandLandmarks.length === 0) {
+          history.length = 0
+          setDebugInfo('✋ Mostrá la mano frente a la cámara')
+          return
+        }
 
-          // Keep last 500ms of history
-          posHistory.current = posHistory.current.filter((p) => now - p.t < 500)
+        const wrist = results.multiHandLandmarks[0][0]
+        const now = Date.now()
+        history.push({ x: wrist.x, t: now })
 
-          if (posHistory.current.length < 5 || cooldown.current) return
+        // Keep last 400ms
+        while (history.length > 0 && now - history[0].t > 400) history.shift()
 
-          const first = posHistory.current[0]
-          const last = posHistory.current[posHistory.current.length - 1]
-          const dx = last.x - first.x
-          const dt = last.t - first.t
+        setDebugInfo(`🖐️ Mano detectada (x: ${(wrist.x * 100).toFixed(0)}%)`)
 
-          // Swipe threshold: moved > 15% of frame width in < 500ms
-          if (Math.abs(dx) > 0.15 && dt < 500) {
-            // Camera is mirrored, so dx is inverted
-            const dir = dx > 0 ? 'left' : 'right'
-            cooldown.current = true
-            setSwipeDirection(dir)
-            onSwipe(dir)
-            posHistory.current = []
-            setTimeout(() => {
-              cooldown.current = false
-              setSwipeDirection(null)
-            }, 800)
-          }
-        })
+        if (history.length < 4 || cooldown) return
 
-        // Start camera
-        camera = new mp.Camera(video, {
-          onFrame: async () => {
+        const first = history[0]
+        const last = history[history.length - 1]
+        const dx = last.x - first.x
+        const dt = last.t - first.t
+
+        // Threshold: 12% of screen in under 400ms
+        if (Math.abs(dx) > 0.12 && dt < 400) {
+          // Camera is mirrored
+          const dir = dx > 0 ? 'left' : 'right'
+          cooldown = true
+          setSwipeDirection(dir)
+          onSwipe(dir)
+          history.length = 0
+          setTimeout(() => {
+            cooldown = false
+            setSwipeDirection(null)
+          }, 700)
+        }
+      })
+
+      await hands.initialize()
+      setStatus('active')
+      setDebugInfo('✅ Gestos activos — mové la mano ← →')
+
+      // 5. Process frames
+      async function processFrame() {
+        if (stopped) return
+        if (video.readyState >= 2) {
+          try {
             await hands.send({ image: video })
-          },
-          width: 320,
-          height: 240,
-        })
+          } catch {}
+        }
+        rafId = requestAnimationFrame(processFrame)
+      }
+      processFrame()
 
-        await camera.start()
-        setCameraActive(true)
-      } catch (err) {
-        console.error('[menu-tv] Camera/MediaPipe init error:', err)
+      // Cleanup
+      return () => {
+        stopped = true
+        cancelAnimationFrame(rafId)
+        hands.close()
+        video.remove()
+        stream?.getTracks().forEach(t => t.stop())
       }
     }
 
-    init()
+    const cleanup = init()
 
     return () => {
-      if (camera) {
-        try { camera.stop() } catch {}
-      }
-      if (hands) {
-        try { hands.close() } catch {}
-      }
-      if (videoRef.current) {
-        videoRef.current.remove()
-      }
+      stopped = true
+      cancelAnimationFrame(rafId)
+      cleanup?.then(fn => fn?.())
+      stream?.getTracks().forEach(t => t.stop())
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  return { cameraActive, swipeDirection }
+  return { status, swipeDirection, debugInfo }
 }
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
@@ -244,9 +282,9 @@ export default function MenuTVPage() {
     [categories.length]
   )
 
-  const { cameraActive, swipeDirection } = useHandSwipe(handleSwipe)
+  const { status, swipeDirection, debugInfo } = useHandSwipe(handleSwipe)
 
-  // Also support keyboard arrows for testing
+  // Keyboard arrows for testing
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.key === 'ArrowRight') handleSwipe('right')
@@ -272,7 +310,7 @@ export default function MenuTVPage() {
     : menuItems.filter((i) => i.available !== 0)
 
   return (
-    <div className="h-screen w-screen bg-[#1a1a2e] flex flex-col overflow-hidden">
+    <div className="h-screen w-screen bg-[#1a1a2e] flex flex-col overflow-hidden select-none">
       {/* Header: Category tabs */}
       <div className="shrink-0 flex items-center gap-2 px-4 py-3 bg-[#16213e] overflow-x-auto">
         {categories.map((cat, idx) => (
@@ -289,16 +327,6 @@ export default function MenuTVPage() {
             {cat.name}
           </button>
         ))}
-
-        {/* Camera status */}
-        <div className="ml-auto shrink-0 flex items-center gap-2 text-sm text-white/50">
-          <div
-            className={`w-3 h-3 rounded-full ${
-              cameraActive ? 'bg-green-400 animate-pulse' : 'bg-red-500'
-            }`}
-          />
-          {cameraActive ? '📷 Gestos activos' : '📷 Sin cámara'}
-        </div>
       </div>
 
       {/* Category title */}
@@ -308,9 +336,6 @@ export default function MenuTVPage() {
             ? `${CATEGORY_ICONS[activeCategory.slug] ?? '🍴'} ${activeCategory.name}`
             : 'Todos'}
         </h1>
-        <p className="text-white/40 text-sm mt-1">
-          Mové la mano ← → para cambiar de categoría
-        </p>
       </div>
 
       {/* Items grid */}
@@ -328,19 +353,34 @@ export default function MenuTVPage() {
         )}
       </main>
 
-      {/* Navigation dots */}
-      <div className="shrink-0 flex justify-center gap-2 py-3 bg-[#16213e]">
-        {categories.map((_, idx) => (
-          <button
-            key={idx}
-            onClick={() => setActiveCatIdx(idx)}
-            className={`w-3 h-3 rounded-full transition-all ${
-              idx === activeCatIdx
-                ? 'bg-yellow-400 scale-125'
-                : 'bg-white/20 hover:bg-white/40'
+      {/* Bottom: dots + status */}
+      <div className="shrink-0 flex items-center justify-between px-4 py-3 bg-[#16213e]">
+        {/* Navigation dots */}
+        <div className="flex gap-2">
+          {categories.map((_, idx) => (
+            <button
+              key={idx}
+              onClick={() => setActiveCatIdx(idx)}
+              className={`w-3 h-3 rounded-full transition-all ${
+                idx === activeCatIdx
+                  ? 'bg-yellow-400 scale-125'
+                  : 'bg-white/20 hover:bg-white/40'
+              }`}
+            />
+          ))}
+        </div>
+
+        {/* Camera status */}
+        <div className="flex items-center gap-2 text-sm text-white/50">
+          <div
+            className={`w-3 h-3 rounded-full ${
+              status === 'active' ? 'bg-green-400 animate-pulse'
+                : status === 'loading' ? 'bg-yellow-400 animate-pulse'
+                : 'bg-red-500'
             }`}
           />
-        ))}
+          <span className="text-xs">{debugInfo || (status === 'loading' ? 'Iniciando cámara...' : '')}</span>
+        </div>
       </div>
 
       {/* Swipe indicators */}
