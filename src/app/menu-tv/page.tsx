@@ -257,7 +257,13 @@ export default function MenuTVPage() {
     [categories.length]
   )
 
-  const { status, swipeDirection, debugInfo } = useMotionSwipe(handleSwipe)
+  // Ref para que el motion detector siempre tenga el callback actual
+  const swipeRef = useRef(handleSwipe)
+  swipeRef.current = handleSwipe
+
+  const { status, swipeDirection, debugInfo } = useMotionSwipe(
+    useCallback((dir: 'left' | 'right') => swipeRef.current(dir), [])
+  )
 
   // Keyboard arrows for testing
   useEffect(() => {
