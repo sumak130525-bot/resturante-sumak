@@ -330,9 +330,9 @@ export default function MenuTVPage() {
   const activeCategory = categories[activeCatIdx]
   const categoryItems = activeCategory
     ? menuItems.filter(
-        (i) => i.category_id === activeCategory.id && i.available !== 0
+        (i) => i.category_id === activeCategory.id && i.available !== 0 && (i.display_order ?? 0) > 0
       )
-    : menuItems.filter((i) => i.available !== 0)
+    : menuItems.filter((i) => i.available !== 0 && (i.display_order ?? 0) > 0)
 
   return (
     <div className="h-screen w-screen bg-[#1a1a2e] flex flex-col overflow-hidden select-none">
