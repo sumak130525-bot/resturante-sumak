@@ -84,8 +84,8 @@ function SwipeIndicator({ direction }: { direction: 'left' | 'right' }) {
         direction === 'left' ? 'left-4' : 'right-4'
       }`}
     >
-      <div className="bg-white/20 backdrop-blur-md rounded-full p-4 animate-pulse">
-        <span className="text-white text-5xl font-bold">
+      <div className="bg-white/30 backdrop-blur-md rounded-full p-6 animate-pulse">
+        <span className="text-white text-6xl font-bold">
           {direction === 'left' ? '‹' : '›'}
         </span>
       </div>
@@ -93,9 +93,9 @@ function SwipeIndicator({ direction }: { direction: 'left' | 'right' }) {
   )
 }
 
-// ─── Hand Tracking with webcam ────────────────────────────────────────────────
-function useHandSwipe(onSwipe: (direction: 'left' | 'right') => void) {
-  const [status, setStatus] = useState<'loading' | 'active' | 'error' | 'no-camera'>('loading')
+// ─── Motion Detection (no ML needed, fast!) ──────────────────────────────────
+function useMotionSwipe(onSwipe: (direction: 'left' | 'right') => void) {
+  const [status, setStatus] = useState<'loading' | 'active' | 'error'>('loading')
   const [swipeDirection, setSwipeDirection] = useState<'left' | 'right' | null>(null)
   const [debugInfo, setDebugInfo] = useState('')
 
@@ -103,147 +103,124 @@ function useHandSwipe(onSwipe: (direction: 'left' | 'right') => void) {
     let stopped = false
     let stream: MediaStream | null = null
     let rafId: number
+    const W = 160
+    const H = 120
 
     async function init() {
       // 1. Get camera
       try {
         stream = await navigator.mediaDevices.getUserMedia({
-          video: { width: 320, height: 240, facingMode: 'user' },
+          video: { width: W, height: H, facingMode: 'user' },
         })
       } catch {
-        setStatus('no-camera')
-        setDebugInfo('No se pudo acceder a la cámara. Permití el acceso.')
+        setStatus('error')
+        setDebugInfo('No se pudo acceder a la cámara')
         return
       }
 
       if (stopped) { stream.getTracks().forEach(t => t.stop()); return }
 
-      // 2. Create hidden video
+      // 2. Video + Canvas (hidden processing)
       const video = document.createElement('video')
       video.srcObject = stream
       video.setAttribute('playsinline', '')
       video.muted = true
-      video.style.position = 'fixed'
-      video.style.bottom = '10px'
-      video.style.right = '10px'
-      video.style.width = '160px'
-      video.style.height = '120px'
-      video.style.borderRadius = '8px'
-      video.style.border = '2px solid rgba(255,255,255,0.3)'
-      video.style.zIndex = '100'
-      video.style.opacity = '0.6'
-      video.style.transform = 'scaleX(-1)'
+      // Preview chiquito
+      video.style.cssText = 'position:fixed;bottom:10px;right:10px;width:120px;height:90px;border-radius:8px;border:2px solid rgba(255,255,255,0.3);z-index:100;opacity:0.5;transform:scaleX(-1);'
       document.body.appendChild(video)
       await video.play()
 
-      if (stopped) { video.remove(); stream.getTracks().forEach(t => t.stop()); return }
+      const canvas = document.createElement('canvas')
+      canvas.width = W
+      canvas.height = H
+      const ctx = canvas.getContext('2d', { willReadFrequently: true })!
 
-      // 3. Load MediaPipe Hands
-      setDebugInfo('Cargando MediaPipe...')
-      try {
-        const loadScript = (src: string) =>
-          new Promise<void>((resolve, reject) => {
-            if (document.querySelector(`script[src="${src}"]`)) { resolve(); return }
-            const s = document.createElement('script')
-            s.src = src
-            s.crossOrigin = 'anonymous'
-            s.onload = () => resolve()
-            s.onerror = () => reject(new Error(`Failed to load ${src}`))
-            document.head.appendChild(s)
-          })
-
-        await loadScript('https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1675469240/hands.js')
-      } catch {
-        setStatus('error')
-        setDebugInfo('Error cargando MediaPipe. Usá flechas del teclado.')
-        return
-      }
-
-      if (stopped) { video.remove(); stream.getTracks().forEach(t => t.stop()); return }
-
-      // 4. Init Hands
-      const mp = (window as any)
-      if (!mp.Hands) {
-        setStatus('error')
-        setDebugInfo('MediaPipe Hands no disponible')
-        return
-      }
-
-      const hands = new mp.Hands({
-        locateFile: (file: string) =>
-          `https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1675469240/${file}`,
-      })
-
-      hands.setOptions({
-        maxNumHands: 1,
-        modelComplexity: 0,
-        minDetectionConfidence: 0.5,
-        minTrackingConfidence: 0.4,
-      })
-
-      // Track wrist X position
-      const history: { x: number; t: number }[] = []
+      let prevFrame: Uint8ClampedArray | null = null
       let cooldown = false
 
-      hands.onResults((results: any) => {
-        if (!results.multiHandLandmarks || results.multiHandLandmarks.length === 0) {
-          history.length = 0
-          setDebugInfo('✋ Mostrá la mano frente a la cámara')
+      setStatus('active')
+      setDebugInfo('✅ Cámara activa — mové la mano ← →')
+
+      function processFrame() {
+        if (stopped) return
+        rafId = requestAnimationFrame(processFrame)
+
+        if (video.readyState < 2) return
+
+        // Draw current frame
+        ctx.drawImage(video, 0, 0, W, H)
+        const frame = ctx.getImageData(0, 0, W, H)
+        const pixels = frame.data
+
+        if (!prevFrame || cooldown) {
+          prevFrame = new Uint8ClampedArray(pixels)
           return
         }
 
-        const wrist = results.multiHandLandmarks[0][0]
-        const now = Date.now()
-        history.push({ x: wrist.x, t: now })
+        // Compare frames: calculate motion center-of-mass on X axis
+        // Split frame into left half and right half
+        let leftMotion = 0
+        let rightMotion = 0
+        let totalMotion = 0
+        const midX = W / 2
+        const threshold = 40 // pixel brightness change threshold
 
-        // Keep last 400ms
-        while (history.length > 0 && now - history[0].t > 400) history.shift()
+        for (let y = 0; y < H; y++) {
+          for (let x = 0; x < W; x++) {
+            const i = (y * W + x) * 4
+            const diff =
+              Math.abs(pixels[i] - prevFrame[i]) +
+              Math.abs(pixels[i + 1] - prevFrame[i + 1]) +
+              Math.abs(pixels[i + 2] - prevFrame[i + 2])
 
-        setDebugInfo(`🖐️ Mano detectada (x: ${(wrist.x * 100).toFixed(0)}%)`)
+            if (diff > threshold) {
+              totalMotion++
+              if (x < midX) {
+                leftMotion++
+              } else {
+                rightMotion++
+              }
+            }
+          }
+        }
 
-        if (history.length < 4 || cooldown) return
+        prevFrame = new Uint8ClampedArray(pixels)
 
-        const first = history[0]
-        const last = history[history.length - 1]
-        const dx = last.x - first.x
-        const dt = last.t - first.t
+        // Need minimum total motion (at least 3% of pixels changed)
+        const motionPercent = (totalMotion / (W * H)) * 100
+        if (motionPercent < 3) return
 
-        // Threshold: 12% of screen in under 400ms
-        if (Math.abs(dx) > 0.12 && dt < 400) {
-          // Camera is mirrored
-          const dir = dx > 0 ? 'left' : 'right'
+        // Detect directional swipe: one side should have significantly more motion
+        const total = leftMotion + rightMotion
+        if (total === 0) return
+
+        const leftRatio = leftMotion / total
+        const rightRatio = rightMotion / total
+        const imbalance = Math.abs(leftRatio - rightRatio)
+
+        // Need at least 30% imbalance to count as directional swipe
+        if (imbalance > 0.3 && motionPercent > 5) {
+          // Camera is mirrored: left in camera = right in reality
+          const dir = leftRatio > rightRatio ? 'right' : 'left'
+
           cooldown = true
           setSwipeDirection(dir)
+          setDebugInfo(`👉 Swipe ${dir === 'right' ? '→' : '←'} (${motionPercent.toFixed(0)}% movimiento)`)
           onSwipe(dir)
-          history.length = 0
+
           setTimeout(() => {
             cooldown = false
             setSwipeDirection(null)
-          }, 700)
+            setDebugInfo('✅ Cámara activa — mové la mano ← →')
+          }, 1000)
         }
-      })
-
-      await hands.initialize()
-      setStatus('active')
-      setDebugInfo('✅ Gestos activos — mové la mano ← →')
-
-      // 5. Process frames
-      async function processFrame() {
-        if (stopped) return
-        if (video.readyState >= 2) {
-          try {
-            await hands.send({ image: video })
-          } catch {}
-        }
-        rafId = requestAnimationFrame(processFrame)
       }
+
       processFrame()
 
-      // Cleanup
       return () => {
         stopped = true
         cancelAnimationFrame(rafId)
-        hands.close()
         video.remove()
         stream?.getTracks().forEach(t => t.stop())
       }
@@ -253,9 +230,7 @@ function useHandSwipe(onSwipe: (direction: 'left' | 'right') => void) {
 
     return () => {
       stopped = true
-      cancelAnimationFrame(rafId)
       cleanup?.then(fn => fn?.())
-      stream?.getTracks().forEach(t => t.stop())
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -282,7 +257,7 @@ export default function MenuTVPage() {
     [categories.length]
   )
 
-  const { status, swipeDirection, debugInfo } = useHandSwipe(handleSwipe)
+  const { status, swipeDirection, debugInfo } = useMotionSwipe(handleSwipe)
 
   // Keyboard arrows for testing
   useEffect(() => {
@@ -355,7 +330,6 @@ export default function MenuTVPage() {
 
       {/* Bottom: dots + status */}
       <div className="shrink-0 flex items-center justify-between px-4 py-3 bg-[#16213e]">
-        {/* Navigation dots */}
         <div className="flex gap-2">
           {categories.map((_, idx) => (
             <button
@@ -370,7 +344,6 @@ export default function MenuTVPage() {
           ))}
         </div>
 
-        {/* Camera status */}
         <div className="flex items-center gap-2 text-sm text-white/50">
           <div
             className={`w-3 h-3 rounded-full ${
@@ -379,7 +352,7 @@ export default function MenuTVPage() {
                 : 'bg-red-500'
             }`}
           />
-          <span className="text-xs">{debugInfo || (status === 'loading' ? 'Iniciando cámara...' : '')}</span>
+          <span className="text-xs">{debugInfo}</span>
         </div>
       </div>
 
