@@ -137,6 +137,9 @@ function useMotionSwipe(onSwipe: (direction: 'left' | 'right') => void) {
 
       let prevFrame: Uint8ClampedArray | null = null
       let cooldown = false
+      // Acumular dirección en múltiples frames para confirmar swipe real
+      const swipeAccum: { left: number; right: number; frames: number }  = { left: 0, right: 0, frames: 0 }
+      let skipFrames = 0 // Procesar cada 3 frames para estabilidad
 
       setStatus('active')
       setDebugInfo('✅ Cámara activa — mové la mano ← →')
@@ -146,6 +149,11 @@ function useMotionSwipe(onSwipe: (direction: 'left' | 'right') => void) {
         rafId = requestAnimationFrame(processFrame)
 
         if (video.readyState < 2) return
+
+        // Skip frames para no procesar tan seguido
+        skipFrames++
+        if (skipFrames < 3) return
+        skipFrames = 0
 
         // Draw current frame
         ctx.drawImage(video, 0, 0, W, H)
@@ -157,16 +165,18 @@ function useMotionSwipe(onSwipe: (direction: 'left' | 'right') => void) {
           return
         }
 
-        // Compare frames: calculate motion center-of-mass on X axis
-        // Split frame into left half and right half
+        // Solo analizar la franja central (ignorar bordes con ruido)
+        const marginX = Math.floor(W * 0.1)
+        const marginY = Math.floor(H * 0.2)
         let leftMotion = 0
         let rightMotion = 0
+        let centerMotion = 0
         let totalMotion = 0
         const midX = W / 2
-        const threshold = 40 // pixel brightness change threshold
+        const threshold = 50
 
-        for (let y = 0; y < H; y++) {
-          for (let x = 0; x < W; x++) {
+        for (let y = marginY; y < H - marginY; y++) {
+          for (let x = marginX; x < W - marginX; x++) {
             const i = (y * W + x) * 4
             const diff =
               Math.abs(pixels[i] - prevFrame[i]) +
@@ -175,10 +185,15 @@ function useMotionSwipe(onSwipe: (direction: 'left' | 'right') => void) {
 
             if (diff > threshold) {
               totalMotion++
-              if (x < midX) {
+              // Dividir en 3 zonas: izq, centro, der
+              const third = (W - marginX * 2) / 3
+              const relX = x - marginX
+              if (relX < third) {
                 leftMotion++
-              } else {
+              } else if (relX > third * 2) {
                 rightMotion++
+              } else {
+                centerMotion++
               }
             }
           }
@@ -186,33 +201,62 @@ function useMotionSwipe(onSwipe: (direction: 'left' | 'right') => void) {
 
         prevFrame = new Uint8ClampedArray(pixels)
 
-        // Need minimum total motion (at least 3% of pixels changed)
-        const motionPercent = (totalMotion / (W * H)) * 100
-        if (motionPercent < 3) return
+        const activeArea = (W - marginX * 2) * (H - marginY * 2)
+        const motionPercent = (totalMotion / activeArea) * 100
 
-        // Detect directional swipe: one side should have significantly more motion
-        const total = leftMotion + rightMotion
-        if (total === 0) return
+        // Ignorar poco movimiento (< 4%) y mucho movimiento uniforme (acercarse = todo se mueve)
+        if (motionPercent < 4 || motionPercent > 60) {
+          // Resetear acumulador si no hay movimiento
+          if (motionPercent < 2) {
+            swipeAccum.left = 0
+            swipeAccum.right = 0
+            swipeAccum.frames = 0
+          }
+          return
+        }
 
-        const leftRatio = leftMotion / total
-        const rightRatio = rightMotion / total
-        const imbalance = Math.abs(leftRatio - rightRatio)
+        // Si el movimiento es muy uniforme (centro tiene mucho), es acercarse, no swipe
+        const totalLR = leftMotion + rightMotion + centerMotion
+        if (totalLR === 0) return
+        const centerRatio = centerMotion / totalLR
+        if (centerRatio > 0.5) return // Más de 50% en el centro = no es swipe lateral
 
-        // Need at least 30% imbalance to count as directional swipe
-        if (imbalance > 0.3 && motionPercent > 5) {
-          // Camera is mirrored: left in camera = right in reality
-          const dir = leftRatio > rightRatio ? 'right' : 'left'
+        // Acumular dirección
+        const dirScore = rightMotion - leftMotion
+        if (dirScore > 0) {
+          swipeAccum.right += dirScore
+        } else {
+          swipeAccum.left += Math.abs(dirScore)
+        }
+        swipeAccum.frames++
 
-          cooldown = true
-          setSwipeDirection(dir)
-          setDebugInfo(`👉 Swipe ${dir === 'right' ? '→' : '←'} (${motionPercent.toFixed(0)}% movimiento)`)
-          onSwipe(dir)
+        // Necesitar al menos 3 frames consistentes para confirmar swipe
+        if (swipeAccum.frames >= 3) {
+          const dominant = swipeAccum.right > swipeAccum.left ? 'right' : 'left'
+          const dominantScore = Math.max(swipeAccum.right, swipeAccum.left)
+          const minorScore = Math.min(swipeAccum.right, swipeAccum.left)
 
-          setTimeout(() => {
-            cooldown = false
-            setSwipeDirection(null)
-            setDebugInfo('✅ Cámara activa — mové la mano ← →')
-          }, 1000)
+          // La dirección dominante debe ser al menos 2x la menor
+          if (dominantScore > minorScore * 2 && dominantScore > 50) {
+            // Camera is mirrored
+            const dir = dominant === 'right' ? 'left' : 'right'
+
+            cooldown = true
+            setSwipeDirection(dir)
+            setDebugInfo(`👉 Swipe ${dir === 'right' ? '→' : '←'}`)
+            onSwipe(dir)
+
+            setTimeout(() => {
+              cooldown = false
+              setSwipeDirection(null)
+              setDebugInfo('✅ Cámara activa — mové la mano ← →')
+            }, 1200)
+          }
+
+          // Reset acumulador
+          swipeAccum.left = 0
+          swipeAccum.right = 0
+          swipeAccum.frames = 0
         }
       }
 
