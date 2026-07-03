@@ -11,9 +11,11 @@ import { WhatsAppFAB } from '@/components/public/WhatsAppFAB'
 import { WhatsAppBanner } from '@/components/public/WhatsAppBanner'
 import { ClosureBanner } from '@/components/public/ClosureBanner'
 import { KitchenClosedBanner } from '@/components/public/KitchenClosedBanner'
+import { ScheduledClosedBanner } from '@/components/public/ScheduledClosedBanner'
 import { PushPrompt } from '@/components/public/PushPrompt'
 import { NotificationButton } from '@/components/public/NotificationButton'
 import { useTranslation } from '@/lib/i18n'
+import { useRestaurantOpen } from '@/hooks/useRestaurantOpen'
 import { ChevronDown, Utensils, Wifi, MapPin, Clock } from 'lucide-react'
 import Image from 'next/image'
 import type { MenuItem, CartItem } from '@/lib/types'
@@ -27,6 +29,7 @@ function HomeContent() {
   const [cart, setCart] = useState<CartItem[]>([])
   const [cartOpen, setCartOpen] = useState(false)
   const { t } = useTranslation()
+  const { isOpen: restaurantOpen, refresh: refreshOpen } = useRestaurantOpen()
 
   const searchParams = useSearchParams()
   const mesa = searchParams.get('mesa')
@@ -77,6 +80,7 @@ function HomeContent() {
       {/* ════════════════════════════════════════
           BANNERS DE CIERRE
           ════════════════════════════════════════ */}
+      <ScheduledClosedBanner />
       <ClosureBanner />
       <KitchenClosedBanner />
 
@@ -382,6 +386,8 @@ function HomeContent() {
         onRemove={handleRemove}
         onClear={handleClear}
         mesa={mesa}
+        restaurantOpen={restaurantOpen}
+        onCheckOpen={refreshOpen}
       />
 
       {/* WhatsApp FAB — hide when cart is open */}

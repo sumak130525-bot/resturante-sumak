@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { MercadoPagoConfig, Preference } from 'mercadopago'
 import { createServerClient, type CookieOptions } from '@supabase/ssr'
 import { cookies } from 'next/headers'
+import { isRestaurantOpen, type ClosureDayRecord } from '@/lib/businessHours'
 
 const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL ?? 'https://restaurante-sumak.vercel.app'
 
@@ -57,6 +58,37 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       )
     }
+
+    // ── Validación de horario de atención ──────────────────────────────────
+    // Solo bloqueamos pedidos web (channel !== 'whatsapp')
+    if (channel !== 'whatsapp') {
+      const closureDays: ClosureDayRecord[] = await fetch(
+        `${process.env.NEXT_PUBLIC_BASE_URL ?? 'https://restaurante-sumak.vercel.app'}/api/admin/closure-days`,
+        { next: { revalidate: 0 } }
+      )
+        .then((r) => (r.ok ? r.json() : []))
+        .catch(() => [])
+
+      const kitchenStatus = await fetch(
+        `${process.env.NEXT_PUBLIC_BASE_URL ?? 'https://restaurante-sumak.vercel.app'}/api/admin/kitchen-status`,
+        { next: { revalidate: 0 } }
+      )
+        .then((r) => (r.ok ? r.json() : null))
+        .catch(() => null)
+
+      const open = isRestaurantOpen({
+        closureDays,
+        kitchenEffectiveClosed: kitchenStatus?.effective_closed ?? false,
+      })
+
+      if (!open) {
+        return NextResponse.json(
+          { error: 'closed', message: 'Estamos cerrados' },
+          { status: 403 }
+        )
+      }
+    }
+    // ── Fin validación de horario ──────────────────────────────────────────
 
     const accessToken = process.env.MERCADOPAGO_ACCESS_TOKEN
     if (!accessToken) {

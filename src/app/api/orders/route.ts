@@ -9,6 +9,7 @@ import {
   getStoreId,
   LOYVERSE_PAYMENT_MERCADOPAGO,
 } from '@/lib/loyverse'
+import { isRestaurantOpen, type ClosureDayRecord } from '@/lib/businessHours'
 
 type OrderItemInput = {
   menu_item_id: string
@@ -149,6 +150,25 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       )
     }
+
+    // ── Validación de horario (capa 2 – sólo canal web) ───────────────────
+    if (channel !== 'whatsapp') {
+      const BASE = process.env.NEXT_PUBLIC_BASE_URL ?? 'https://restaurante-sumak.vercel.app'
+      const closureDays: ClosureDayRecord[] = await fetch(`${BASE}/api/admin/closure-days`, { next: { revalidate: 0 } })
+        .then((r) => (r.ok ? r.json() : []))
+        .catch(() => [])
+      const kitchenStatus = await fetch(`${BASE}/api/admin/kitchen-status`, { next: { revalidate: 0 } })
+        .then((r) => (r.ok ? r.json() : null))
+        .catch(() => null)
+
+      if (!isRestaurantOpen({ closureDays, kitchenEffectiveClosed: kitchenStatus?.effective_closed ?? false })) {
+        return NextResponse.json(
+          { error: 'closed', message: 'Estamos cerrados' },
+          { status: 403 }
+        )
+      }
+    }
+    // ── Fin validación de horario ──────────────────────────────────────────
 
     // Usar service client para bypass de RLS; fallback a anon para lectura de menú
     const serviceClient = await getServiceClient()

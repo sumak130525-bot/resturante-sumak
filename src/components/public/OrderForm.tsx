@@ -19,9 +19,11 @@ interface OrderFormProps {
   onBack: () => void
   onSuccess: () => void
   mesa?: string | null
+  restaurantOpen?: boolean
+  onCheckOpen?: () => Promise<boolean>
 }
 
-export function OrderForm({ cart, total, onBack, mesa }: OrderFormProps) {
+export function OrderForm({ cart, total, onBack, mesa, restaurantOpen = true, onCheckOpen }: OrderFormProps) {
   const { t, locale } = useTranslation()
   const [name, setName] = useState('')
   const [phone, setPhone] = useState('')
@@ -39,6 +41,19 @@ export function OrderForm({ cart, total, onBack, mesa }: OrderFormProps) {
       setError(t('phoneRequired'))
       return
     }
+
+    // Re-check open status right before submitting (in case time changed while browsing)
+    if (onCheckOpen) {
+      const stillOpen = await onCheckOpen()
+      if (!stillOpen) {
+        setError('Estamos cerrados. Horario: Lunes a Sábado 8:00–22:30')
+        return
+      }
+    } else if (!restaurantOpen) {
+      setError('Estamos cerrados. Horario: Lunes a Sábado 8:00–22:30')
+      return
+    }
+
     setError(null)
     setLoading(true)
 
@@ -72,7 +87,12 @@ export function OrderForm({ cart, total, onBack, mesa }: OrderFormProps) {
       })
 
       const data = await res.json()
-      if (!res.ok) throw new Error(data.error ?? 'Error al crear preferencia de pago')
+      if (!res.ok) {
+        if (data.error === 'closed') {
+          throw new Error(data.message ?? 'Estamos cerrados. Horario: Lunes a Sábado 8:00–22:30')
+        }
+        throw new Error(data.error ?? 'Error al crear preferencia de pago')
+      }
 
       if (data.init_point) {
         window.location.href = data.init_point
@@ -193,7 +213,7 @@ export function OrderForm({ cart, total, onBack, mesa }: OrderFormProps) {
       <div className="shrink-0 px-5 pb-6 pt-3 border-t border-sumak-cream-dark">
         <button
           type="submit"
-          disabled={loading}
+          disabled={loading || !restaurantOpen}
           className={cn(
             'w-full flex items-center justify-center gap-2.5',
             'bg-[#009ee3] text-white font-bold',
@@ -201,7 +221,7 @@ export function OrderForm({ cart, total, onBack, mesa }: OrderFormProps) {
             'transition-all duration-300',
             'hover:bg-[#0085c3] hover:scale-[1.02]',
             'active:scale-[0.98]',
-            loading && 'opacity-80 cursor-not-allowed'
+            (loading || !restaurantOpen) && 'opacity-80 cursor-not-allowed'
           )}
         >
           {loading ? (

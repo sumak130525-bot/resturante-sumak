@@ -1,7 +1,7 @@
 'use client'
 
 import { useState } from 'react'
-import { X, Trash2, ShoppingBag, ArrowRight, Sparkles, Phone, User, MessageSquare, MapPin } from 'lucide-react'
+import { X, Trash2, ShoppingBag, ArrowRight, Sparkles, Phone, User, MessageSquare, MapPin, Clock } from 'lucide-react'
 import { cn, formatPrice } from '@/lib/utils'
 import { buildWhatsAppURL } from '@/lib/whatsapp'
 import { useTranslation, getItemName } from '@/lib/i18n'
@@ -23,6 +23,8 @@ interface CartDrawerProps {
   onRemove: (itemId: string) => void
   onClear: () => void
   mesa?: string | null
+  restaurantOpen?: boolean
+  onCheckOpen?: () => Promise<boolean>
 }
 
 export function CartDrawer({
@@ -33,6 +35,8 @@ export function CartDrawer({
   onRemove,
   onClear,
   mesa,
+  restaurantOpen = true,
+  onCheckOpen,
 }: CartDrawerProps) {
   const { t, locale } = useTranslation()
   const [showOrderForm, setShowOrderForm] = useState(false)
@@ -170,6 +174,8 @@ export function CartDrawer({
             onBack={() => setShowOrderForm(false)}
             onSuccess={handleOrderSuccess}
             mesa={mesa}
+            restaurantOpen={restaurantOpen}
+            onCheckOpen={onCheckOpen}
           />
 
         ) : (
@@ -225,16 +231,28 @@ export function CartDrawer({
                 </span>
               </div>
 
+              {/* Closed notice */}
+              {!restaurantOpen && (
+                <div className="flex items-center gap-2 rounded-xl bg-sumak-brown/10 border border-sumak-brown/20 px-3 py-2.5">
+                  <Clock size={13} className="text-sumak-brown shrink-0" />
+                  <p className="text-xs text-sumak-brown font-medium leading-snug">
+                    Estamos cerrados. Horario: Lunes a Sábado 8:00–22:30
+                  </p>
+                </div>
+              )}
+
               {/* CTA principal */}
               <button
                 onClick={() => setShowOrderForm(true)}
+                disabled={!restaurantOpen}
                 className={cn(
                   'w-full flex items-center justify-center gap-2',
                   'bg-sumak-brown text-sumak-gold font-bold',
                   'py-3.5 px-6 rounded-pill',
                   'transition-all duration-300 ease-smooth',
-                  'hover:bg-sumak-brown-mid hover:shadow-gold-glow/30 hover:scale-[1.02]',
-                  'active:scale-[0.98]'
+                  restaurantOpen
+                    ? 'hover:bg-sumak-brown-mid hover:shadow-gold-glow/30 hover:scale-[1.02] active:scale-[0.98]'
+                    : 'opacity-40 cursor-not-allowed'
                 )}
               >
                 {t('confirmOrder')}
