@@ -93,21 +93,21 @@ function SwipeIndicator({ direction }: { direction: 'left' | 'right' }) {
   )
 }
 
-// ─── Hand Tracking: detect raised arm + lateral swipe ─────────────────────────
-function useArmSwipe(onSwipe: (direction: 'left' | 'right') => void) {
+// ─── Motion Detection (no ML needed, fast!) ──────────────────────────────────
+function useMotionSwipe(onSwipe: (direction: 'left' | 'right') => void) {
   const [status, setStatus] = useState<'loading' | 'active' | 'error'>('loading')
   const [swipeDirection, setSwipeDirection] = useState<'left' | 'right' | null>(null)
-  const [debugInfo, setDebugInfo] = useState('Iniciando cámara...')
+  const [debugInfo, setDebugInfo] = useState('')
 
   useEffect(() => {
     let stopped = false
     let stream: MediaStream | null = null
-    let intervalId: ReturnType<typeof setInterval>
-    const W = 320
-    const H = 240
+    let rafId: number
+    const W = 160
+    const H = 120
 
     async function init() {
-      // 1. Camera
+      // 1. Get camera
       try {
         stream = await navigator.mediaDevices.getUserMedia({
           video: { width: W, height: H, facingMode: 'user' },
@@ -120,170 +120,151 @@ function useArmSwipe(onSwipe: (direction: 'left' | 'right') => void) {
 
       if (stopped) { stream.getTracks().forEach(t => t.stop()); return }
 
+      // 2. Video + Canvas (hidden processing)
       const video = document.createElement('video')
       video.srcObject = stream
       video.setAttribute('playsinline', '')
       video.muted = true
+      // Preview chiquito
       video.style.cssText = 'position:fixed;bottom:10px;right:10px;width:120px;height:90px;border-radius:8px;border:2px solid rgba(255,255,255,0.3);z-index:100;opacity:0.5;transform:scaleX(-1);'
       document.body.appendChild(video)
       await video.play()
 
-      if (stopped) { video.remove(); stream.getTracks().forEach(t => t.stop()); return }
+      const canvas = document.createElement('canvas')
+      canvas.width = W
+      canvas.height = H
+      const ctx = canvas.getContext('2d', { willReadFrequently: true })!
 
-      // 2. Load MediaPipe Hands
-      setDebugInfo('Cargando detección de manos...')
-      try {
-        const loadScript = (src: string) =>
-          new Promise<void>((resolve, reject) => {
-            if (document.querySelector(`script[src="${src}"]`)) { resolve(); return }
-            const s = document.createElement('script')
-            s.src = src
-            s.crossOrigin = 'anonymous'
-            s.onload = () => resolve()
-            s.onerror = () => reject(new Error('Script load failed'))
-            document.head.appendChild(s)
-          })
-
-        await loadScript('https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1675469240/hands.js')
-      } catch {
-        setStatus('error')
-        setDebugInfo('Error cargando MediaPipe')
-        return
-      }
-
-      if (stopped) { video.remove(); stream.getTracks().forEach(t => t.stop()); return }
-
-      const mp = (window as any)
-      if (!mp.Hands) {
-        setStatus('error')
-        setDebugInfo('MediaPipe no disponible')
-        return
-      }
-
-      const hands = new mp.Hands({
-        locateFile: (file: string) =>
-          `https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1675469240/${file}`,
-      })
-
-      hands.setOptions({
-        maxNumHands: 1,
-        modelComplexity: 0,
-        minDetectionConfidence: 0.5,
-        minTrackingConfidence: 0.4,
-      })
-
-      // Track wrist position for swipe
-      const wristHistory: { x: number; y: number; t: number }[] = []
+      let prevFrame: Uint8ClampedArray | null = null
       let cooldown = false
-      let handDetected = false
-      let raisedOpenSince: number | null = null
+      // Acumular dirección en múltiples frames para confirmar swipe real
+      const swipeAccum: { left: number; right: number; frames: number }  = { left: 0, right: 0, frames: 0 }
+      let skipFrames = 0 // Procesar cada 3 frames para estabilidad
 
-      hands.onResults((results: any) => {
-        if (!results.multiHandLandmarks || results.multiHandLandmarks.length === 0) {
-          handDetected = false
-          raisedOpenSince = null
-          wristHistory.length = 0
-          setDebugInfo('✋ Levantá la mano abierta para navegar')
+      setStatus('active')
+      setDebugInfo('✅ Cámara activa — mové la mano ← →')
+
+      function processFrame() {
+        if (stopped) return
+        rafId = requestAnimationFrame(processFrame)
+
+        if (video.readyState < 2) return
+
+        // Skip frames para no procesar tan seguido
+        skipFrames++
+        if (skipFrames < 3) return
+        skipFrames = 0
+
+        // Draw current frame
+        ctx.drawImage(video, 0, 0, W, H)
+        const frame = ctx.getImageData(0, 0, W, H)
+        const pixels = frame.data
+
+        if (!prevFrame || cooldown) {
+          prevFrame = new Uint8ClampedArray(pixels)
           return
         }
 
-        const landmarks = results.multiHandLandmarks[0]
-        // 0=wrist, 9=middle_mcp
-        // Fingertips: 8=index, 12=middle, 16=ring, 20=pinky
-        // PIPs:       6=index, 10=middle, 14=ring, 18=pinky
-        const wrist = landmarks[0]
-        const middleMcp = landmarks[9]
+        // Solo analizar la franja central (ignorar bordes con ruido)
+        const marginX = Math.floor(W * 0.1)
+        const marginY = Math.floor(H * 0.2)
+        let leftMotion = 0
+        let rightMotion = 0
+        let centerMotion = 0
+        let totalMotion = 0
+        const midX = W / 2
+        const threshold = 50
 
-        // 1) Mano en mitad superior del frame (wrist.y < 0.5)
-        const isUpperFrame = wrist.y < 0.5
+        for (let y = marginY; y < H - marginY; y++) {
+          for (let x = marginX; x < W - marginX; x++) {
+            const i = (y * W + x) * 4
+            const diff =
+              Math.abs(pixels[i] - prevFrame[i]) +
+              Math.abs(pixels[i + 1] - prevFrame[i + 1]) +
+              Math.abs(pixels[i + 2] - prevFrame[i + 2])
 
-        // 2) Brazo levantado — umbral aumentado a 0.08
-        const isRaised = middleMcp.y < wrist.y - 0.08
+            if (diff > threshold) {
+              totalMotion++
+              // Dividir en 3 zonas: izq, centro, der
+              const third = (W - marginX * 2) / 3
+              const relX = x - marginX
+              if (relX < third) {
+                leftMotion++
+              } else if (relX > third * 2) {
+                rightMotion++
+              } else {
+                centerMotion++
+              }
+            }
+          }
+        }
 
-        // 3) Mano abierta — al menos 3 de 4 dedos extendidos (punta por encima del PIP)
-        const fingerPairs = [[8, 6], [12, 10], [16, 14], [20, 18]]
-        const extendedCount = fingerPairs.filter(
-          ([tip, pip]) => landmarks[tip].y < landmarks[pip].y
-        ).length
-        const isOpen = extendedCount >= 3
+        prevFrame = new Uint8ClampedArray(pixels)
 
-        if (!isUpperFrame || !isRaised || !isOpen) {
-          handDetected = false
-          raisedOpenSince = null
-          wristHistory.length = 0
-          if (!isUpperFrame) {
-            setDebugInfo('⬆️ Levantá la mano más arriba')
-          } else if (!isRaised) {
-            setDebugInfo('☝️ Levantá más el brazo')
-          } else {
-            setDebugInfo(`✊ Abrí la mano (${extendedCount}/4 dedos)`)
+        const activeArea = (W - marginX * 2) * (H - marginY * 2)
+        const motionPercent = (totalMotion / activeArea) * 100
+
+        // Ignorar poco movimiento (< 4%) y mucho movimiento uniforme (acercarse = todo se mueve)
+        if (motionPercent < 4 || motionPercent > 60) {
+          // Resetear acumulador si no hay movimiento
+          if (motionPercent < 2) {
+            swipeAccum.left = 0
+            swipeAccum.right = 0
+            swipeAccum.frames = 0
           }
           return
         }
 
-        // 5) Requerir mano levantada+abierta por al menos 300ms antes de aceptar swipe
-        const now = Date.now()
-        if (raisedOpenSince === null) {
-          raisedOpenSince = now
+        // Si el movimiento es muy uniforme (centro tiene mucho), es acercarse, no swipe
+        const totalLR = leftMotion + rightMotion + centerMotion
+        if (totalLR === 0) return
+        const centerRatio = centerMotion / totalLR
+        if (centerRatio > 0.5) return // Más de 50% en el centro = no es swipe lateral
+
+        // Acumular dirección
+        const dirScore = rightMotion - leftMotion
+        if (dirScore > 0) {
+          swipeAccum.right += dirScore
+        } else {
+          swipeAccum.left += Math.abs(dirScore)
         }
-        const readyForSwipe = now - raisedOpenSince >= 300
+        swipeAccum.frames++
 
-        handDetected = true
-        wristHistory.push({ x: wrist.x, y: wrist.y, t: now })
+        // Necesitar al menos 3 frames consistentes para confirmar swipe
+        if (swipeAccum.frames >= 3) {
+          const dominant = swipeAccum.right > swipeAccum.left ? 'right' : 'left'
+          const dominantScore = Math.max(swipeAccum.right, swipeAccum.left)
+          const minorScore = Math.min(swipeAccum.right, swipeAccum.left)
 
-        // Keep last 600ms
-        while (wristHistory.length > 0 && now - wristHistory[0].t > 600) wristHistory.shift()
+          // La dirección dominante debe ser al menos 2x la menor
+          if (dominantScore > minorScore * 2 && dominantScore > 50) {
+            // Camera is mirrored
+            const dir = dominant === 'right' ? 'left' : 'right'
 
-        if (!readyForSwipe) {
-          setDebugInfo(`🖐️ Mano detectada — aguantá... (${Math.round(now - raisedOpenSince)}ms)`)
-          return
+            cooldown = true
+            setSwipeDirection(dir)
+            setDebugInfo(`👉 Swipe ${dir === 'right' ? '→' : '←'}`)
+            onSwipe(dir)
+
+            setTimeout(() => {
+              cooldown = false
+              setSwipeDirection(null)
+              setDebugInfo('✅ Cámara activa — mové la mano ← →')
+            }, 1200)
+          }
+
+          // Reset acumulador
+          swipeAccum.left = 0
+          swipeAccum.right = 0
+          swipeAccum.frames = 0
         }
+      }
 
-        setDebugInfo(`🖐️ Mano lista — mové a los lados`)
-
-        if (wristHistory.length < 3 || cooldown) return
-
-        const first = wristHistory[0]
-        const last = wristHistory[wristHistory.length - 1]
-        const dx = last.x - first.x
-        const dy = Math.abs(last.y - first.y)
-        const dt = last.t - first.t
-
-        // 4) Swipe: movimiento horizontal > 15%, vertical bajo, en < 600ms
-        if (Math.abs(dx) > 0.15 && dy < 0.15 && dt < 600 && dt > 50) {
-          // Camera mirrored
-          const dir = dx > 0 ? 'left' : 'right'
-          cooldown = true
-          setSwipeDirection(dir)
-          setDebugInfo(`👉 Swipe ${dir === 'right' ? '→' : '←'} detectado`)
-          onSwipe(dir)
-          wristHistory.length = 0
-          raisedOpenSince = null
-
-          setTimeout(() => {
-            cooldown = false
-            setSwipeDirection(null)
-            setDebugInfo('✅ Listo — mové la mano ← →')
-          }, 1000)
-        }
-      })
-
-      await hands.initialize()
-      setStatus('active')
-      setDebugInfo('✅ Listo — levantá la mano y mové a los lados')
-
-      // Process frame every 150ms (not every frame — saves CPU)
-      intervalId = setInterval(async () => {
-        if (stopped || video.readyState < 2) return
-        try {
-          await hands.send({ image: video })
-        } catch {}
-      }, 150)
+      processFrame()
 
       return () => {
         stopped = true
-        clearInterval(intervalId)
-        try { hands.close() } catch {}
+        cancelAnimationFrame(rafId)
         video.remove()
         stream?.getTracks().forEach(t => t.stop())
       }
@@ -324,7 +305,7 @@ export default function MenuTVPage() {
   const swipeRef = useRef(handleSwipe)
   swipeRef.current = handleSwipe
 
-  const { status, swipeDirection, debugInfo } = useArmSwipe(
+  const { status, swipeDirection, debugInfo } = useMotionSwipe(
     useCallback((dir: 'left' | 'right') => swipeRef.current(dir), [])
   )
 
