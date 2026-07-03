@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import Image from 'next/image'
 import { useMenuRealtime } from '@/hooks/useMenuRealtime'
 import { useTranslation, getItemName, type Locale } from '@/lib/i18n'
@@ -16,6 +16,8 @@ const FALLBACK_REFRESH_MS = 15 * 1_000  // Refresh every 15s to pick up admin ch
 const DEFAULT_GRID_COLS   = 6
 const DEFAULT_GRID_ROWS   = 16
 const MAX_VISIBLE         = DEFAULT_GRID_COLS * DEFAULT_GRID_ROWS
+const LONG_PRESS_MS       = 500   // Duration for long press to activate drag
+const DRAG_CANCEL_PX      = 10   // Max movement before long-press is cancelled (scroll intent)
 
 // ─── Category Icons ───────────────────────────────────────────────────────────
 
@@ -420,9 +422,13 @@ function CardModal({
 interface DishCardProps {
   item: MenuItem
   locale: Locale
+  onDragStart: (item: MenuItem, clientX: number, clientY: number) => void
+  isDragging: boolean
+  isDropTarget: boolean
+  cellRef: (el: HTMLElement | null) => void
 }
 
-function DishCard({ item, locale }: DishCardProps) {
+function DishCard({ item, locale, onDragStart, isDragging, isDropTarget, cellRef }: DishCardProps) {
   const isUnavailable = item.available === 0 || item.available_qty === 0
   const name = getItemName(item, locale)
   const emoji = CATEGORY_EMOJI[item.categories?.slug ?? ''] ?? '🍽️'
@@ -433,6 +439,70 @@ function DishCard({ item, locale }: DishCardProps) {
   const [uploading, setUploading] = useState(false)
   // Local optimistic stock state so highlight updates immediately
   const [localQty, setLocalQty] = useState<number | null>(item.available_qty ?? null)
+
+  // Long-press state
+  const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const pressStartRef = useRef<{ x: number; y: number } | null>(null)
+  const didDragRef = useRef(false)
+
+  const cancelLongPress = useCallback(() => {
+    if (longPressTimerRef.current) {
+      clearTimeout(longPressTimerRef.current)
+      longPressTimerRef.current = null
+    }
+    pressStartRef.current = null
+  }, [])
+
+  const handlePointerDown = useCallback((e: React.PointerEvent) => {
+    // Only primary pointer (left mouse / first touch)
+    if (e.button !== 0 && e.pointerType === 'mouse') return
+    // Don't start if modal is open
+    if (modalStep) return
+
+    didDragRef.current = false
+    pressStartRef.current = { x: e.clientX, y: e.clientY }
+
+    longPressTimerRef.current = setTimeout(() => {
+      longPressTimerRef.current = null
+      if (pressStartRef.current) {
+        // Vibrate for haptic feedback
+        if (typeof navigator.vibrate === 'function') {
+          navigator.vibrate(50)
+        }
+        didDragRef.current = true
+        onDragStart(item, e.clientX, e.clientY)
+        pressStartRef.current = null
+      }
+    }, LONG_PRESS_MS)
+  }, [item, modalStep, onDragStart])
+
+  const handlePointerMove = useCallback((e: React.PointerEvent) => {
+    if (!pressStartRef.current) return
+    const dx = e.clientX - pressStartRef.current.x
+    const dy = e.clientY - pressStartRef.current.y
+    // If finger moved more than threshold, cancel long press (user is scrolling)
+    if (Math.abs(dx) > DRAG_CANCEL_PX || Math.abs(dy) > DRAG_CANCEL_PX) {
+      cancelLongPress()
+    }
+  }, [cancelLongPress])
+
+  const handlePointerUp = useCallback(() => {
+    if (longPressTimerRef.current) {
+      // Timer still running → it was a short tap → open modal
+      cancelLongPress()
+      if (!didDragRef.current && !modalStep) {
+        setModalStep('menu')
+      }
+    }
+    pressStartRef.current = null
+  }, [cancelLongPress, modalStep])
+
+  // Cleanup timer on unmount
+  useEffect(() => {
+    return () => {
+      if (longPressTimerRef.current) clearTimeout(longPressTimerRef.current)
+    }
+  }, [])
 
   const handleCancel = () => {
     setModalStep(null)
@@ -502,20 +572,22 @@ function DishCard({ item, locale }: DishCardProps) {
     }
   }
 
-  const handleClick = () => {
-    if (!modalStep) setModalStep('menu')
-  }
-
   return (
     <article
+      ref={cellRef}
       data-item-id={item.id}
       className={cn(
         'relative w-full h-full rounded-lg overflow-hidden cursor-pointer',
         'transition-all duration-300',
         isUnavailable && !deleted && 'opacity-50',
         deleted && 'opacity-0 scale-95 pointer-events-none',
+        isDragging && 'opacity-30 scale-95',
       )}
-      onClick={handleClick}
+      style={isDropTarget ? { outline: '3px solid #F5C842', outlineOffset: '-3px' } : undefined}
+      onPointerDown={handlePointerDown}
+      onPointerMove={handlePointerMove}
+      onPointerUp={handlePointerUp}
+      onPointerCancel={cancelLongPress}
     >
       {/* Hidden file input for camera/gallery */}
       <input
@@ -619,6 +691,47 @@ function SkeletonGrid({ count }: { count: number }) {
   )
 }
 
+// ─── Drag Ghost Thumbnail ─────────────────────────────────────────────────────
+
+interface DragGhostProps {
+  item: MenuItem
+  pos: { x: number; y: number }
+  locale: Locale
+}
+
+function DragGhost({ item, pos, locale }: DragGhostProps) {
+  const name = getItemName(item, locale)
+  const emoji = CATEGORY_EMOJI[item.categories?.slug ?? ''] ?? '🍽️'
+  return (
+    <div
+      className="fixed z-[9999] pointer-events-none rounded-xl overflow-hidden shadow-2xl"
+      style={{
+        width: 80,
+        height: 80,
+        left: pos.x - 40,
+        top: pos.y - 40,
+        opacity: 0.85,
+        transform: 'scale(1.08)',
+        border: '2px solid #F5C842',
+      }}
+    >
+      {item.image_url ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={item.image_url}
+          alt={name}
+          className="w-full h-full object-cover"
+          draggable={false}
+        />
+      ) : (
+        <div className="w-full h-full flex items-center justify-center bg-[#1a1917]">
+          <span className="text-3xl">{emoji}</span>
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 export default function MenuDisplayPage() {
@@ -654,8 +767,120 @@ export default function MenuDisplayPage() {
     if (!languagesEnabled && locale !== 'es') setLocale('es')
   }, [languagesEnabled, locale, setLocale])
 
+  // ─── Drag & Drop state ──────────────────────────────────────────────────────
+  const [draggedItem, setDraggedItem] = useState<MenuItem | null>(null)
+  const [dragPos, setDragPos] = useState<{ x: number; y: number }>({ x: 0, y: 0 })
+  const [dropTarget, setDropTarget] = useState<number | null>(null) // grid position (1-N)
+  // Map position → cell DOM element for hit-testing
+  const cellElemsRef = useRef<Map<number, HTMLElement>>(new Map())
+
+  const getPositionFromPoint = useCallback((clientX: number, clientY: number): number | null => {
+    let best: number | null = null
+    cellElemsRef.current.forEach((el, position) => {
+      const rect = el.getBoundingClientRect()
+      if (
+        clientX >= rect.left &&
+        clientX <= rect.right &&
+        clientY >= rect.top &&
+        clientY <= rect.bottom
+      ) {
+        best = position
+      }
+    })
+    return best
+  }, [])
+
+  const handleDragStart = useCallback((item: MenuItem, clientX: number, clientY: number) => {
+    setDraggedItem(item)
+    setDragPos({ x: clientX, y: clientY })
+    setDropTarget(item.display_order ?? null)
+  }, [])
+
+  const handleDragMove = useCallback((clientX: number, clientY: number) => {
+    if (!draggedItem) return
+    setDragPos({ x: clientX, y: clientY })
+    const pos = getPositionFromPoint(clientX, clientY)
+    setDropTarget(pos)
+  }, [draggedItem, getPositionFromPoint])
+
+  const handleDragEnd = useCallback(async (clientX: number, clientY: number) => {
+    if (!draggedItem) return
+    const targetPosition = getPositionFromPoint(clientX, clientY)
+    const sourcePosition = draggedItem.display_order ?? 0
+
+    if (targetPosition !== null && targetPosition !== sourcePosition) {
+      const targetItem = menuItems.find((i) => i.display_order === targetPosition)
+      try {
+        if (targetItem) {
+          // Swap
+          await fetch('/api/menu-display/reorder', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              updates: [
+                { id: draggedItem.id, display_order: targetPosition },
+                { id: targetItem.id, display_order: sourcePosition },
+              ],
+            }),
+          })
+        } else {
+          // Move to empty cell
+          await fetch('/api/menu-display/reorder', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              updates: [{ id: draggedItem.id, display_order: targetPosition }],
+            }),
+          })
+        }
+        refetch()
+      } catch { /* silent fail */ }
+    }
+    setDraggedItem(null)
+    setDropTarget(null)
+  }, [draggedItem, menuItems, getPositionFromPoint, refetch])
+
+  const cancelDrag = useCallback(() => {
+    setDraggedItem(null)
+    setDropTarget(null)
+  }, [])
+
+  // Global move/end listeners while dragging
+  useEffect(() => {
+    if (!draggedItem) return
+
+    const onMouseMove = (e: MouseEvent) => handleDragMove(e.clientX, e.clientY)
+    const onMouseUp = (e: MouseEvent) => { void handleDragEnd(e.clientX, e.clientY) }
+    const onTouchMove = (e: TouchEvent) => {
+      e.preventDefault()
+      const t = e.touches[0]
+      handleDragMove(t.clientX, t.clientY)
+    }
+    const onTouchEnd = (e: TouchEvent) => {
+      const t = e.changedTouches[0]
+      void handleDragEnd(t.clientX, t.clientY)
+    }
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') cancelDrag()
+    }
+
+    window.addEventListener('mousemove', onMouseMove)
+    window.addEventListener('mouseup', onMouseUp)
+    window.addEventListener('touchmove', onTouchMove, { passive: false })
+    window.addEventListener('touchend', onTouchEnd)
+    window.addEventListener('keydown', onKeyDown)
+    return () => {
+      window.removeEventListener('mousemove', onMouseMove)
+      window.removeEventListener('mouseup', onMouseUp)
+      window.removeEventListener('touchmove', onTouchMove)
+      window.removeEventListener('touchend', onTouchEnd)
+      window.removeEventListener('keydown', onKeyDown)
+    }
+  }, [draggedItem, handleDragMove, handleDragEnd, cancelDrag])
+
   const handleEmptyCellClick = (position: number) => {
-    setAssigningPosition(position)
+    // Only open assign modal when not dragging
+    if (!draggedItem) setAssigningPosition(position)
   }
 
   const handleAssign = async (itemId: string) => {
@@ -813,20 +1038,34 @@ export default function MenuDisplayPage() {
             {Array.from({ length: gridMaxVisible }).map((_, gridIndex) => {
               const position = gridIndex + 1
               const item = filteredItems.find((i) => i.display_order === position)
+              const isDropTarget = dropTarget === position
+
               if (item) {
                 return (
                   <DishCard
                     key={item.id}
                     item={item}
                     locale={locale}
+                    onDragStart={handleDragStart}
+                    isDragging={draggedItem?.id === item.id}
+                    isDropTarget={isDropTarget && draggedItem?.id !== item.id}
+                    cellRef={(el) => {
+                      if (el) cellElemsRef.current.set(position, el)
+                      else cellElemsRef.current.delete(position)
+                    }}
                   />
                 )
               }
               return (
                 <button
                   key={`empty-${gridIndex}`}
+                  ref={(el) => {
+                    if (el) cellElemsRef.current.set(position, el)
+                    else cellElemsRef.current.delete(position)
+                  }}
                   onClick={() => handleEmptyCellClick(position)}
                   className="w-full h-full rounded-lg bg-black/20 transition-all duration-150 hover:bg-white/5 active:bg-white/10 flex items-center justify-center group"
+                  style={isDropTarget ? { outline: '3px solid #F5C842', outlineOffset: '-3px', background: 'rgba(245,200,66,0.08)' } : undefined}
                   aria-label={`Agregar plato en celda ${position}`}
                 >
                   <span className="text-white/10 text-2xl group-hover:text-white/25 transition-colors duration-150 select-none">+</span>
@@ -844,6 +1083,11 @@ export default function MenuDisplayPage() {
           onAssign={handleAssign}
           onClose={handleAssignClose}
         />
+      )}
+
+      {/* ── Drag ghost thumbnail ── */}
+      {draggedItem && (
+        <DragGhost item={draggedItem} pos={dragPos} locale={locale} />
       )}
     </div>
   )
