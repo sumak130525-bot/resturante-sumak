@@ -62,20 +62,20 @@ function struckKey(orderId: string) {
   return `sumak-cocina-struck-${orderId}`
 }
 
-function loadStruck(orderId: string): Set<number> {
+function loadStruck(orderId: string): Set<string> {
   try {
     const raw = localStorage.getItem(struckKey(orderId))
     if (!raw) return new Set()
-    const arr: number[] = JSON.parse(raw)
+    const arr: string[] = JSON.parse(raw)
     return new Set(arr)
   } catch {
     return new Set()
   }
 }
 
-function saveStruck(orderId: string, indices: Set<number>) {
+function saveStruck(orderId: string, ids: Set<string>) {
   try {
-    localStorage.setItem(struckKey(orderId), JSON.stringify(Array.from(indices)))
+    localStorage.setItem(struckKey(orderId), JSON.stringify(Array.from(ids)))
   } catch {}
 }
 
@@ -365,17 +365,17 @@ function OrderCard({
   isDelivered?: boolean
 }) {
   // ── Estado de items tachados ──
-  const [struckIndices, setStruckIndices] = useState<Set<number>>(() => {
+  const [struckIds, setStruckIds] = useState<Set<string>>(() => {
     if (typeof window === 'undefined') return new Set()
     // Inicializar desde DB (delivered_at) + localStorage
     const fromLocal = loadStruck(order.id)
-    const fromDB = new Set<number>()
-    order.items.forEach((item: any, idx: number) => {
-      if (item.delivered_at) fromDB.add(idx)
+    const fromDB = new Set<string>()
+    order.items.forEach((item: any) => {
+      if (item.delivered_at && item.id) fromDB.add(item.id)
     })
     // Merge: si la DB dice entregado, marcar
     if (fromDB.size > 0) {
-      const merged = new Set(Array.from(fromLocal).concat(Array.from(fromDB)))
+      const merged = new Set([...Array.from(fromLocal), ...Array.from(fromDB)])
       saveStruck(order.id, merged)
       return merged
     }
@@ -390,35 +390,31 @@ function OrderCard({
 
   if (isPOS && displayItems.length === 0) return null
 
-  const allStruck = displayItems.length > 0 && struckIndices.size === displayItems.length
+  const allStruck = displayItems.length > 0 && displayItems.every((item) => item.id && struckIds.has(item.id))
 
-  const toggleStruck = (idx: number) => {
+  const toggleStruck = (itemId: string) => {
     if (isDelivered) return
-    const item = displayItems[idx]
-    const itemId = item?.id
-    const wasStruck = struckIndices.has(idx)
+    const wasStruck = struckIds.has(itemId)
     
     // Actualizar UI inmediatamente
-    setStruckIndices((prev) => {
+    setStruckIds((prev) => {
       const next = new Set(Array.from(prev))
       if (wasStruck) {
-        next.delete(idx)
+        next.delete(itemId)
       } else {
-        next.add(idx)
+        next.add(itemId)
       }
       saveStruck(order.id, next)
       return next
     })
 
     // Guardar en DB fuera del setState
-    if (itemId) {
-      const delivered = !wasStruck
-      fetch('/api/cocina/orders/item-deliver', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ item_id: itemId, delivered }),
-      }).catch(() => {})
-    }
+    const delivered = !wasStruck
+    fetch('/api/cocina/orders/item-deliver', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ item_id: itemId, delivered }),
+    }).catch(() => {})
   }
 
   const headerBg = isDelivered ? 'bg-gray-400' : getHeaderColorByTime(order.created_at)
@@ -553,12 +549,12 @@ function OrderCard({
                     </div>
                     <ul className="flex flex-col gap-2">
                       {groups.get(pn)!.map(({ item, idx }) => {
-                        const struck = struckIndices.has(idx)
+                        const struck = item.id ? struckIds.has(item.id) : false
                         return (
                           <li
                             key={idx}
                             className="flex items-start gap-2 cursor-pointer select-none transition-all duration-150"
-                            onClick={() => toggleStruck(idx)}
+                            onClick={() => item.id && toggleStruck(item.id)}
                             title={struck ? 'Click para quitar tachado' : 'Click para tachar'}
                           >
                             <span className={`text-2xl font-black leading-none w-8 shrink-0 ${struck ? 'text-gray-400 line-through' : 'text-gray-900'}`}>
@@ -598,12 +594,12 @@ function OrderCard({
           // Lista plana (comportamiento original)
           <ul className="flex flex-col gap-2">
             {displayItems.map((item, i) => {
-              const struck = struckIndices.has(i)
+              const struck = item.id ? struckIds.has(item.id) : false
               return (
                 <li
                   key={i}
                   className={`flex items-start gap-2 cursor-pointer select-none transition-all duration-150`}
-                  onClick={() => toggleStruck(i)}
+                  onClick={() => item.id && toggleStruck(item.id)}
                   title={struck ? 'Click para quitar tachado' : 'Click para tachar'}
                 >
                   <span className={`text-2xl font-black leading-none w-8 shrink-0 ${struck ? 'text-gray-400 line-through' : 'text-gray-900'}`}>
