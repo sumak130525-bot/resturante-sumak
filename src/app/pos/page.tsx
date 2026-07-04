@@ -1162,13 +1162,13 @@ function CloseShiftModal({
       const data = await res.json()
       if (!res.ok) throw new Error(data.error ?? 'Error al cerrar turno')
 
-      // Reset state FIRST, then print (in case print navigates away)
-      onClosed()
-      // Open cash drawer for counting
+      // Open cash drawer (non-blocking)
       if (printServerUrl) {
         fetch(`${printServerUrl}/open-drawer`, { method: 'POST' }).catch(() => {})
       }
-      void triggerShiftPrint(data.summary, printServerUrl)
+      // Print BEFORE closing (onClosed may unmount the component)
+      await triggerShiftPrint(data.summary, printServerUrl)
+      onClosed()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error')
       setSubmitting(false)
