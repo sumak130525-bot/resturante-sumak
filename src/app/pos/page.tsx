@@ -1166,9 +1166,16 @@ function CloseShiftModal({
       if (printServerUrl) {
         fetch(`${printServerUrl}/open-drawer`, { method: 'POST' }).catch(() => {})
       }
-      // Print BEFORE closing (onClosed may unmount the component)
-      await triggerShiftPrint(data.summary, printServerUrl)
-      onClosed()
+      if (printServerUrl) {
+        // Thermal printer: send ticket directly, then close modal normally
+        await triggerShiftPrint(data.summary, printServerUrl)
+        onClosed()
+      } else {
+        // PWA standalone (APK): window.open is blocked — navigate to /pos/ticket via location.href.
+        // The page is replaced so onClosed() won't run, but the shift is already closed in DB.
+        // The ticket page will redirect back to /pos when the user finishes printing.
+        await triggerShiftPrint(data.summary, null)
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error')
       setSubmitting(false)
@@ -1381,8 +1388,10 @@ async function triggerShiftPrint(summary: ShiftSummary, printServerUrl?: string 
   sessionStorage.setItem('pos_ticket_marginright', '0')
   sessionStorage.setItem('pos_ticket_separator', '-')
   sessionStorage.setItem('pos_ticket_separatordouble', 'false')
-  // Open print page in a new tab so the POS page is NOT reloaded and state is preserved
-  window.open('/pos/ticket', '_blank')
+  // Mark that a shift was just closed so the ticket page redirects back to /pos
+  sessionStorage.setItem('pos_shift_just_closed', 'true')
+  // Use location.href instead of window.open — window.open is blocked in PWA standalone (APK)
+  window.location.href = '/pos/ticket'
 }
 
 // ─── Clock ─────────────────────────────────────────────────────────────────────

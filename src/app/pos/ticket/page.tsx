@@ -37,6 +37,10 @@ export default function TicketPage() {
     setTicketText(text)
     const logo = sessionStorage.getItem('pos_ticket_logo')
     if (logo) setLogoUrl(logo)
+    const shiftJustClosed = sessionStorage.getItem('pos_shift_just_closed') === 'true'
+    if (shiftJustClosed) {
+      sessionStorage.removeItem('pos_shift_just_closed')
+    }
     const fs = sessionStorage.getItem('pos_ticket_fontsize')
     if (fs) setFontSize(fs)
 
