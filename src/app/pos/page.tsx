@@ -4982,6 +4982,7 @@ export default function POSPage() {
   const handleOpenNewTable = useCallback(() => {
     setActiveOpenOrder(null)
     setTicketItems([])
+    requestAnimationFrame(() => setComboOverlayTick((t) => t + 1))
     setActiveComboSelection(null)
     setTableNumber('')
     setDiningOption('Comer dentro')
@@ -4992,6 +4993,7 @@ export default function POSPage() {
   const handleClearActiveTable = useCallback(() => {
     setActiveOpenOrder(null)
     setTicketItems([])
+    requestAnimationFrame(() => setComboOverlayTick((t) => t + 1))
     setActiveComboSelection(null)
     setTableNumber('')
     setTicketOpen(false)
@@ -5022,6 +5024,8 @@ export default function POSPage() {
       if (activeOpenOrder?.id === orderId) {
         setActiveOpenOrder(null)
         setTicketItems([])
+        requestAnimationFrame(() => setComboOverlayTick((t) => t + 1))
+        setActiveComboSelection(null)
         setTableNumber('')
         setTicketOpen(false)
       }
@@ -5100,6 +5104,7 @@ export default function POSPage() {
         const closedTableNumber = activeOpenOrder.table_number
         setActiveOpenOrder(null)
         setTicketItems([])
+        requestAnimationFrame(() => setComboOverlayTick((t) => t + 1))
         setActiveComboSelection(null)
         setTableNumber('')
         setCustomerName('')
@@ -5218,6 +5223,7 @@ export default function POSPage() {
 
       // Reset ticket
       setTicketItems([])
+      requestAnimationFrame(() => setComboOverlayTick((t) => t + 1))
       setActiveComboSelection(null)
       setTableNumber('')
       setCustomerName('')
