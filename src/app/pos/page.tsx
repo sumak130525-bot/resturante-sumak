@@ -485,14 +485,16 @@ function ComboOverlay({
       if (positions.length === 0) return
 
       let minLeft = Infinity, minTop = Infinity, maxRight = -Infinity, maxBottom = -Infinity
+      const scrollTop = gridRef.current.scrollTop
+      const scrollLeft = gridRef.current.scrollLeft
       for (const pos of positions) {
         const el = cellElemsRef.current.get(pos)
         if (!el) return // not ready yet
         const r = el.getBoundingClientRect()
-        minLeft = Math.min(minLeft, r.left - gridRect.left)
-        minTop = Math.min(minTop, r.top - gridRect.top)
-        maxRight = Math.max(maxRight, r.right - gridRect.left)
-        maxBottom = Math.max(maxBottom, r.bottom - gridRect.top)
+        minLeft = Math.min(minLeft, r.left - gridRect.left + scrollLeft)
+        minTop = Math.min(minTop, r.top - gridRect.top + scrollTop)
+        maxRight = Math.max(maxRight, r.right - gridRect.left + scrollLeft)
+        maxBottom = Math.max(maxBottom, r.bottom - gridRect.top + scrollTop)
       }
       setRect({ left: minLeft, top: minTop, width: maxRight - minLeft, height: maxBottom - minTop })
     }
