@@ -85,6 +85,36 @@ function clearStruck(orderId: string) {
   } catch {}
 }
 
+// ─── LocalStorage helpers para sub-items de combos tachados ──────────────────
+// Key format: `${orderId}:${itemId}:${subIndex}`
+
+function struckSubKey(orderId: string) {
+  return `sumak-cocina-struck-sub-${orderId}`
+}
+
+function loadStruckSub(orderId: string): Set<string> {
+  try {
+    const raw = localStorage.getItem(struckSubKey(orderId))
+    if (!raw) return new Set()
+    const arr: string[] = JSON.parse(raw)
+    return new Set(arr)
+  } catch {
+    return new Set()
+  }
+}
+
+function saveStruckSub(orderId: string, keys: Set<string>) {
+  try {
+    localStorage.setItem(struckSubKey(orderId), JSON.stringify(Array.from(keys)))
+  } catch {}
+}
+
+function clearStruckSub(orderId: string) {
+  try {
+    localStorage.removeItem(struckSubKey(orderId))
+  } catch {}
+}
+
 // ─── Sonidos ──────────────────────────────────────────────────────────────────
 
 type SoundOption = 'loud' | 'beep' | 'bell' | 'alert' | 'silent'
@@ -365,19 +395,70 @@ function KdsItemRow({
   struck,
   onToggle,
   isDelivered,
+  struckSubItems,
+  onToggleSub,
+  itemId,
 }: {
   item: KdsItem
   struck: boolean
   onToggle: (id: string) => void
   isDelivered?: boolean
+  struckSubItems?: Set<string>
+  onToggleSub?: (key: string) => void
+  itemId?: string
 }) {
   // Detect combo item: has a line_note that looks like a combo sub-item list
   const isCombo = !item.is_bonus && item.note && item.note.includes(' + ')
-  const comboSubItems = isCombo ? item.note!.split(' + ') : null
+  const comboSubItems = isCombo ? item.note!.split(' + ').map((s) => s.trim()).filter(Boolean) : null
+
+  if (isCombo && comboSubItems) {
+    // Combo: header is non-clickable title; sub-items are individually tachable
+    return (
+      <li className="flex flex-col gap-1 select-none">
+        {/* Combo header — not clickable, just a label */}
+        <div className="flex items-start gap-2 w-full opacity-80">
+          <span className={`text-2xl font-black leading-none w-8 shrink-0 ${struck ? 'text-gray-400 line-through' : 'text-gray-900'}`}>
+            {item.quantity}×
+          </span>
+          <div className="flex flex-col min-w-0 flex-1">
+            <span className={`text-xl font-semibold leading-tight ${struck ? 'line-through text-gray-400' : 'text-yellow-700 font-black'}`}>
+              <span className="mr-1">★</span>
+              {item.name}
+            </span>
+            {item.modifiers && item.modifiers.length > 0 && (
+              <span className={`text-base leading-snug mt-0.5 ${struck ? 'line-through text-gray-400' : 'text-gray-700'}`}>
+                {item.modifiers.join(' · ')}
+              </span>
+            )}
+          </div>
+        </div>
+        {/* Sub-items: each individually tachable */}
+        <div className="ml-10 flex flex-col gap-1 border-l-2 border-yellow-400 pl-2">
+          {comboSubItems.map((sub, i) => {
+            const subKey = `${itemId ?? item.name}:${i}`
+            const subStruck = struckSubItems?.has(subKey) ?? false
+            return (
+              <div
+                key={i}
+                className={`flex items-center gap-1.5 cursor-pointer rounded-md px-1 py-0.5 transition-all duration-150 active:scale-95 ${subStruck ? 'bg-gray-100' : 'hover:bg-yellow-50'}`}
+                onClick={() => !isDelivered && onToggleSub && onToggleSub(subKey)}
+                title={subStruck ? 'Click para quitar tachado' : 'Click para tachar'}
+              >
+                <span className="text-yellow-500 text-sm shrink-0">›</span>
+                <span className={`text-lg font-semibold leading-tight transition-all duration-150 ${subStruck ? 'line-through text-gray-400' : 'text-yellow-800'}`}>
+                  {sub}
+                </span>
+              </div>
+            )
+          })}
+        </div>
+      </li>
+    )
+  }
 
   return (
     <li
-      className={`flex items-start gap-2 cursor-pointer select-none transition-all duration-150 ${isCombo ? 'flex-col gap-1' : ''}`}
+      className="flex items-start gap-2 cursor-pointer select-none transition-all duration-150"
       onClick={() => item.id && !isDelivered && onToggle(item.id)}
       title={struck ? 'Click para quitar tachado' : 'Click para tachar'}
     >
@@ -386,9 +467,8 @@ function KdsItemRow({
           {item.quantity}×
         </span>
         <div className="flex flex-col min-w-0 flex-1">
-          <span className={`text-xl font-semibold leading-tight ${struck ? 'line-through text-gray-400' : item.is_bonus ? 'text-yellow-600' : isCombo ? 'text-yellow-700 font-black' : 'text-gray-900'}`}>
+          <span className={`text-xl font-semibold leading-tight ${struck ? 'line-through text-gray-400' : item.is_bonus ? 'text-yellow-600' : 'text-gray-900'}`}>
             {item.is_bonus && <span className="mr-1">★</span>}
-            {isCombo && <span className="mr-1">★</span>}
             {item.name}
           </span>
           {item.is_bonus && item.bonus_reason && (
@@ -401,27 +481,13 @@ function KdsItemRow({
               {item.modifiers.join(' · ')}
             </span>
           )}
-          {/* Regular note (not a combo) */}
-          {item.note && !isCombo && (
+          {item.note && (
             <span className={`text-base font-semibold leading-snug mt-0.5 ${struck ? 'line-through text-gray-400' : 'text-red-600'}`}>
               💬 {item.note}
             </span>
           )}
         </div>
       </div>
-      {/* Combo sub-items displayed below */}
-      {isCombo && comboSubItems && (
-        <div className="ml-10 flex flex-col gap-0.5 border-l-2 border-yellow-400 pl-2">
-          {comboSubItems.map((sub, i) => (
-            <span
-              key={i}
-              className={`text-lg font-semibold leading-tight ${struck ? 'line-through text-gray-400' : 'text-yellow-800'}`}
-            >
-              {sub.trim()}
-            </span>
-          ))}
-        </div>
-      )}
     </li>
   )
 }
@@ -455,6 +521,12 @@ function OrderCard({
       return merged
     }
     return fromLocal
+  })
+
+  // ── Estado de sub-items de combo tachados ──
+  const [struckSubItems, setStruckSubItems] = useState<Set<string>>(() => {
+    if (typeof window === 'undefined') return new Set()
+    return loadStruckSub(order.id)
   })
 
   // ── Filtrar bebidas envasadas (Sin alcohol / Con alcohol) en pedidos POS (no WhatsApp) ──
@@ -492,6 +564,33 @@ function OrderCard({
     }).catch(() => {})
   }
 
+  const toggleStruckSub = (subKey: string, comboItemId: string, totalSubCount: number) => {
+    if (isDelivered) return
+    setStruckSubItems((prev) => {
+      const next = new Set(Array.from(prev))
+      if (next.has(subKey)) {
+        next.delete(subKey)
+      } else {
+        next.add(subKey)
+      }
+      saveStruckSub(order.id, next)
+
+      // Check if ALL sub-items of this combo are now struck
+      const allSubsStruck = Array.from({ length: totalSubCount }, (_, i) => `${comboItemId}:${i}`).every(
+        (k) => next.has(k)
+      )
+      if (allSubsStruck && !struckIds.has(comboItemId)) {
+        // Auto-deliver the combo header
+        toggleStruck(comboItemId)
+      } else if (!allSubsStruck && struckIds.has(comboItemId)) {
+        // Un-strike the combo header if a sub was un-struck
+        toggleStruck(comboItemId)
+      }
+
+      return next
+    })
+  }
+
   const headerBg = isDelivered ? 'bg-gray-400' : getHeaderColorByTime(order.created_at)
 
   const diningBadge = order.diningOption
@@ -508,6 +607,7 @@ function OrderCard({
   const handleHeaderClick = () => {
     if (isDelivered || !onDeliver) return
     clearStruck(order.id)
+    clearStruckSub(order.id)
     onDeliver(order.id, order.source)
   }
 
@@ -625,6 +725,8 @@ function OrderCard({
                     <ul className="flex flex-col gap-2">
                       {groups.get(pn)!.map(({ item, idx }) => {
                         const struck = item.id ? struckIds.has(item.id) : false
+                        const isComboItem = !item.is_bonus && item.note && item.note.includes(' + ')
+                        const subCount = isComboItem ? item.note!.split(' + ').filter(Boolean).length : 0
                         return (
                           <KdsItemRow
                             key={idx}
@@ -632,6 +734,9 @@ function OrderCard({
                             struck={struck}
                             onToggle={toggleStruck}
                             isDelivered={isDelivered}
+                            struckSubItems={struckSubItems}
+                            itemId={item.id}
+                            onToggleSub={(subKey) => item.id && toggleStruckSub(subKey, item.id, subCount)}
                           />
                         )
                       })}
@@ -646,6 +751,8 @@ function OrderCard({
           <ul className="flex flex-col gap-2">
             {displayItems.map((item, i) => {
               const struck = item.id ? struckIds.has(item.id) : false
+              const isComboItem = !item.is_bonus && item.note && item.note.includes(' + ')
+              const subCount = isComboItem ? item.note!.split(' + ').filter(Boolean).length : 0
               return (
                 <KdsItemRow
                   key={i}
@@ -653,6 +760,9 @@ function OrderCard({
                   struck={struck}
                   onToggle={toggleStruck}
                   isDelivered={isDelivered}
+                  struckSubItems={struckSubItems}
+                  itemId={item.id}
+                  onToggleSub={(subKey) => item.id && toggleStruckSub(subKey, item.id, subCount)}
                 />
               )
             })}
