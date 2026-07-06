@@ -79,6 +79,7 @@ export async function POST(
     const newItems = processedItems.map((item) => ({
       order_id: id,
       menu_item_id: item.is_combo_header ? null : item.menu_item_id,
+      name: item.name ?? null,
       quantity: item.quantity,
       unit_price: item.is_bonus ? 0 : Math.round(item.unit_price),
       line_note: item.line_note ?? null,
@@ -96,7 +97,7 @@ export async function POST(
     if (insertErr) {
       // Retry without optional columns if they don't exist
       if (insertErr.message.includes('column')) {
-        const fallbackItems = newItems.map(({ line_note, person_number, is_bonus, bonus_reason, original_price, ...rest }) => rest)
+        const fallbackItems = newItems.map(({ line_note, person_number, is_bonus, bonus_reason, original_price, name: _name, ...rest }) => rest)
         const { error: fallbackErr } = await supabase
           .from('order_items')
           .insert(fallbackItems)

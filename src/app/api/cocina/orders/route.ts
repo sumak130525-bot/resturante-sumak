@@ -63,7 +63,7 @@ async function getWebOrders(): Promise<KdsOrder[]> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data, error } = await (supabase as any)
     .from('orders')
-    .select('*, order_items(id, quantity, unit_price, line_note, person_number, is_bonus, bonus_reason, sent_to_kitchen_at, delivered_at, menu_items(name, subcategory))')
+    .select('*, order_items(id, name, quantity, unit_price, line_note, person_number, is_bonus, bonus_reason, sent_to_kitchen_at, delivered_at, menu_items(name, subcategory))')
     .gte('created_at', since)
     .not('status', 'in', '("delivered","cancelled")')
     .order('created_at', { ascending: true })
@@ -106,7 +106,9 @@ async function getWebOrders(): Promise<KdsOrder[]> {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       items: orderItems.map((i: any) => ({
         id: i.id ?? null,
-        name: i.menu_items?.name ?? 'Ítem',
+        // For combo headers: menu_item_id is null, so menu_items is null.
+        // Use order_items.name (the stored combo name) as fallback.
+        name: i.menu_items?.name ?? i.name ?? 'Ítem',
         quantity: i.quantity,
         price: i.unit_price,
         note: i.line_note ?? null,
@@ -364,7 +366,7 @@ async function getDeliveredOrdersToday(): Promise<KdsOrder[]> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data, error } = await (supabase as any)
     .from('orders')
-    .select('*, order_items(id, quantity, unit_price, line_note, person_number, is_bonus, bonus_reason, sent_to_kitchen_at, delivered_at, menu_items(name, subcategory))')
+    .select('*, order_items(id, name, quantity, unit_price, line_note, person_number, is_bonus, bonus_reason, sent_to_kitchen_at, delivered_at, menu_items(name, subcategory))')
     .eq('status', 'delivered')
     .gte('created_at', todayStart.toISOString())
     .order('created_at', { ascending: false })
@@ -388,7 +390,7 @@ async function getDeliveredOrdersToday(): Promise<KdsOrder[]> {
       paymentMethod: o.payment_method ?? undefined,
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       items: (o.order_items ?? []).map((i: any) => ({
-        name: i.menu_items?.name ?? 'Ítem',
+        name: i.menu_items?.name ?? i.name ?? 'Ítem',
         quantity: i.quantity,
         price: i.unit_price,
         note: i.line_note ?? null,

@@ -111,6 +111,7 @@ export async function POST(request: NextRequest) {
       const base: Record<string, any> = {
         order_id: order.id,
         menu_item_id: item.is_combo_header ? null : item.menu_item_id,
+        name: item.name ?? null,
         quantity: item.quantity,
         unit_price: item.is_bonus ? 0 : Math.round(item.price),
         line_note: lineNote,
@@ -129,7 +130,7 @@ export async function POST(request: NextRequest) {
     if (itemsError) {
       // If columns don't exist yet, retry without optional columns
       if (itemsError.message.includes('line_note') || itemsError.message.includes('person_number') || itemsError.message.includes('is_bonus') || itemsError.message.includes('bonus_reason') || itemsError.message.includes('original_price') || itemsError.message.includes('column')) {
-        const fallbackItems = orderItems.map(({ line_note, person_number, is_bonus, bonus_reason, original_price, ...rest }) => rest)
+        const fallbackItems = orderItems.map(({ line_note, person_number, is_bonus, bonus_reason, original_price, name: _name, ...rest }) => rest)
         const { error: fallbackError } = await supabase
           .from('order_items')
           .insert(fallbackItems)

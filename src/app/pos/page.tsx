@@ -466,12 +466,14 @@ function ComboOverlay({
   cellElemsRef,
   gridRef,
   onStartCombo,
+  recomputeTick,
 }: {
   combo: Combo
   isActive: boolean
   cellElemsRef: React.MutableRefObject<Map<number, HTMLElement>>
   gridRef: React.MutableRefObject<HTMLElement | null>
   onStartCombo: (combo: Combo) => void
+  recomputeTick?: number
 }) {
   const [rect, setRect] = useState<{ left: number; top: number; width: number; height: number } | null>(null)
 
@@ -503,7 +505,8 @@ function ComboOverlay({
       window.removeEventListener('resize', compute)
       if (grid) grid.removeEventListener('scroll', compute)
     }
-  }, [combo.positions, cellElemsRef, gridRef])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [combo.positions, cellElemsRef, gridRef, recomputeTick])
 
   if (!rect) return null
 
@@ -4173,6 +4176,8 @@ export default function POSPage() {
   // ─── Combos ───────────────────────────────────────────────────────────────────
   const [combos, setCombos] = useState<Combo[]>([])
   const [activeComboSelection, setActiveComboSelection] = useState<ActiveComboSelection | null>(null)
+  // Tick incremented after order/ticket clear to force ComboOverlay to recompute cell positions
+  const [comboOverlayTick, setComboOverlayTick] = useState(0)
 
   useEffect(() => {
     fetch('/api/admin/combos')
@@ -4914,6 +4919,9 @@ export default function POSPage() {
         return { ...prev, existingItems: [...prev.existingItems, ...newExisting] }
       })
       setTicketItems([])
+      setActiveComboSelection(null)
+      // Re-trigger ComboOverlay recompute after the grid re-renders
+      requestAnimationFrame(() => setComboOverlayTick((t) => t + 1))
       setOpenTablesRefresh((n) => n + 1)
       setToast(`Mesa ${targetTableNumber ?? tableNumber} — enviado a cocina`)
     } catch {
@@ -5684,6 +5692,7 @@ export default function POSPage() {
               cellElemsRef={cellElemsRef}
               gridRef={gridRef}
               onStartCombo={handleStartCombo}
+              recomputeTick={comboOverlayTick}
             />
           ))}
           </main>
