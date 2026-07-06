@@ -111,6 +111,23 @@ type OrderItemRow = {
   subtotal: number
 }
 
+export type ComboSlot = {
+  category_id: string
+  label: string
+  qty: number
+}
+
+export type Combo = {
+  id: string
+  name: string
+  price: number
+  slots: ComboSlot[]
+  positions: number[]
+  image_urls: string[]
+  active: boolean
+  created_at: string
+}
+
 export type ClosureDay = {
   id: string
   start_date: string       // 'YYYY-MM-DD'
