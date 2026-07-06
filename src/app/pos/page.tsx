@@ -501,9 +501,17 @@ function ComboOverlay({
     window.addEventListener('resize', compute)
     const grid = gridRef.current
     if (grid) grid.addEventListener('scroll', compute)
+    // ResizeObserver: recompute whenever the grid container changes size
+    // (e.g. ticket panel opens/closes, window resize, any layout shift)
+    let resizeObs: ResizeObserver | null = null
+    if (grid && typeof ResizeObserver !== 'undefined') {
+      resizeObs = new ResizeObserver(compute)
+      resizeObs.observe(grid)
+    }
     return () => {
       window.removeEventListener('resize', compute)
       if (grid) grid.removeEventListener('scroll', compute)
+      if (resizeObs) resizeObs.disconnect()
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [combo.positions, cellElemsRef, gridRef, recomputeTick])
