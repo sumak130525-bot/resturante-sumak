@@ -455,69 +455,122 @@ type ActiveComboSelection = {
   headerUid: string
 }
 
-// ─── ComboCard component ──────────────────────────────────────────────────────
+// ─── ComboOverlay component ───────────────────────────────────────────────────
+// Renders an absolutely-positioned overlay over the combo grid cells.
+// The overlay itself has pointer-events:none so the underlying dish cards remain
+// tappable. Only the star badge has pointer-events:auto to activate the combo.
 
-function ComboCard({
+function ComboOverlay({
   combo,
   isActive,
+  cellElemsRef,
+  gridRef,
   onStartCombo,
 }: {
   combo: Combo
   isActive: boolean
+  cellElemsRef: React.MutableRefObject<Map<number, HTMLElement>>
+  gridRef: React.MutableRefObject<HTMLElement | null>
   onStartCombo: (combo: Combo) => void
 }) {
-  const [imgError, setImgError] = useState(false)
-  const hasImages = combo.image_urls && combo.image_urls.length > 0 && !imgError
-  const totalSlots = combo.slots.reduce((s, slot) => s + slot.qty, 0)
+  const [rect, setRect] = useState<{ left: number; top: number; width: number; height: number } | null>(null)
+
+  useEffect(() => {
+    function compute() {
+      if (!gridRef.current) return
+      const gridRect = gridRef.current.getBoundingClientRect()
+      const positions = combo.positions
+      if (positions.length === 0) return
+
+      let minLeft = Infinity, minTop = Infinity, maxRight = -Infinity, maxBottom = -Infinity
+      for (const pos of positions) {
+        const el = cellElemsRef.current.get(pos)
+        if (!el) return // not ready yet
+        const r = el.getBoundingClientRect()
+        minLeft = Math.min(minLeft, r.left - gridRect.left)
+        minTop = Math.min(minTop, r.top - gridRect.top)
+        maxRight = Math.max(maxRight, r.right - gridRect.left)
+        maxBottom = Math.max(maxBottom, r.bottom - gridRect.top)
+      }
+      setRect({ left: minLeft, top: minTop, width: maxRight - minLeft, height: maxBottom - minTop })
+    }
+    compute()
+    // Recompute on resize/scroll
+    window.addEventListener('resize', compute)
+    const grid = gridRef.current
+    if (grid) grid.addEventListener('scroll', compute)
+    return () => {
+      window.removeEventListener('resize', compute)
+      if (grid) grid.removeEventListener('scroll', compute)
+    }
+  }, [combo.positions, cellElemsRef, gridRef])
+
+  if (!rect) return null
+
+  const priceLabel = new Intl.NumberFormat('es-AR', { minimumFractionDigits: 0 }).format(combo.price)
 
   return (
-    <button
-      onClick={() => onStartCombo(combo)}
-      className={`relative w-full h-full rounded-xl border-2 flex flex-col overflow-hidden transition-all active:scale-95 ${
-        isActive
-          ? 'border-yellow-400 ring-2 ring-yellow-400/60 bg-yellow-950'
-          : 'border-yellow-600/60 hover:border-yellow-400 bg-sumak-brown-mid'
-      }`}
+    <div
+      style={{
+        position: 'absolute',
+        left: rect.left - 2,
+        top: rect.top - 2,
+        width: rect.width + 4,
+        height: rect.height + 4,
+        pointerEvents: 'none',
+        zIndex: 10,
+      }}
     >
-      {/* Images strip */}
-      {hasImages && (
-        <div className="flex-1 flex overflow-hidden min-h-0">
-          {combo.image_urls.slice(0, 3).map((url, i) => (
-            <img
-              key={i}
-              src={url}
-              alt=""
-              onError={() => setImgError(true)}
-              className="flex-1 object-cover min-w-0 h-full"
-              style={{ width: `${100 / Math.min(combo.image_urls.length, 3)}%` }}
-            />
-          ))}
-        </div>
-      )}
-      {!hasImages && (
-        <div className="flex-1 flex items-center justify-center text-yellow-600/40 text-3xl min-h-0">
-          🍽️
-        </div>
-      )}
-
-      {/* Label row */}
-      <div className="shrink-0 px-2 py-1.5 flex items-center justify-between gap-1 bg-black/60">
-        <span className="text-white font-bold text-xs leading-tight truncate flex-1">{combo.name}</span>
-        <div
-          className="shrink-0 flex items-center justify-center rounded-full bg-orange-500 text-white font-black text-xs w-8 h-8"
-          title={`${combo.slots.length} slots, ${totalSlots} items`}
-        >
-          ★
-          <span className="text-[10px] ml-0.5">{new Intl.NumberFormat('es-AR', { minimumFractionDigits: 0 }).format(combo.price)}</span>
-        </div>
-      </div>
-
-      {isActive && (
-        <div className="absolute top-1 right-1 bg-yellow-400 rounded-full w-4 h-4 flex items-center justify-center">
-          <span className="text-yellow-900 font-black text-[10px]">✓</span>
-        </div>
-      )}
-    </button>
+      {/* Gold border */}
+      <div
+        style={{
+          position: 'absolute',
+          inset: 0,
+          border: isActive ? '3px solid #facc15' : '3px solid #d97706',
+          borderRadius: '0.85rem',
+          boxShadow: isActive ? '0 0 0 2px rgba(250,204,21,0.35)' : '0 0 0 1px rgba(217,119,6,0.25)',
+          pointerEvents: 'none',
+          transition: 'border-color 0.2s, box-shadow 0.2s',
+        }}
+      />
+      {/* Star badge — centered at bottom between the cells */}
+      <button
+        onClick={(e) => { e.stopPropagation(); onStartCombo(combo) }}
+        style={{
+          position: 'absolute',
+          bottom: -18,
+          left: '50%',
+          transform: 'translateX(-50%)',
+          pointerEvents: 'auto',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: 2,
+          background: isActive ? '#ea580c' : '#f97316',
+          color: '#fff',
+          border: '2px solid rgba(255,255,255,0.35)',
+          borderRadius: 9999,
+          padding: '3px 8px',
+          fontWeight: 900,
+          fontSize: '0.72rem',
+          lineHeight: 1,
+          whiteSpace: 'nowrap',
+          boxShadow: '0 2px 8px rgba(0,0,0,0.6)',
+          cursor: 'pointer',
+          transition: 'background 0.15s, transform 0.1s',
+          zIndex: 20,
+        }}
+        onMouseDown={(e) => (e.currentTarget.style.transform = 'translateX(-50%) scale(0.93)')}
+        onMouseUp={(e) => (e.currentTarget.style.transform = 'translateX(-50%) scale(1)')}
+        onTouchStart={(e) => (e.currentTarget.style.transform = 'translateX(-50%) scale(0.93)')}
+        onTouchEnd={(e) => (e.currentTarget.style.transform = 'translateX(-50%) scale(1)')}
+        title={`Combo ${combo.name} — ${priceLabel}`}
+      >
+        <span style={{ fontSize: '0.78rem' }}>★</span>
+        <span>{priceLabel}</span>
+        {isActive && <span style={{ fontSize: '0.65rem', opacity: 0.9 }}>✓</span>}
+      </button>
+    </div>
   )
 }
 
@@ -5427,6 +5480,7 @@ export default function POSPage() {
               gridTemplateRows: editMode ? 'repeat(4, calc(25% - 5px))' : 'repeat(4, calc(25% - 5px))',
               gridAutoRows: 'calc(25% - 5px)',
               gap: '6px',
+              position: 'relative',
             }}
           >
             {loading ? (
@@ -5503,34 +5557,11 @@ export default function POSPage() {
                 </div>
               ))
             ) : activeCategory === 'all' ? (
-              // Normal mode Todos: fixed grid by position, combos overlay their positions
+              // Normal mode Todos: fixed grid by position, combos shown as overlays
               Array.from({ length: gridSize }).map((_, gridIndex) => {
                 const position = gridIndex + 1
                 const item = displayItems.find((i) => i.display_order === position)
                 const isDropTarget = draggedItem !== null && dropTarget === position && position !== (draggedItem.display_order ?? 0)
-
-                // Check if a combo starts at this position
-                const comboAtPos = combos.find((c) => c.positions[0] === position)
-                if (comboAtPos) {
-                  const span = comboAtPos.positions.length
-                  return (
-                    <div
-                      key={`combo-${comboAtPos.id}`}
-                      style={{ gridColumn: `span ${span}` }}
-                      className="relative w-full h-full"
-                    >
-                      <ComboCard
-                        combo={comboAtPos}
-                        isActive={activeComboSelection?.combo.id === comboAtPos.id}
-                        onStartCombo={handleStartCombo}
-                      />
-                    </div>
-                  )
-                }
-
-                // Skip positions occupied by combos (not the first position)
-                const isOccupiedByCombo = combos.some((c) => c.positions.includes(position) && c.positions[0] !== position)
-                if (isOccupiedByCombo) return null
 
                 if (item) {
                   return (
@@ -5636,6 +5667,17 @@ export default function POSPage() {
                 ])
               })()
             )}
+          {/* Combo overlays — rendered over the grid, outside grid flow */}
+          {!editMode && activeCategory === 'all' && !posSearch.trim() && combos.map((combo) => (
+            <ComboOverlay
+              key={combo.id}
+              combo={combo}
+              isActive={activeComboSelection?.combo.id === combo.id}
+              cellElemsRef={cellElemsRef}
+              gridRef={gridRef}
+              onStartCombo={handleStartCombo}
+            />
+          ))}
           </main>
           {/* Drag ghost */}
           {draggedItem && (
