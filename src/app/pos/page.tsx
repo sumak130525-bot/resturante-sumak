@@ -2779,18 +2779,18 @@ function TicketItemRow({
   // ── Combo sub-item: indented, price 0, no qty/bonus controls ──
   if (item.combo_slot_label) {
     return (
-      <li className="flex flex-col rounded-lg px-2 py-1 border gap-0.5 bg-yellow-900/30 border-yellow-700/40 ml-3">
+      <li className="flex flex-col rounded-lg px-2 py-1 border gap-0.5 bg-amber-500 border-amber-600 ml-3">
         <div className="flex items-center gap-1.5">
-          <span className="text-yellow-600 text-xs shrink-0">└</span>
+          <span className="text-white text-xs shrink-0">└</span>
           <div className="flex-1 min-w-0">
-            <p className="font-semibold text-yellow-200 text-xs leading-tight truncate">
+            <p className="font-semibold text-white text-xs leading-tight truncate">
               {item.name}
-              <span className="text-yellow-600 text-[10px] ml-1">({item.combo_slot_label})</span>
+              <span className="text-white/80 text-[10px] ml-1">({item.combo_slot_label})</span>
             </p>
           </div>
           <button
             onClick={() => onRemove(item.uid)}
-            className="w-5 h-5 rounded-md bg-red-900 hover:bg-red-800 active:scale-90 flex items-center justify-center text-red-300 font-black text-[10px] transition-all shrink-0"
+            className="w-5 h-5 rounded-md bg-red-900 hover:bg-red-800 active:scale-90 flex items-center justify-center text-white font-black text-[10px] transition-all shrink-0"
             aria-label="Quitar del combo"
           >
             ✕
