@@ -110,7 +110,7 @@ export async function POST(request: NextRequest) {
 
       const base: Record<string, any> = {
         order_id: order.id,
-        menu_item_id: item.menu_item_id,
+        menu_item_id: item.is_combo_header ? null : item.menu_item_id,
         quantity: item.quantity,
         unit_price: item.is_bonus ? 0 : Math.round(item.price),
         line_note: lineNote,
@@ -142,6 +142,8 @@ export async function POST(request: NextRequest) {
     // ── Decrement available_qty for limited-stock items ───────────────────────
     try {
       for (const item of itemsForDb) {
+        // Skip combo headers (menu_item_id is the combo id, not a real menu_items row)
+        if (item.is_combo_header) continue
         // Read current qty, then update atomically
         const { data: stockData } = await supabase
           .from('menu_items')
@@ -208,6 +210,8 @@ export async function POST(request: NextRequest) {
     // ── Auto-consume ingredients from inventory ───────────────────────────────
     try {
       for (const item of itemsForDb) {
+        // Skip combo headers (menu_item_id is the combo id, not a real menu_items row)
+        if (item.is_combo_header) continue
         // Get recipe items for this menu item
         const { data: recipeItems, error: recipeErr } = await supabase
           .from('recipe_items')

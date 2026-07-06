@@ -533,14 +533,14 @@ function ComboOverlay({
           transition: 'border-color 0.2s, box-shadow 0.2s',
         }}
       />
-      {/* Star badge — centered at bottom between the cells */}
+      {/* Star badge — centered over the overlay */}
       <button
         onClick={(e) => { e.stopPropagation(); onStartCombo(combo) }}
         style={{
           position: 'absolute',
-          bottom: -18,
+          top: '50%',
           left: '50%',
-          transform: 'translateX(-50%)',
+          transform: 'translate(-50%, -50%)',
           pointerEvents: 'auto',
           display: 'flex',
           alignItems: 'center',
@@ -560,10 +560,10 @@ function ComboOverlay({
           transition: 'background 0.15s, transform 0.1s',
           zIndex: 20,
         }}
-        onMouseDown={(e) => (e.currentTarget.style.transform = 'translateX(-50%) scale(0.93)')}
-        onMouseUp={(e) => (e.currentTarget.style.transform = 'translateX(-50%) scale(1)')}
-        onTouchStart={(e) => (e.currentTarget.style.transform = 'translateX(-50%) scale(0.93)')}
-        onTouchEnd={(e) => (e.currentTarget.style.transform = 'translateX(-50%) scale(1)')}
+        onMouseDown={(e) => (e.currentTarget.style.transform = 'translate(-50%, -50%) scale(0.93)')}
+        onMouseUp={(e) => (e.currentTarget.style.transform = 'translate(-50%, -50%) scale(1)')}
+        onTouchStart={(e) => (e.currentTarget.style.transform = 'translate(-50%, -50%) scale(0.93)')}
+        onTouchEnd={(e) => (e.currentTarget.style.transform = 'translate(-50%, -50%) scale(1)')}
         title={`Combo ${combo.name} — ${priceLabel}`}
       >
         <span style={{ fontSize: '0.78rem' }}>★</span>
@@ -4799,6 +4799,7 @@ export default function POSPage() {
         }
         const newItemsPayload = ticketItems.map((item) => ({
           menu_item_id: item.menu_item_id,
+          name: item.name,
           price: item.is_bonus ? 0 : item.price,
           quantity: item.quantity,
           line_note: item.customNote ?? buildLineNote(item.modifiers ?? []),
@@ -4806,6 +4807,8 @@ export default function POSPage() {
           is_bonus: item.is_bonus ?? false,
           bonus_reason: item.bonus_reason ?? null,
           original_price: item.original_price ?? null,
+          ...(item.is_combo_header ? { is_combo_header: true, combo_id: item.combo_id } : {}),
+          ...(item.combo_slot_label ? { combo_slot_label: item.combo_slot_label, combo_id: item.combo_id } : {}),
         }))
         const total = ticketItems.reduce((s, i) => s + (i.is_bonus ? 0 : i.price) * i.quantity, 0)
         const createRes = await fetch('/api/pos/orders', {
@@ -4842,6 +4845,7 @@ export default function POSPage() {
         // Mesa ya existe: agregar items
         const newItemsPayload = ticketItems.map((item) => ({
           menu_item_id: item.menu_item_id,
+          name: item.name,
           quantity: item.quantity,
           unit_price: item.is_bonus ? 0 : item.price,
           line_note: item.customNote ?? buildLineNote(item.modifiers ?? []),
@@ -4849,6 +4853,8 @@ export default function POSPage() {
           is_bonus: item.is_bonus ?? false,
           bonus_reason: item.bonus_reason ?? null,
           original_price: item.original_price ?? null,
+          ...(item.is_combo_header ? { is_combo_header: true, combo_id: item.combo_id } : {}),
+          ...(item.combo_slot_label ? { combo_slot_label: item.combo_slot_label, combo_id: item.combo_id } : {}),
         }))
 
         const addRes = await fetch(`/api/pos/orders/${targetOrderId}/items`, {
@@ -5148,6 +5154,8 @@ export default function POSPage() {
             bonus_reason: item.bonus_reason ?? null,
             original_price: item.original_price ?? (item.price + modExtra),
           } : {}),
+          ...(item.is_combo_header ? { is_combo_header: true, combo_id: item.combo_id } : {}),
+          ...(item.combo_slot_label ? { combo_slot_label: item.combo_slot_label, combo_id: item.combo_id } : {}),
         }
       })
 

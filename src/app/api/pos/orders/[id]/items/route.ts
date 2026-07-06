@@ -12,6 +12,7 @@ function getAdminClient() {
 
 type NewItem = {
   menu_item_id: string
+  name?: string
   quantity: number
   unit_price: number
   line_note?: string | null
@@ -19,6 +20,10 @@ type NewItem = {
   is_bonus?: boolean
   bonus_reason?: string | null
   original_price?: number | null
+  // ── Combos ──────────────────────────────────────────
+  is_combo_header?: boolean
+  combo_id?: string | null
+  combo_slot_label?: string | null
 }
 
 // POST /api/pos/orders/[id]/items
@@ -55,10 +60,25 @@ export async function POST(
       return NextResponse.json({ error: 'Solo se pueden agregar items a órdenes POS.' }, { status: 400 })
     }
 
+    // Sub-items de combo (combo_slot_label != null) NO se insertan — solo el header con line_note
+    const itemsForDb = items.filter((item) => !item.combo_slot_label)
+
+    // For combo headers: build line_note from sub-items
+    const processedItems = itemsForDb.map((item) => {
+      let lineNote = item.line_note ?? null
+      if (item.is_combo_header && item.combo_id) {
+        const subItems = items.filter((si) => si.combo_slot_label && si.combo_id === item.combo_id)
+        if (subItems.length > 0) {
+          lineNote = subItems.map((si) => si.name ?? '').join(' + ')
+        }
+      }
+      return { ...item, line_note: lineNote }
+    })
+
     // Insertar nuevos items (sent_to_kitchen_at queda NULL → pendientes de enviar)
-    const newItems = items.map((item) => ({
+    const newItems = processedItems.map((item) => ({
       order_id: id,
-      menu_item_id: item.menu_item_id,
+      menu_item_id: item.is_combo_header ? null : item.menu_item_id,
       quantity: item.quantity,
       unit_price: item.is_bonus ? 0 : Math.round(item.unit_price),
       line_note: item.line_note ?? null,
