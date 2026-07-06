@@ -351,6 +351,81 @@ function getOrderLabel(order: KdsOrder): string {
   return order.number
 }
 
+// Check if a line_note is a combo note (contains sub-item list separated by " + ")
+// We detect combos by the " + " separator used in the API when building combo line_notes.
+function _isComboLineNote(note: string | null | undefined): boolean {
+  if (!note) return false
+  return note.includes(' + ')
+}
+
+// ─── Item row renderer for combo and regular items ───────────────────────────
+
+function KdsItemRow({
+  item,
+  struck,
+  onToggle,
+  isDelivered,
+}: {
+  item: KdsItem
+  struck: boolean
+  onToggle: (id: string) => void
+  isDelivered?: boolean
+}) {
+  // Detect combo item: has a line_note that looks like a combo sub-item list
+  const isCombo = !item.is_bonus && item.note && item.note.includes(' + ')
+  const comboSubItems = isCombo ? item.note!.split(' + ') : null
+
+  return (
+    <li
+      className={`flex items-start gap-2 cursor-pointer select-none transition-all duration-150 ${isCombo ? 'flex-col gap-1' : ''}`}
+      onClick={() => item.id && !isDelivered && onToggle(item.id)}
+      title={struck ? 'Click para quitar tachado' : 'Click para tachar'}
+    >
+      <div className="flex items-start gap-2 w-full">
+        <span className={`text-2xl font-black leading-none w-8 shrink-0 ${struck ? 'text-gray-400 line-through' : 'text-gray-900'}`}>
+          {item.quantity}×
+        </span>
+        <div className="flex flex-col min-w-0 flex-1">
+          <span className={`text-xl font-semibold leading-tight ${struck ? 'line-through text-gray-400' : item.is_bonus ? 'text-yellow-600' : isCombo ? 'text-yellow-700 font-black' : 'text-gray-900'}`}>
+            {item.is_bonus && <span className="mr-1">★</span>}
+            {isCombo && <span className="mr-1">★</span>}
+            {item.name}
+          </span>
+          {item.is_bonus && item.bonus_reason && (
+            <span className={`text-sm font-semibold leading-snug mt-0.5 ${struck ? 'line-through text-gray-400' : 'text-yellow-600'}`}>
+              ★ {item.bonus_reason}
+            </span>
+          )}
+          {item.modifiers && item.modifiers.length > 0 && (
+            <span className={`text-base leading-snug mt-0.5 ${struck ? 'line-through text-gray-400' : 'text-gray-700'}`}>
+              {item.modifiers.join(' · ')}
+            </span>
+          )}
+          {/* Regular note (not a combo) */}
+          {item.note && !isCombo && (
+            <span className={`text-base font-semibold leading-snug mt-0.5 ${struck ? 'line-through text-gray-400' : 'text-red-600'}`}>
+              💬 {item.note}
+            </span>
+          )}
+        </div>
+      </div>
+      {/* Combo sub-items displayed below */}
+      {isCombo && comboSubItems && (
+        <div className="ml-10 flex flex-col gap-0.5 border-l-2 border-yellow-400 pl-2">
+          {comboSubItems.map((sub, i) => (
+            <span
+              key={i}
+              className={`text-lg font-semibold leading-tight ${struck ? 'line-through text-gray-400' : 'text-yellow-800'}`}
+            >
+              {sub.trim()}
+            </span>
+          ))}
+        </div>
+      )}
+    </li>
+  )
+}
+
 // ─── Componente Card ──────────────────────────────────────────────────────────
 
 function OrderCard({
@@ -551,37 +626,13 @@ function OrderCard({
                       {groups.get(pn)!.map(({ item, idx }) => {
                         const struck = item.id ? struckIds.has(item.id) : false
                         return (
-                          <li
+                          <KdsItemRow
                             key={idx}
-                            className="flex items-start gap-2 cursor-pointer select-none transition-all duration-150"
-                            onClick={() => item.id && toggleStruck(item.id)}
-                            title={struck ? 'Click para quitar tachado' : 'Click para tachar'}
-                          >
-                            <span className={`text-2xl font-black leading-none w-8 shrink-0 ${struck ? 'text-gray-400 line-through' : 'text-gray-900'}`}>
-                              {item.quantity}×
-                            </span>
-                            <div className="flex flex-col min-w-0">
-                              <span className={`text-xl font-semibold leading-tight ${struck ? 'line-through text-gray-400' : item.is_bonus ? 'text-yellow-600' : 'text-gray-900'}`}>
-                                {item.is_bonus && <span className="mr-1">★</span>}
-                                {item.name}
-                              </span>
-                              {item.is_bonus && item.bonus_reason && (
-                                <span className={`text-sm font-semibold leading-snug mt-0.5 ${struck ? 'line-through text-gray-400' : 'text-yellow-600'}`}>
-                                  ★ {item.bonus_reason}
-                                </span>
-                              )}
-                              {item.modifiers && item.modifiers.length > 0 && (
-                                <span className={`text-base leading-snug mt-0.5 ${struck ? 'line-through text-gray-400' : 'text-gray-700'}`}>
-                                  {item.modifiers.join(' · ')}
-                                </span>
-                              )}
-                              {item.note && (
-                                <span className={`text-base font-semibold leading-snug mt-0.5 ${struck ? 'line-through text-gray-400' : 'text-red-600'}`}>
-                                  💬 {item.note}
-                                </span>
-                              )}
-                            </div>
-                          </li>
+                            item={item}
+                            struck={struck}
+                            onToggle={toggleStruck}
+                            isDelivered={isDelivered}
+                          />
                         )
                       })}
                     </ul>
@@ -596,37 +647,13 @@ function OrderCard({
             {displayItems.map((item, i) => {
               const struck = item.id ? struckIds.has(item.id) : false
               return (
-                <li
+                <KdsItemRow
                   key={i}
-                  className={`flex items-start gap-2 cursor-pointer select-none transition-all duration-150`}
-                  onClick={() => item.id && toggleStruck(item.id)}
-                  title={struck ? 'Click para quitar tachado' : 'Click para tachar'}
-                >
-                  <span className={`text-2xl font-black leading-none w-8 shrink-0 ${struck ? 'text-gray-400 line-through' : 'text-gray-900'}`}>
-                    {item.quantity}×
-                  </span>
-                  <div className="flex flex-col min-w-0">
-                    <span className={`text-xl font-semibold leading-tight ${struck ? 'line-through text-gray-400' : item.is_bonus ? 'text-yellow-600' : 'text-gray-900'}`}>
-                      {item.is_bonus && <span className="mr-1">★</span>}
-                      {item.name}
-                    </span>
-                    {item.is_bonus && item.bonus_reason && (
-                      <span className={`text-sm font-semibold leading-snug mt-0.5 ${struck ? 'line-through text-gray-400' : 'text-yellow-600'}`}>
-                        ★ {item.bonus_reason}
-                      </span>
-                    )}
-                    {item.modifiers && item.modifiers.length > 0 && (
-                      <span className={`text-base leading-snug mt-0.5 ${struck ? 'line-through text-gray-400' : 'text-gray-700'}`}>
-                        {item.modifiers.join(' · ')}
-                      </span>
-                    )}
-                    {item.note && (
-                      <span className={`text-base font-semibold leading-snug mt-0.5 ${struck ? 'line-through text-gray-400' : 'text-red-600'}`}>
-                        💬 {item.note}
-                      </span>
-                    )}
-                  </div>
-                </li>
+                  item={item}
+                  struck={struck}
+                  onToggle={toggleStruck}
+                  isDelivered={isDelivered}
+                />
               )
             })}
           </ul>

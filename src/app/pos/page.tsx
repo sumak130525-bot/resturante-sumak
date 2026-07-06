@@ -3,7 +3,7 @@
 import { useState, useCallback, useEffect, useRef } from 'react'
 import { useMenuRealtime } from '@/hooks/useMenuRealtime'
 import WhatsAppNotifier from '@/components/WhatsAppNotifier'
-import type { MenuItem } from '@/lib/types'
+import type { MenuItem, Combo } from '@/lib/types'
 import { useTranslation, getItemName, type Locale } from '@/lib/i18n'
 import { useLanguagesEnabled } from '@/hooks/useLanguagesEnabled'
 import { type TicketConfig, DEFAULT_TICKET_CONFIG } from '@/types/ticket-config'
@@ -119,8 +119,32 @@ function buildTicketText(
 
   // Build item lines — flat list (person grouping handled in sectionized output below)
   const buildItemLines = (items: typeof data.items) => items.flatMap((item, idx) => {
+    const ticketItem = item as TicketItem
+
+    // ── Combo sub-items: skip (they are concatenated in the header's line_note) ──
+    if (ticketItem.combo_slot_label) return []
+
     const qty = String(item.quantity)
-    const isBonus = (item as TicketItem).is_bonus
+    const isBonus = ticketItem.is_bonus
+    const isComboHeader = ticketItem.is_combo_header
+
+    // For combo header: show name + price, no qty
+    if (isComboHeader) {
+      const sub = formatTicketMoney(item.price)
+      const contentW = Math.max(1, W - marginLeft - marginRight)
+      const prefix = '★ '
+      const maxNameLen = contentW - prefix.length
+      const name = item.name.length > maxNameLen ? item.name.substring(0, maxNameLen) : item.name
+      const line1 = addMargin(prefix + name)
+      const line2 = addMargin(pad(sub, contentW, true))
+      // Add sub-item names indented
+      const subItems = (data.items as TicketItem[]).filter((si) => si.combo_id === ticketItem.combo_id && si.combo_slot_label)
+      const subLines = subItems.map((si) => addMargin(`  - ${si.name}`))
+      const lines = [line1, line2, ...subLines]
+      if (itemGap && idx < items.length - 1) lines.push(itemGap)
+      return lines
+    }
+
     const displayPrice = isBonus ? 0 : item.price
     const sub = isBonus ? 'GRATIS' : formatTicketMoney(displayPrice * item.quantity)
     const prefix = qty + 'x '
@@ -137,8 +161,8 @@ function buildTicketText(
     const modLines = (item.modifiers ?? []).map(
       (m) => addMargin(`  > ${m.optionName}${m.price > 0 ? ' (+)' : ''}`)
     )
-    const bonusReasonLine = isBonus && (item as TicketItem).bonus_reason
-      ? [addMargin(`  (${(item as TicketItem).bonus_reason})`)]
+    const bonusReasonLine = isBonus && ticketItem.bonus_reason
+      ? [addMargin(`  (${ticketItem.bonus_reason})`)]
       : []
     const lines = [line1, line2, ...modLines, ...bonusReasonLine]
     if (itemGap && idx < items.length - 1) lines.push(itemGap)
@@ -415,6 +439,86 @@ type TicketItem = {
   is_bonus?: boolean             // bonificado = gratis
   bonus_reason?: string | null   // motivo de bonificación
   original_price?: number        // precio original antes de bonificar
+  // ── Combos ────────────────────────────────────────────────────────────────
+  is_combo_header?: boolean      // true = línea de cabecera del combo
+  combo_id?: string              // ID del combo al que pertenece
+  combo_slot_label?: string      // sub-item: etiqueta del slot al que pertenece
+}
+
+// ─── Combo selection state type ───────────────────────────────────────────────
+
+type ActiveComboSelection = {
+  combo: Combo
+  // Tracks which slots are filled: slotLabel → array of filled item names
+  filledSlots: { slotLabel: string; itemName: string; menu_item_id: string }[]
+  // uid of the header item already added to the ticket
+  headerUid: string
+}
+
+// ─── ComboCard component ──────────────────────────────────────────────────────
+
+function ComboCard({
+  combo,
+  isActive,
+  onStartCombo,
+}: {
+  combo: Combo
+  isActive: boolean
+  onStartCombo: (combo: Combo) => void
+}) {
+  const [imgError, setImgError] = useState(false)
+  const hasImages = combo.image_urls && combo.image_urls.length > 0 && !imgError
+  const totalSlots = combo.slots.reduce((s, slot) => s + slot.qty, 0)
+
+  return (
+    <button
+      onClick={() => onStartCombo(combo)}
+      className={`relative w-full h-full rounded-xl border-2 flex flex-col overflow-hidden transition-all active:scale-95 ${
+        isActive
+          ? 'border-yellow-400 ring-2 ring-yellow-400/60 bg-yellow-950'
+          : 'border-yellow-600/60 hover:border-yellow-400 bg-sumak-brown-mid'
+      }`}
+    >
+      {/* Images strip */}
+      {hasImages && (
+        <div className="flex-1 flex overflow-hidden min-h-0">
+          {combo.image_urls.slice(0, 3).map((url, i) => (
+            <img
+              key={i}
+              src={url}
+              alt=""
+              onError={() => setImgError(true)}
+              className="flex-1 object-cover min-w-0 h-full"
+              style={{ width: `${100 / Math.min(combo.image_urls.length, 3)}%` }}
+            />
+          ))}
+        </div>
+      )}
+      {!hasImages && (
+        <div className="flex-1 flex items-center justify-center text-yellow-600/40 text-3xl min-h-0">
+          🍽️
+        </div>
+      )}
+
+      {/* Label row */}
+      <div className="shrink-0 px-2 py-1.5 flex items-center justify-between gap-1 bg-black/60">
+        <span className="text-white font-bold text-xs leading-tight truncate flex-1">{combo.name}</span>
+        <div
+          className="shrink-0 flex items-center justify-center rounded-full bg-orange-500 text-white font-black text-xs w-8 h-8"
+          title={`${combo.slots.length} slots, ${totalSlots} items`}
+        >
+          ★
+          <span className="text-[10px] ml-0.5">{new Intl.NumberFormat('es-AR', { minimumFractionDigits: 0 }).format(combo.price)}</span>
+        </div>
+      </div>
+
+      {isActive && (
+        <div className="absolute top-1 right-1 bg-yellow-400 rounded-full w-4 h-4 flex items-center justify-center">
+          <span className="text-yellow-900 font-black text-[10px]">✓</span>
+        </div>
+      )}
+    </button>
+  )
 }
 
 // ─── Bonus Reason type ────────────────────────────────────────────────────────
@@ -2580,6 +2684,56 @@ function TicketItemRow({
   const modExtra = (item.modifiers ?? []).reduce((ms, m) => ms + m.price, 0)
   const unitTotal = item.price + modExtra   // always the actual price (0 if bonus)
   const displayUnitTotal = item.is_bonus ? 0 : unitTotal
+
+  // ── Combo header: gold border, show price, no qty controls ──
+  if (item.is_combo_header) {
+    return (
+      <li className="flex flex-col rounded-xl px-2.5 py-1.5 border gap-1 bg-yellow-950 border-yellow-600">
+        <div className="flex items-start gap-1.5">
+          <div className="flex-1 min-w-0">
+            <p className="font-black text-yellow-300 text-sm leading-tight truncate">
+              ★ {item.name}
+            </p>
+            <p className="font-bold text-xs tabular-nums mt-0.5 text-yellow-400">
+              {formatARS(item.price)}
+            </p>
+          </div>
+          <button
+            onClick={() => onRemove(item.uid)}
+            className="w-6 h-6 rounded-md bg-red-900 hover:bg-red-800 active:scale-90 flex items-center justify-center text-red-300 font-black text-xs transition-all ml-0.5 shrink-0"
+            aria-label="Eliminar combo"
+          >
+            ✕
+          </button>
+        </div>
+      </li>
+    )
+  }
+
+  // ── Combo sub-item: indented, price 0, no qty/bonus controls ──
+  if (item.combo_slot_label) {
+    return (
+      <li className="flex flex-col rounded-lg px-2 py-1 border gap-0.5 bg-yellow-900/30 border-yellow-700/40 ml-3">
+        <div className="flex items-center gap-1.5">
+          <span className="text-yellow-600 text-xs shrink-0">└</span>
+          <div className="flex-1 min-w-0">
+            <p className="font-semibold text-yellow-200 text-xs leading-tight truncate">
+              {item.name}
+              <span className="text-yellow-600 text-[10px] ml-1">({item.combo_slot_label})</span>
+            </p>
+          </div>
+          <button
+            onClick={() => onRemove(item.uid)}
+            className="w-5 h-5 rounded-md bg-red-900 hover:bg-red-800 active:scale-90 flex items-center justify-center text-red-300 font-black text-[10px] transition-all shrink-0"
+            aria-label="Quitar del combo"
+          >
+            ✕
+          </button>
+        </div>
+      </li>
+    )
+  }
+
   return (
     <li className={`flex flex-col rounded-xl px-2.5 py-1.5 border gap-1 ${item.is_bonus ? 'bg-yellow-50 border-yellow-300' : 'bg-gray-50 border-gray-100'}`}>
       <div className="flex items-start gap-1.5">
@@ -2838,6 +2992,9 @@ function TicketPanel({
   onBillSelect,
   onForcePrint,
   bills = [1000, 2000, 10000, 20000],
+  // ─── Combos ────────────────────────────────────────────────────
+  activeComboSelection,
+  onCancelCombo,
 }: {
   items: TicketItem[]
   diningOption: DiningOption
@@ -2878,6 +3035,9 @@ function TicketPanel({
   onBillSelect?: (bill: number) => void
   onForcePrint?: (v: boolean) => void
   bills?: number[]
+  // ─── Combos ────────────────────────────────────────────────────
+  activeComboSelection?: ActiveComboSelection | null
+  onCancelCombo?: () => void
 }) {
   const total = items.reduce((s, i) => {
     if (i.is_bonus) return s
@@ -3075,6 +3235,46 @@ function TicketPanel({
 
         {/* Items list */}
         <div className="px-3 py-2">
+          {/* ── Combo selection indicator ───────────────────────────── */}
+          {activeComboSelection && (() => {
+            const combo = activeComboSelection.combo
+            const filled = activeComboSelection.filledSlots
+            // Build pending slots list
+            const pending: string[] = []
+            combo.slots.forEach((slot) => {
+              const filledForSlot = filled.filter((f) => f.slotLabel === slot.label)
+              const remaining = slot.qty - filledForSlot.length
+              for (let i = 0; i < remaining; i++) pending.push(slot.label)
+            })
+            return (
+              <div className="mb-2 rounded-xl border-2 border-yellow-500 bg-yellow-950 px-3 py-2 flex flex-col gap-1.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-yellow-300 font-black text-sm">★ {combo.name}</span>
+                  <button
+                    onClick={onCancelCombo}
+                    className="text-xs text-red-400 font-bold hover:text-red-300 px-2 py-0.5 rounded-lg bg-red-900/50 active:scale-95"
+                  >
+                    Cancelar
+                  </button>
+                </div>
+                <div className="flex flex-wrap gap-1">
+                  {pending.map((label, i) => (
+                    <span key={i} className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-yellow-800 text-yellow-200 border border-yellow-600">
+                      {label}
+                    </span>
+                  ))}
+                  {pending.length === 0 && (
+                    <span className="text-[10px] text-green-400 font-bold">Combo completo</span>
+                  )}
+                </div>
+                {pending.length > 0 && (
+                  <p className="text-[10px] text-yellow-500">
+                    Tocá {pending.length === 1 ? 'el item' : 'los items'} del combo en el menú
+                  </p>
+                )}
+              </div>
+            )
+          })()}
           {isEmpty ? (
             <div className="flex flex-col items-center justify-center py-8 text-gray-400 gap-2">
               <span className="text-4xl">🛒</span>
@@ -3917,6 +4117,17 @@ export default function POSPage() {
   const [pendingItem, setPendingItem] = useState<MenuItem | null>(null)
   const [pendingModifiers, setPendingModifiers] = useState<Modifier[]>([])
 
+  // ─── Combos ───────────────────────────────────────────────────────────────────
+  const [combos, setCombos] = useState<Combo[]>([])
+  const [activeComboSelection, setActiveComboSelection] = useState<ActiveComboSelection | null>(null)
+
+  useEffect(() => {
+    fetch('/api/admin/combos')
+      .then((r) => r.ok ? r.json() : [])
+      .then((data) => setCombos(Array.isArray(data) ? data.filter((c: Combo) => c.active) : []))
+      .catch(() => {})
+  }, [])
+
   // Persons state (per-person ordering)
   const [persons, setPersons] = useState(1)
   const [activePerson, setActivePerson] = useState(1)
@@ -4246,6 +4457,73 @@ export default function POSPage() {
   }, [persons, activePerson])
 
   const handleAddItem = useCallback((item: MenuItem) => {
+    // ── If in combo selection mode, add as sub-item ──────────────────────────
+    if (activeComboSelection) {
+      const combo = activeComboSelection.combo
+      const filled = activeComboSelection.filledSlots
+
+      // Find the next unfilled slot that accepts this item's category
+      const pendingSlot = combo.slots.find((slot) => {
+        // Count how many items are already filled for this slot
+        const count = filled.filter((f) => f.slotLabel === slot.label).length
+        if (count >= slot.qty) return false
+        // If the slot has a category restriction, check it
+        if (slot.category_id) {
+          return slot.category_id === (item.category_id ?? '')
+        }
+        return true
+      })
+
+      if (!pendingSlot) {
+        // No slot found for this item — just add normally
+        const modifierIds = itemModifierMap[item.id] ?? []
+        if (modifierIds.length === 0) {
+          addItemToTicket(item)
+        } else {
+          const modifiersForItem = allModifiers.filter((m) => modifierIds.includes(m.id))
+          if (modifiersForItem.length === 0) {
+            addItemToTicket(item)
+          } else {
+            setPendingItem(item)
+            setPendingModifiers(modifiersForItem)
+          }
+        }
+        return
+      }
+
+      // Add sub-item to ticket (price 0, with combo_slot_label)
+      const personNum = persons > 1 ? activePerson : null
+      const subUid = `combo__${activeComboSelection.headerUid}__slot__${pendingSlot.label}__${item.id}__${Date.now()}`
+      const subItem: TicketItem = {
+        uid: subUid,
+        menu_item_id: item.id,
+        name: item.name,
+        price: 0,
+        quantity: 1,
+        image_url: item.image_url,
+        person_number: personNum,
+        combo_id: combo.id,
+        combo_slot_label: pendingSlot.label,
+      }
+      setTicketItems((prev) => [...prev, subItem])
+      setTicketOpen(true)
+
+      // Update filled slots
+      const newFilled = [
+        ...filled,
+        { slotLabel: pendingSlot.label, itemName: item.name, menu_item_id: item.id },
+      ]
+      const totalRequired = combo.slots.reduce((s, sl) => s + sl.qty, 0)
+      if (newFilled.length >= totalRequired) {
+        // All slots filled — exit combo mode
+        setActiveComboSelection(null)
+      } else {
+        setActiveComboSelection({ ...activeComboSelection, filledSlots: newFilled })
+      }
+      return
+    }
+
+    // ── Normal add ────────────────────────────────────────────────────────────
     const modifierIds = itemModifierMap[item.id] ?? []
     if (modifierIds.length === 0) {
       // No modifiers — add directly
@@ -4262,7 +4540,49 @@ export default function POSPage() {
     }
     setPendingItem(item)
     setPendingModifiers(modifiersForItem)
-  }, [itemModifierMap, allModifiers, addItemToTicket])
+  }, [itemModifierMap, allModifiers, addItemToTicket, activeComboSelection, persons, activePerson])
+
+  const handleStartCombo = useCallback((combo: Combo) => {
+    // If already in mode for this combo, cancel it
+    if (activeComboSelection?.combo.id === combo.id) {
+      // Remove header and all sub-items for this combo
+      setTicketItems((prev) => prev.filter((i) => i.uid !== activeComboSelection.headerUid && i.combo_id !== combo.id))
+      setActiveComboSelection(null)
+      return
+    }
+    // Cancel any previous combo selection
+    if (activeComboSelection) {
+      setTicketItems((prev) => prev.filter(
+        (i) => i.uid !== activeComboSelection.headerUid && i.combo_id !== activeComboSelection.combo.id
+      ))
+    }
+    // Add combo header item
+    const personNum = persons > 1 ? activePerson : null
+    const headerUid = `combo_header__${combo.id}__${Date.now()}`
+    const headerItem: TicketItem = {
+      uid: headerUid,
+      menu_item_id: combo.id,
+      name: combo.name,
+      price: combo.price,
+      quantity: 1,
+      image_url: combo.image_urls?.[0] ?? null,
+      person_number: personNum,
+      is_combo_header: true,
+      combo_id: combo.id,
+    }
+    setTicketItems((prev) => [...prev, headerItem])
+    setTicketOpen(true)
+    setActiveComboSelection({ combo, filledSlots: [], headerUid })
+  }, [activeComboSelection, persons, activePerson])
+
+  const handleCancelCombo = useCallback(() => {
+    if (!activeComboSelection) return
+    // Remove header and all sub-items
+    setTicketItems((prev) => prev.filter(
+      (i) => i.uid !== activeComboSelection.headerUid && i.combo_id !== activeComboSelection.combo.id
+    ))
+    setActiveComboSelection(null)
+  }, [activeComboSelection])
 
   const handleModifierConfirm = useCallback((selections: SelectedModifier[]) => {
     if (!pendingItem) return
@@ -4280,6 +4600,8 @@ export default function POSPage() {
     setTicketItems((prev) => {
       const item = prev.find((i) => i.uid === uid)
       if (!item) return prev
+      // Combo headers and sub-items are not quantity-adjustable
+      if (item.is_combo_header || item.combo_slot_label) return prev
       const newQty = item.quantity + delta
       if (newQty <= 0) return prev.filter((i) => i.uid !== uid)
       return prev.map((i) => i.uid === uid ? { ...i, quantity: newQty } : i)
@@ -4287,7 +4609,16 @@ export default function POSPage() {
   }, [])
 
   const handleRemove = useCallback((uid: string) => {
-    setTicketItems((prev) => prev.filter((i) => i.uid !== uid))
+    setTicketItems((prev) => {
+      const item = prev.find((i) => i.uid === uid)
+      // If removing a combo header, also remove all sub-items
+      if (item?.is_combo_header && item.combo_id) {
+        setActiveComboSelection(null)
+        return prev.filter((i) => i.uid !== uid && i.combo_id !== item.combo_id)
+      }
+      // If removing a combo sub-item, just remove it
+      return prev.filter((i) => i.uid !== uid)
+    })
   }, [])
 
   const handleUpdateNote = useCallback((uid: string, note: string) => {
@@ -4584,6 +4915,7 @@ export default function POSPage() {
   const handleOpenNewTable = useCallback(() => {
     setActiveOpenOrder(null)
     setTicketItems([])
+    setActiveComboSelection(null)
     setTableNumber('')
     setDiningOption('Comer dentro')
     setTicketOpen(true)
@@ -4593,6 +4925,7 @@ export default function POSPage() {
   const handleClearActiveTable = useCallback(() => {
     setActiveOpenOrder(null)
     setTicketItems([])
+    setActiveComboSelection(null)
     setTableNumber('')
     setTicketOpen(false)
   }, [])
@@ -4700,6 +5033,7 @@ export default function POSPage() {
         const closedTableNumber = activeOpenOrder.table_number
         setActiveOpenOrder(null)
         setTicketItems([])
+        setActiveComboSelection(null)
         setTableNumber('')
         setCustomerName('')
         setOrderNotes('')
@@ -4815,6 +5149,7 @@ export default function POSPage() {
 
       // Reset ticket
       setTicketItems([])
+      setActiveComboSelection(null)
       setTableNumber('')
       setCustomerName('')
       setOrderNotes('')
@@ -5168,11 +5503,35 @@ export default function POSPage() {
                 </div>
               ))
             ) : activeCategory === 'all' ? (
-              // Normal mode Todos: fixed grid by position
+              // Normal mode Todos: fixed grid by position, combos overlay their positions
               Array.from({ length: gridSize }).map((_, gridIndex) => {
                 const position = gridIndex + 1
                 const item = displayItems.find((i) => i.display_order === position)
                 const isDropTarget = draggedItem !== null && dropTarget === position && position !== (draggedItem.display_order ?? 0)
+
+                // Check if a combo starts at this position
+                const comboAtPos = combos.find((c) => c.positions[0] === position)
+                if (comboAtPos) {
+                  const span = comboAtPos.positions.length
+                  return (
+                    <div
+                      key={`combo-${comboAtPos.id}`}
+                      style={{ gridColumn: `span ${span}` }}
+                      className="relative w-full h-full"
+                    >
+                      <ComboCard
+                        combo={comboAtPos}
+                        isActive={activeComboSelection?.combo.id === comboAtPos.id}
+                        onStartCombo={handleStartCombo}
+                      />
+                    </div>
+                  )
+                }
+
+                // Skip positions occupied by combos (not the first position)
+                const isOccupiedByCombo = combos.some((c) => c.positions.includes(position) && c.positions[0] !== position)
+                if (isOccupiedByCombo) return null
+
                 if (item) {
                   return (
                     <div
@@ -5331,6 +5690,8 @@ export default function POSPage() {
               onBillSelect={(bill) => setSelectedBill(selectedBill === bill ? null : bill)}
               onForcePrint={(v: boolean) => { setForceprint(v); forceprintRef.current = v }}
               bills={posBills}
+              activeComboSelection={activeComboSelection}
+              onCancelCombo={handleCancelCombo}
             />
           )}
         </aside>

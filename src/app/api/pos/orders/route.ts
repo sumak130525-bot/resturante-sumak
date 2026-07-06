@@ -13,6 +13,10 @@ type PosOrderItem = {
   is_bonus?: boolean
   bonus_reason?: string | null
   original_price?: number | null
+  // ── Combos ──────────────────────────────────────────
+  is_combo_header?: boolean
+  combo_id?: string | null
+  combo_slot_label?: string | null
 }
 
 function getAdminClient() {
@@ -86,14 +90,30 @@ export async function POST(request: NextRequest) {
     if (!order) throw new Error('No se pudo crear el pedido')
 
     // Crear order_items con line_note para modificadores y person_number para pedidos multi-persona
+    // Sub-items de combo (combo_slot_label != null) NO se insertan — solo el header con line_note
+    const itemsForDb = (items as PosOrderItem[]).filter((item) => !item.combo_slot_label)
+
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const orderItems = (items as PosOrderItem[]).map((item): Record<string, any> => {
+    const orderItems = itemsForDb.map((item): Record<string, any> => {
+      let lineNote = item.line_note || null
+
+      // For combo headers: build line_note from sub-items
+      if (item.is_combo_header && item.combo_id) {
+        const subItems = (items as PosOrderItem[]).filter(
+          (si) => si.combo_slot_label && si.combo_id === item.combo_id
+        )
+        if (subItems.length > 0) {
+          const subNames = subItems.map((si) => si.name).join(' + ')
+          lineNote = subNames
+        }
+      }
+
       const base: Record<string, any> = {
         order_id: order.id,
         menu_item_id: item.menu_item_id,
         quantity: item.quantity,
         unit_price: item.is_bonus ? 0 : Math.round(item.price),
-        line_note: item.line_note || null,
+        line_note: lineNote,
         person_number: item.person_number ?? null,
         is_bonus: item.is_bonus ?? false,
         bonus_reason: item.bonus_reason ?? null,
@@ -121,7 +141,7 @@ export async function POST(request: NextRequest) {
 
     // ── Decrement available_qty for limited-stock items ───────────────────────
     try {
-      for (const item of (items as PosOrderItem[])) {
+      for (const item of itemsForDb) {
         // Read current qty, then update atomically
         const { data: stockData } = await supabase
           .from('menu_items')
@@ -187,7 +207,7 @@ export async function POST(request: NextRequest) {
 
     // ── Auto-consume ingredients from inventory ───────────────────────────────
     try {
-      for (const item of (items as PosOrderItem[])) {
+      for (const item of itemsForDb) {
         // Get recipe items for this menu item
         const { data: recipeItems, error: recipeErr } = await supabase
           .from('recipe_items')
