@@ -226,4 +226,11 @@
   color: var(--sumak-brown);
 }
 
+/* ──────────────────────────────────────────────────────────
+   QUANTITY SCROLLER – hide scrollbar
+   ────────────────────────────────────────────────────────── */
+.qty-strip::-webkit-scrollbar {
+  display: none;
+}
+
 

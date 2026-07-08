@@ -787,6 +787,87 @@ function AssignModal({ position, onAssign, onClose }: AssignModalProps) {
   )
 }
 
+// ─── Quantity Scroller Sub-Component ─────────────────────────────────────────
+
+function QtyScroller({
+  mod,
+  selectedQty,
+  onSelect,
+}: {
+  mod: Modifier
+  selectedQty: number
+  onSelect: (qty: number) => void
+}) {
+  const scrollRef = useRef<HTMLDivElement>(null)
+  const unitPrice = mod.unit_price ?? 0
+  const nums = Array.from(
+    { length: (mod.max_qty ?? 12) - (mod.min_qty ?? 1) + 1 },
+    (_, i) => (mod.min_qty ?? 1) + i
+  )
+  const scrollBy = (dir: -1 | 1) => {
+    scrollRef.current?.scrollBy({ left: dir * 56, behavior: 'smooth' })
+  }
+
+  return (
+    <div>
+      {/* Scroller row */}
+      <div className="flex items-center gap-1">
+        {/* Left arrow */}
+        <button
+          onClick={() => scrollBy(-1)}
+          className="shrink-0 w-7 h-7 rounded-full bg-gray-100 text-gray-500 flex items-center justify-center text-sm hover:bg-gray-200 active:scale-95 transition-all"
+        >
+          &#8249;
+        </button>
+
+        {/* Scrollable strip */}
+        <div
+          ref={scrollRef}
+          className="qty-strip flex gap-2 overflow-x-auto py-1 flex-1"
+          style={{
+            scrollSnapType: 'x mandatory',
+            scrollbarWidth: 'none',
+            WebkitOverflowScrolling: 'touch',
+          }}
+        >
+          {nums.map((qty) => {
+            const selected = selectedQty === qty
+            return (
+              <button
+                key={qty}
+                onClick={() => onSelect(selected ? 0 : qty)}
+                style={{ scrollSnapAlign: 'center', minWidth: '44px', minHeight: '44px' }}
+                className={`shrink-0 w-11 h-11 rounded-full flex items-center justify-center font-black text-lg transition-all active:scale-95 ${
+                  selected
+                    ? 'bg-amber-500 text-white shadow-md'
+                    : 'bg-gray-100 text-gray-800 hover:bg-gray-200'
+                }`}
+              >
+                {qty}
+              </button>
+            )
+          })}
+        </div>
+
+        {/* Right arrow */}
+        <button
+          onClick={() => scrollBy(1)}
+          className="shrink-0 w-7 h-7 rounded-full bg-gray-100 text-gray-500 flex items-center justify-center text-sm hover:bg-gray-200 active:scale-95 transition-all"
+        >
+          &#8250;
+        </button>
+      </div>
+
+      {/* Accumulated price */}
+      {unitPrice > 0 && selectedQty > 0 && (
+        <p className="text-center mt-2 text-2xl font-black text-amber-600">
+          {formatARS(unitPrice * selectedQty)}
+        </p>
+      )}
+    </div>
+  )
+}
+
 // ─── Modifier Modal ───────────────────────────────────────────────────────────
 
 function ModifierModal({
@@ -892,35 +973,12 @@ function ModifierModal({
                 {mod.name}
               </p>
               {mod.type === 'quantity' ? (
-                /* ── Quantity scroller ── */
-                <div className="flex flex-wrap gap-2">
-                  {Array.from(
-                    { length: (mod.max_qty ?? 12) - (mod.min_qty ?? 1) + 1 },
-                    (_, i) => (mod.min_qty ?? 1) + i
-                  ).map((qty) => {
-                    const unitPrice = mod.unit_price ?? 0
-                    const total = unitPrice * qty
-                    const selected = (qtySelections[mod.id] ?? 0) === qty
-                    return (
-                      <button
-                        key={qty}
-                        onClick={() => handleQtySelect(mod.id, selected ? 0 : qty)}
-                        className={`flex flex-col items-center justify-center w-16 h-16 rounded-xl border-2 transition-all active:scale-95 ${
-                          selected
-                            ? 'border-teal-500 bg-teal-500 text-white shadow-md'
-                            : 'border-gray-200 bg-gray-50 text-gray-800 hover:border-teal-300 hover:bg-teal-50'
-                        }`}
-                      >
-                        <span className="text-xl font-black leading-none">{qty}</span>
-                        {unitPrice > 0 && (
-                          <span className={`text-[10px] font-bold leading-none mt-0.5 ${selected ? 'text-teal-100' : 'text-teal-600'}`}>
-                            {formatARS(total)}
-                          </span>
-                        )}
-                      </button>
-                    )
-                  })}
-                </div>
+                /* ── Quantity horizontal scroller ── */
+                <QtyScroller
+                  mod={mod}
+                  selectedQty={qtySelections[mod.id] ?? 0}
+                  onSelect={(qty) => handleQtySelect(mod.id, qty)}
+                />
               ) : (
                 /* ── Options toggle list ── */
                 <div className="flex flex-col gap-1">
