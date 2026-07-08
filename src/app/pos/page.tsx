@@ -4693,7 +4693,7 @@ export default function POSPage() {
         quantity: 1,
         image_url: item.image_url,
         person_number: personNum,
-        combo_id: combo.id,
+        combo_id: activeComboSelection.headerUid,
         combo_slot_label: pendingSlot.label,
       }
       setTicketItems((prev) => [...prev, subItem])
@@ -4736,15 +4736,15 @@ export default function POSPage() {
   const handleStartCombo = useCallback((combo: Combo) => {
     // If already in mode for this combo, cancel it
     if (activeComboSelection?.combo.id === combo.id) {
-      // Remove header and all sub-items for this combo
-      setTicketItems((prev) => prev.filter((i) => i.uid !== activeComboSelection.headerUid && i.combo_id !== combo.id))
+      // Remove header and all sub-items for this combo instance
+      setTicketItems((prev) => prev.filter((i) => i.combo_id !== activeComboSelection.headerUid))
       setActiveComboSelection(null)
       return
     }
     // Cancel any previous combo selection
     if (activeComboSelection) {
       setTicketItems((prev) => prev.filter(
-        (i) => i.uid !== activeComboSelection.headerUid && i.combo_id !== activeComboSelection.combo.id
+        (i) => i.combo_id !== activeComboSelection.headerUid
       ))
     }
     // Add combo header item
@@ -4759,7 +4759,7 @@ export default function POSPage() {
       image_url: combo.image_urls?.[0] ?? null,
       person_number: personNum,
       is_combo_header: true,
-      combo_id: combo.id,
+      combo_id: headerUid,
     }
     setTicketItems((prev) => [...prev, headerItem])
     setTicketOpen(true)
@@ -4768,9 +4768,9 @@ export default function POSPage() {
 
   const handleCancelCombo = useCallback(() => {
     if (!activeComboSelection) return
-    // Remove header and all sub-items
+    // Remove header and all sub-items by shared combo_id (= headerUid)
     setTicketItems((prev) => prev.filter(
-      (i) => i.uid !== activeComboSelection.headerUid && i.combo_id !== activeComboSelection.combo.id
+      (i) => i.combo_id !== activeComboSelection.headerUid
     ))
     setActiveComboSelection(null)
   }, [activeComboSelection])
