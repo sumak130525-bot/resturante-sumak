@@ -563,7 +563,7 @@ function ComboOverlay({
           color: '#fff',
           border: '2px solid rgba(255,255,255,0.35)',
           borderRadius: 9999,
-          padding: '2px 6px',
+          padding: '1px 4px',
           fontWeight: 900,
           fontSize: '0.72rem',
           lineHeight: 1,
