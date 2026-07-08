@@ -579,8 +579,8 @@ function ComboOverlay({
         onTouchEnd={(e) => (e.currentTarget.style.transform = 'translate(-50%, -50%) scale(1)')}
         title={`Combo ${combo.name} — ${priceLabel}`}
       >
-        <span style={{ fontSize: '0.78rem' }}>★</span>
-        <span>{priceLabel}</span>
+        <span style={{ fontSize: '1rem', fontWeight: 'bold', color: '#ef4444' }}>+</span>
+        <span> $ {priceLabel}</span>
         {isActive && <span style={{ fontSize: '0.65rem', opacity: 0.9 }}>✓</span>}
       </button>
     </div>
