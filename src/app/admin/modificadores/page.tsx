@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { AdminLayoutClient } from '@/components/admin/AdminLayoutClient'
 import { createClient } from '@/lib/supabase/client'
-import { Sliders, RefreshCw, Plus, Trash2, Check, ChevronDown, ChevronUp, Pencil, X } from 'lucide-react'
+import { Sliders, RefreshCw, Plus, Trash2, Check, ChevronDown, ChevronUp, Pencil, X, Hash, List } from 'lucide-react'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -16,6 +16,13 @@ type ModifierOption = {
 type ModifierGroup = {
   id: string
   name: string
+  type?: 'options' | 'quantity'
+  // quantity-type fields
+  unit_price?: number
+  min_qty?: number
+  max_qty?: number
+  label?: string
+  // options-type field
   options: ModifierOption[]
 }
 
@@ -40,7 +47,7 @@ function newOption(): ModifierOption {
 }
 
 function newGroup(): ModifierGroup {
-  return { id: crypto.randomUUID(), name: '', options: [newOption()] }
+  return { id: crypto.randomUUID(), name: '', type: 'options', options: [newOption()] }
 }
 
 // ─── Tab type ─────────────────────────────────────────────────────────────────
@@ -179,22 +186,40 @@ export default function AdminModificadoresPage() {
     }
   }
 
-  // ── Draft option helpers ─────────────────────────────────────────────────
+  // ── Draft field helpers ──────────────────────────────────────────────────
 
   const draftSetName = (name: string) => {
     setDraftGroup((prev) => prev ? { ...prev, name } : prev)
   }
 
+  const draftSetType = (type: 'options' | 'quantity') => {
+    setDraftGroup((prev) => {
+      if (!prev) return prev
+      if (type === 'quantity') {
+        return { ...prev, type, unit_price: 0, min_qty: 1, max_qty: 12, options: [] }
+      }
+      return { ...prev, type, unit_price: undefined, min_qty: undefined, max_qty: undefined, label: undefined, options: prev.options.length ? prev.options : [newOption()] }
+    })
+  }
+
+  const draftSetQuantityField = (field: 'unit_price' | 'min_qty' | 'max_qty' | 'label', value: string) => {
+    setDraftGroup((prev) => {
+      if (!prev) return prev
+      if (field === 'label') return { ...prev, label: value }
+      return { ...prev, [field]: Number(value) || 0 }
+    })
+  }
+
   const draftAddOption = () => {
     setDraftGroup((prev) =>
-      prev ? { ...prev, options: [...prev.options, newOption()] } : prev
+      prev ? { ...prev, options: [...(prev.options ?? []), newOption()] } : prev
     )
   }
 
   const draftUpdateOption = (idx: number, field: 'name' | 'price', value: string) => {
     setDraftGroup((prev) => {
       if (!prev) return prev
-      const options = prev.options.map((o, i) =>
+      const options = (prev.options ?? []).map((o, i) =>
         i === idx
           ? { ...o, [field]: field === 'price' ? Number(value) || 0 : value }
           : o
@@ -206,7 +231,7 @@ export default function AdminModificadoresPage() {
   const draftRemoveOption = (idx: number) => {
     setDraftGroup((prev) => {
       if (!prev) return prev
-      const options = prev.options.filter((_, i) => i !== idx)
+      const options = (prev.options ?? []).filter((_, i) => i !== idx)
       return { ...prev, options: options.length ? options : [newOption()] }
     })
   }
@@ -320,6 +345,7 @@ export default function AdminModificadoresPage() {
             {modifiers.map((group) => {
               const isEditing = editingGroupId === group.id
               const isExpanded = expandedGroupId === group.id
+              const isQuantity = group.type === 'quantity'
 
               return (
                 <div key={group.id} className="bg-white rounded-2xl shadow-sm overflow-hidden">
@@ -329,6 +355,8 @@ export default function AdminModificadoresPage() {
                       draft={draftGroup}
                       saving={savingGroup}
                       onNameChange={draftSetName}
+                      onTypeChange={draftSetType}
+                      onQuantityFieldChange={draftSetQuantityField}
                       onAddOption={draftAddOption}
                       onUpdateOption={draftUpdateOption}
                       onRemoveOption={draftRemoveOption}
@@ -349,9 +377,15 @@ export default function AdminModificadoresPage() {
                             <ChevronDown size={16} className="text-gray-400 shrink-0" />
                           )}
                           <span className="font-semibold text-gray-900">{group.name}</span>
-                          <span className="text-xs text-gray-400 ml-1">
-                            {group.options.length} opción{group.options.length !== 1 ? 'es' : ''}
-                          </span>
+                          {isQuantity ? (
+                            <span className="text-xs bg-teal-100 text-teal-700 px-2 py-0.5 rounded-full font-semibold ml-1">
+                              Cantidad · {formatARS(group.unit_price ?? 0)}/un · {group.min_qty ?? 1}–{group.max_qty ?? 12}
+                            </span>
+                          ) : (
+                            <span className="text-xs text-gray-400 ml-1">
+                              {(group.options ?? []).length} opción{(group.options ?? []).length !== 1 ? 'es' : ''}
+                            </span>
+                          )}
                         </button>
                         <button
                           onClick={() => handleEditGroup(group)}
@@ -370,21 +404,29 @@ export default function AdminModificadoresPage() {
                       </div>
                       {isExpanded && (
                         <div className="border-t border-gray-50 px-5 pb-4 pt-2">
-                          <div className="flex flex-wrap gap-2">
-                            {group.options.map((opt) => (
-                              <span
-                                key={opt.id}
-                                className="text-xs bg-gray-100 text-gray-600 px-2.5 py-1 rounded-full"
-                              >
-                                {opt.name}
-                                {opt.price > 0 && (
-                                  <span className="ml-1 text-teal-600 font-semibold">
-                                    +{formatARS(opt.price)}
-                                  </span>
-                                )}
-                              </span>
-                            ))}
-                          </div>
+                          {isQuantity ? (
+                            <div className="text-sm text-gray-600 space-y-0.5">
+                              <p>Precio unitario: <span className="font-semibold text-teal-600">{formatARS(group.unit_price ?? 0)}</span></p>
+                              <p>Rango: <span className="font-semibold">{group.min_qty ?? 1} – {group.max_qty ?? 12} unidades</span></p>
+                              {group.label && <p>Etiqueta: <span className="font-semibold">{group.label}</span></p>}
+                            </div>
+                          ) : (
+                            <div className="flex flex-wrap gap-2">
+                              {(group.options ?? []).map((opt) => (
+                                <span
+                                  key={opt.id}
+                                  className="text-xs bg-gray-100 text-gray-600 px-2.5 py-1 rounded-full"
+                                >
+                                  {opt.name}
+                                  {opt.price > 0 && (
+                                    <span className="ml-1 text-teal-600 font-semibold">
+                                      +{formatARS(opt.price)}
+                                    </span>
+                                  )}
+                                </span>
+                              ))}
+                            </div>
+                          )}
                         </div>
                       )}
                     </>
@@ -400,6 +442,8 @@ export default function AdminModificadoresPage() {
                   draft={draftGroup}
                   saving={savingGroup}
                   onNameChange={draftSetName}
+                  onTypeChange={draftSetType}
+                  onQuantityFieldChange={draftSetQuantityField}
                   onAddOption={draftAddOption}
                   onUpdateOption={draftUpdateOption}
                   onRemoveOption={draftRemoveOption}
@@ -494,6 +538,7 @@ export default function AdminModificadoresPage() {
                       <ul className="divide-y divide-gray-50">
                         {modifiers.map((mod) => {
                           const checked = selectedModifierIds.includes(mod.id)
+                          const isQuantity = mod.type === 'quantity'
                           return (
                             <li key={mod.id} className="px-5 py-3">
                               <label className="flex items-start gap-3 cursor-pointer">
@@ -504,22 +549,35 @@ export default function AdminModificadoresPage() {
                                   className="mt-0.5 w-4 h-4 rounded border-gray-300 text-sumak-brown focus:ring-sumak-brown/30 cursor-pointer"
                                 />
                                 <div className="flex-1 min-w-0">
-                                  <p className="text-sm font-semibold text-gray-900">{mod.name}</p>
-                                  <div className="flex flex-wrap gap-1 mt-1">
-                                    {mod.options.map((opt) => (
-                                      <span
-                                        key={opt.id}
-                                        className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full"
-                                      >
-                                        {opt.name}
-                                        {opt.price > 0 && (
-                                          <span className="ml-1 text-teal-600 font-medium">
-                                            +{formatARS(opt.price)}
-                                          </span>
-                                        )}
+                                  <div className="flex items-center gap-2">
+                                    <p className="text-sm font-semibold text-gray-900">{mod.name}</p>
+                                    {isQuantity && (
+                                      <span className="text-xs bg-teal-100 text-teal-700 px-1.5 py-0.5 rounded-full font-medium">
+                                        Cantidad
                                       </span>
-                                    ))}
+                                    )}
                                   </div>
+                                  {isQuantity ? (
+                                    <p className="text-xs text-gray-500 mt-0.5">
+                                      {formatARS(mod.unit_price ?? 0)}/un · {mod.min_qty ?? 1}–{mod.max_qty ?? 12} unidades
+                                    </p>
+                                  ) : (
+                                    <div className="flex flex-wrap gap-1 mt-1">
+                                      {(mod.options ?? []).map((opt) => (
+                                        <span
+                                          key={opt.id}
+                                          className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full"
+                                        >
+                                          {opt.name}
+                                          {opt.price > 0 && (
+                                            <span className="ml-1 text-teal-600 font-medium">
+                                              +{formatARS(opt.price)}
+                                            </span>
+                                          )}
+                                        </span>
+                                      ))}
+                                    </div>
+                                  )}
                                 </div>
                               </label>
                             </li>
@@ -567,6 +625,8 @@ function GroupEditForm({
   draft,
   saving,
   onNameChange,
+  onTypeChange,
+  onQuantityFieldChange,
   onAddOption,
   onUpdateOption,
   onRemoveOption,
@@ -576,12 +636,16 @@ function GroupEditForm({
   draft: ModifierGroup
   saving: boolean
   onNameChange: (name: string) => void
+  onTypeChange: (type: 'options' | 'quantity') => void
+  onQuantityFieldChange: (field: 'unit_price' | 'min_qty' | 'max_qty' | 'label', value: string) => void
   onAddOption: () => void
   onUpdateOption: (idx: number, field: 'name' | 'price', value: string) => void
   onRemoveOption: (idx: number) => void
   onSave: () => void
   onCancel: () => void
 }) {
+  const isQuantity = draft.type === 'quantity'
+
   return (
     <div className="px-5 py-4 space-y-4">
       {/* Group name */}
@@ -593,53 +657,161 @@ function GroupEditForm({
           type="text"
           value={draft.name}
           onChange={(e) => onNameChange(e.target.value)}
-          placeholder="Ej: Milanesa, Punto de cocción…"
+          placeholder="Ej: Empanadas, Punto de cocción…"
           className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm font-semibold text-gray-900 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-sumak-brown/30"
           autoFocus
         />
       </div>
 
-      {/* Options */}
+      {/* Type selector */}
       <div>
-        <label className="block text-xs font-bold text-gray-500 mb-2">Opciones</label>
-        <div className="space-y-2">
-          {draft.options.map((opt, idx) => (
-            <div key={opt.id} className="flex items-center gap-2">
-              <input
-                type="text"
-                value={opt.name}
-                onChange={(e) => onUpdateOption(idx, 'name', e.target.value)}
-                placeholder="Nombre de opción"
-                className="flex-1 rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-900 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-sumak-brown/30"
-              />
+        <label className="block text-xs font-bold text-gray-500 mb-2">Tipo</label>
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={() => onTypeChange('options')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl border-2 text-sm font-semibold transition-all ${
+              !isQuantity
+                ? 'border-sumak-brown bg-sumak-brown/5 text-sumak-brown'
+                : 'border-gray-200 bg-gray-50 text-gray-600 hover:border-gray-300'
+            }`}
+          >
+            <List size={14} />
+            Opciones
+          </button>
+          <button
+            type="button"
+            onClick={() => onTypeChange('quantity')}
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl border-2 text-sm font-semibold transition-all ${
+              isQuantity
+                ? 'border-teal-500 bg-teal-50 text-teal-700'
+                : 'border-gray-200 bg-gray-50 text-gray-600 hover:border-gray-300'
+            }`}
+          >
+            <Hash size={14} />
+            Cantidad
+          </button>
+        </div>
+      </div>
+
+      {isQuantity ? (
+        /* ── Quantity fields ── */
+        <div className="space-y-3">
+          <div>
+            <label className="block text-xs font-bold text-gray-500 mb-1">
+              Precio unitario ($)
+            </label>
+            <input
+              type="number"
+              value={draft.unit_price === 0 ? '' : draft.unit_price}
+              onChange={(e) => onQuantityFieldChange('unit_price', e.target.value)}
+              placeholder="Ej: 1300"
+              min={0}
+              className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm text-gray-900 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-teal-400/40 tabular-nums"
+            />
+          </div>
+          <div className="flex gap-3">
+            <div className="flex-1">
+              <label className="block text-xs font-bold text-gray-500 mb-1">Mínimo</label>
               <input
                 type="number"
-                value={opt.price === 0 ? '' : opt.price}
-                onChange={(e) => onUpdateOption(idx, 'price', e.target.value)}
-                placeholder="$ extra"
-                min={0}
-                className="w-24 rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-900 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-sumak-brown/30 tabular-nums"
+                value={draft.min_qty ?? 1}
+                onChange={(e) => onQuantityFieldChange('min_qty', e.target.value)}
+                min={1}
+                max={99}
+                className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm text-gray-900 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-teal-400/40 tabular-nums"
               />
-              <button
-                type="button"
-                onClick={() => onRemoveOption(idx)}
-                className="p-1.5 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors"
-                title="Quitar opción"
-              >
-                <X size={14} />
-              </button>
             </div>
-          ))}
+            <div className="flex-1">
+              <label className="block text-xs font-bold text-gray-500 mb-1">Máximo</label>
+              <input
+                type="number"
+                value={draft.max_qty ?? 12}
+                onChange={(e) => onQuantityFieldChange('max_qty', e.target.value)}
+                min={1}
+                max={99}
+                className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm text-gray-900 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-teal-400/40 tabular-nums"
+              />
+            </div>
+          </div>
+          <div>
+            <label className="block text-xs font-bold text-gray-500 mb-1">
+              Etiqueta (opcional)
+            </label>
+            <input
+              type="text"
+              value={draft.label ?? ''}
+              onChange={(e) => onQuantityFieldChange('label', e.target.value)}
+              placeholder="Ej: Empanadas"
+              className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm text-gray-900 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-teal-400/40"
+            />
+          </div>
+          {/* Preview */}
+          {(draft.unit_price ?? 0) > 0 && (
+            <div className="bg-teal-50 rounded-xl px-4 py-3">
+              <p className="text-xs font-bold text-teal-700 mb-2">Vista previa del scroller</p>
+              <div className="flex flex-wrap gap-1.5">
+                {Array.from(
+                  { length: Math.min((draft.max_qty ?? 12) - (draft.min_qty ?? 1) + 1, 12) },
+                  (_, i) => (draft.min_qty ?? 1) + i
+                ).map((qty) => (
+                  <div
+                    key={qty}
+                    className="flex flex-col items-center justify-center w-12 h-12 rounded-xl border-2 border-teal-200 bg-white text-gray-700"
+                  >
+                    <span className="text-base font-black leading-none">{qty}</span>
+                    <span className="text-[9px] font-bold text-teal-600 leading-none mt-0.5">
+                      {new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS', minimumFractionDigits: 0 }).format((draft.unit_price ?? 0) * qty)}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
-        <button
-          type="button"
-          onClick={onAddOption}
-          className="mt-2 flex items-center gap-1.5 text-xs font-semibold text-sumak-brown hover:text-sumak-brown/80 transition-colors"
-        >
-          <Plus size={13} />
-          Agregar opción
-        </button>
-      </div>
+      ) : (
+        /* ── Options editor ── */
+        <div>
+          <label className="block text-xs font-bold text-gray-500 mb-2">Opciones</label>
+          <div className="space-y-2">
+            {(draft.options ?? []).map((opt, idx) => (
+              <div key={opt.id} className="flex items-center gap-2">
+                <input
+                  type="text"
+                  value={opt.name}
+                  onChange={(e) => onUpdateOption(idx, 'name', e.target.value)}
+                  placeholder="Nombre de opción"
+                  className="flex-1 rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-900 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-sumak-brown/30"
+                />
+                <input
+                  type="number"
+                  value={opt.price === 0 ? '' : opt.price}
+                  onChange={(e) => onUpdateOption(idx, 'price', e.target.value)}
+                  placeholder="$ extra"
+                  min={0}
+                  className="w-24 rounded-lg border border-gray-200 px-3 py-2 text-sm text-gray-900 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-sumak-brown/30 tabular-nums"
+                />
+                <button
+                  type="button"
+                  onClick={() => onRemoveOption(idx)}
+                  className="p-1.5 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors"
+                  title="Quitar opción"
+                >
+                  <X size={14} />
+                </button>
+              </div>
+            ))}
+          </div>
+          <button
+            type="button"
+            onClick={onAddOption}
+            className="mt-2 flex items-center gap-1.5 text-xs font-semibold text-sumak-brown hover:text-sumak-brown/80 transition-colors"
+          >
+            <Plus size={13} />
+            Agregar opción
+          </button>
+        </div>
+      )}
 
       {/* Actions */}
       <div className="flex gap-2 pt-1">

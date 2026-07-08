@@ -40,6 +40,13 @@ type ModifierOption = {
 type Modifier = {
   id: string
   name: string
+  type?: 'options' | 'quantity'
+  // quantity-type fields
+  unit_price?: number
+  min_qty?: number
+  max_qty?: number
+  label?: string
+  // options-type field
   options: ModifierOption[]
 }
 
@@ -793,8 +800,10 @@ function ModifierModal({
   onConfirm: (selections: SelectedModifier[]) => void
   onCancel: () => void
 }) {
-  // State: modifierId → array of selected optionIds (multi-select per modifier)
+  // State for options-type modifiers: modifierId → array of selected optionIds
   const [selections, setSelections] = useState<Record<string, string[]>>({})
+  // State for quantity-type modifiers: modifierId → selected quantity (0 = none)
+  const [qtySelections, setQtySelections] = useState<Record<string, number>>({})
 
   const handleOptionToggle = (modifierId: string, optionId: string) => {
     setSelections((prev) => {
@@ -812,33 +821,56 @@ function ModifierModal({
     })
   }
 
+  const handleQtySelect = (modifierId: string, qty: number) => {
+    setQtySelections((prev) => ({ ...prev, [modifierId]: qty }))
+  }
+
   const handleConfirm = () => {
     const result: SelectedModifier[] = []
     for (const mod of modifiers) {
-      const selectedOptionIds = selections[mod.id] ?? []
-      for (const optId of selectedOptionIds) {
-        const opt = mod.options.find((o) => o.id === optId)
-        if (opt) {
+      if (mod.type === 'quantity') {
+        const qty = qtySelections[mod.id] ?? 0
+        if (qty > 0) {
+          const unitPrice = mod.unit_price ?? 0
           result.push({
             modifierId: mod.id,
             modifierName: mod.name,
-            optionId: opt.id,
-            optionName: opt.name,
-            price: opt.price,
+            optionId: `${mod.id}_qty_${qty}`,
+            optionName: `${qty}un`,
+            price: unitPrice * qty,
           })
+        }
+      } else {
+        const selectedOptionIds = selections[mod.id] ?? []
+        for (const optId of selectedOptionIds) {
+          const opt = mod.options.find((o) => o.id === optId)
+          if (opt) {
+            result.push({
+              modifierId: mod.id,
+              modifierName: mod.name,
+              optionId: opt.id,
+              optionName: opt.name,
+              price: opt.price,
+            })
+          }
         }
       }
     }
     onConfirm(result)
   }
 
-  const extraTotal = Object.entries(selections).reduce((sum, [modId, optIds]) => {
-    const mod = modifiers.find((m) => m.id === modId)
-    return sum + (optIds as string[]).reduce((s, optId) => {
-      const opt = mod?.options.find((o) => o.id === optId)
-      return s + (opt?.price ?? 0)
+  const extraTotal =
+    Object.entries(selections).reduce((sum, [modId, optIds]) => {
+      const mod = modifiers.find((m) => m.id === modId)
+      return sum + (optIds as string[]).reduce((s, optId) => {
+        const opt = mod?.options.find((o) => o.id === optId)
+        return s + (opt?.price ?? 0)
+      }, 0)
+    }, 0) +
+    Object.entries(qtySelections).reduce((sum, [modId, qty]) => {
+      const mod = modifiers.find((m) => m.id === modId)
+      return sum + (mod?.unit_price ?? 0) * qty
     }, 0)
-  }, 0)
 
   return (
     <div
@@ -859,40 +891,73 @@ function ModifierModal({
               <p className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-2">
                 {mod.name}
               </p>
-              <div className="flex flex-col gap-1">
-                {mod.options.map((opt) => {
-                  const checked = (selections[mod.id] ?? []).includes(opt.id)
-                  return (
-                    <button
-                      key={opt.id}
-                      onClick={() => handleOptionToggle(mod.id, opt.id)}
-                      className={`flex items-center gap-3 px-3 py-2.5 rounded-xl border transition-all text-left ${
-                        checked
-                          ? 'border-teal-500 bg-teal-50'
-                          : 'border-gray-200 bg-gray-50 hover:border-gray-300'
-                      }`}
-                    >
-                      <div
-                        className={`w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 transition-all ${
-                          checked
-                            ? 'border-teal-500 bg-teal-500'
-                            : 'border-gray-300'
+              {mod.type === 'quantity' ? (
+                /* ── Quantity scroller ── */
+                <div className="flex flex-wrap gap-2">
+                  {Array.from(
+                    { length: (mod.max_qty ?? 12) - (mod.min_qty ?? 1) + 1 },
+                    (_, i) => (mod.min_qty ?? 1) + i
+                  ).map((qty) => {
+                    const unitPrice = mod.unit_price ?? 0
+                    const total = unitPrice * qty
+                    const selected = (qtySelections[mod.id] ?? 0) === qty
+                    return (
+                      <button
+                        key={qty}
+                        onClick={() => handleQtySelect(mod.id, selected ? 0 : qty)}
+                        className={`flex flex-col items-center justify-center w-16 h-16 rounded-xl border-2 transition-all active:scale-95 ${
+                          selected
+                            ? 'border-teal-500 bg-teal-500 text-white shadow-md'
+                            : 'border-gray-200 bg-gray-50 text-gray-800 hover:border-teal-300 hover:bg-teal-50'
                         }`}
                       >
-                        {checked && (
-                          <div className="w-1.5 h-1.5 rounded-full bg-white" />
+                        <span className="text-xl font-black leading-none">{qty}</span>
+                        {unitPrice > 0 && (
+                          <span className={`text-[10px] font-bold leading-none mt-0.5 ${selected ? 'text-teal-100' : 'text-teal-600'}`}>
+                            {formatARS(total)}
+                          </span>
                         )}
-                      </div>
-                      <span className="flex-1 text-sm font-medium text-gray-900">{opt.name}</span>
-                      {opt.price > 0 && (
-                        <span className="text-xs font-bold text-teal-600 shrink-0">
-                          +{formatARS(opt.price)}
-                        </span>
-                      )}
-                    </button>
-                  )
-                })}
-              </div>
+                      </button>
+                    )
+                  })}
+                </div>
+              ) : (
+                /* ── Options toggle list ── */
+                <div className="flex flex-col gap-1">
+                  {mod.options.map((opt) => {
+                    const checked = (selections[mod.id] ?? []).includes(opt.id)
+                    return (
+                      <button
+                        key={opt.id}
+                        onClick={() => handleOptionToggle(mod.id, opt.id)}
+                        className={`flex items-center gap-3 px-3 py-2.5 rounded-xl border transition-all text-left ${
+                          checked
+                            ? 'border-teal-500 bg-teal-50'
+                            : 'border-gray-200 bg-gray-50 hover:border-gray-300'
+                        }`}
+                      >
+                        <div
+                          className={`w-4 h-4 rounded-full border-2 flex items-center justify-center shrink-0 transition-all ${
+                            checked
+                              ? 'border-teal-500 bg-teal-500'
+                              : 'border-gray-300'
+                          }`}
+                        >
+                          {checked && (
+                            <div className="w-1.5 h-1.5 rounded-full bg-white" />
+                          )}
+                        </div>
+                        <span className="flex-1 text-sm font-medium text-gray-900">{opt.name}</span>
+                        {opt.price > 0 && (
+                          <span className="text-xs font-bold text-teal-600 shrink-0">
+                            +{formatARS(opt.price)}
+                          </span>
+                        )}
+                      </button>
+                    )
+                  })}
+                </div>
+              )}
             </div>
           ))}
         </div>
