@@ -17,6 +17,7 @@ type ModifierGroup = {
   id: string
   name: string
   type?: 'options' | 'quantity'
+  price_mode?: 'add' | 'replace'
   // quantity-type fields
   unit_price?: number
   min_qty?: number
@@ -192,6 +193,10 @@ export default function AdminModificadoresPage() {
     setDraftGroup((prev) => prev ? { ...prev, name } : prev)
   }
 
+  const draftSetPriceMode = (price_mode: 'add' | 'replace') => {
+    setDraftGroup((prev) => prev ? { ...prev, price_mode } : prev)
+  }
+
   const draftSetType = (type: 'options' | 'quantity') => {
     setDraftGroup((prev) => {
       if (!prev) return prev
@@ -356,6 +361,7 @@ export default function AdminModificadoresPage() {
                       saving={savingGroup}
                       onNameChange={draftSetName}
                       onTypeChange={draftSetType}
+                      onPriceModeChange={draftSetPriceMode}
                       onQuantityFieldChange={draftSetQuantityField}
                       onAddOption={draftAddOption}
                       onUpdateOption={draftUpdateOption}
@@ -384,6 +390,11 @@ export default function AdminModificadoresPage() {
                           ) : (
                             <span className="text-xs text-gray-400 ml-1">
                               {(group.options ?? []).length} opción{(group.options ?? []).length !== 1 ? 'es' : ''}
+                            </span>
+                          )}
+                          {group.price_mode === 'replace' && (
+                            <span className="text-xs bg-orange-100 text-orange-700 px-2 py-0.5 rounded-full font-semibold ml-1">
+                              Reemplaza precio
                             </span>
                           )}
                         </button>
@@ -443,6 +454,7 @@ export default function AdminModificadoresPage() {
                   saving={savingGroup}
                   onNameChange={draftSetName}
                   onTypeChange={draftSetType}
+                  onPriceModeChange={draftSetPriceMode}
                   onQuantityFieldChange={draftSetQuantityField}
                   onAddOption={draftAddOption}
                   onUpdateOption={draftUpdateOption}
@@ -626,6 +638,7 @@ function GroupEditForm({
   saving,
   onNameChange,
   onTypeChange,
+  onPriceModeChange,
   onQuantityFieldChange,
   onAddOption,
   onUpdateOption,
@@ -637,6 +650,7 @@ function GroupEditForm({
   saving: boolean
   onNameChange: (name: string) => void
   onTypeChange: (type: 'options' | 'quantity') => void
+  onPriceModeChange: (price_mode: 'add' | 'replace') => void
   onQuantityFieldChange: (field: 'unit_price' | 'min_qty' | 'max_qty' | 'label', value: string) => void
   onAddOption: () => void
   onUpdateOption: (idx: number, field: 'name' | 'price', value: string) => void
@@ -645,6 +659,7 @@ function GroupEditForm({
   onCancel: () => void
 }) {
   const isQuantity = draft.type === 'quantity'
+  const priceMode = draft.price_mode ?? 'add'
 
   return (
     <div className="px-5 py-4 space-y-4">
@@ -692,6 +707,40 @@ function GroupEditForm({
             Cantidad
           </button>
         </div>
+      </div>
+
+      {/* Price mode toggle */}
+      <div>
+        <label className="block text-xs font-bold text-gray-500 mb-2">Modo de precio</label>
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={() => onPriceModeChange('add')}
+            className={`flex-1 px-4 py-2 rounded-xl border-2 text-sm font-semibold transition-all ${
+              priceMode === 'add'
+                ? 'border-sumak-brown bg-sumak-brown/5 text-sumak-brown'
+                : 'border-gray-200 bg-gray-50 text-gray-600 hover:border-gray-300'
+            }`}
+          >
+            Sumar al precio
+          </button>
+          <button
+            type="button"
+            onClick={() => onPriceModeChange('replace')}
+            className={`flex-1 px-4 py-2 rounded-xl border-2 text-sm font-semibold transition-all ${
+              priceMode === 'replace'
+                ? 'border-orange-500 bg-orange-50 text-orange-700'
+                : 'border-gray-200 bg-gray-50 text-gray-600 hover:border-gray-300'
+            }`}
+          >
+            Reemplazar precio
+          </button>
+        </div>
+        {priceMode === 'replace' && (
+          <p className="text-xs text-orange-600 mt-1.5">
+            El precio base del plato será reemplazado por el precio de este modificador
+          </p>
+        )}
       </div>
 
       {isQuantity ? (

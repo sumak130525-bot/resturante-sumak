@@ -41,6 +41,7 @@ type Modifier = {
   id: string
   name: string
   type?: 'options' | 'quantity'
+  price_mode?: 'add' | 'replace'
   // quantity-type fields
   unit_price?: number
   min_qty?: number
@@ -57,6 +58,7 @@ type SelectedModifier = {
   optionId: string
   optionName: string
   price: number
+  price_mode?: 'add' | 'replace'
 }
 
 type PrintData = {
@@ -450,6 +452,7 @@ type TicketItem = {
   is_combo_header?: boolean      // true = línea de cabecera del combo
   combo_id?: string              // ID del combo al que pertenece
   combo_slot_label?: string      // sub-item: etiqueta del slot al que pertenece
+  price_replaced?: boolean       // true = precio base reemplazado por modificador replace
 }
 
 // ─── Combo selection state type ───────────────────────────────────────────────
@@ -919,6 +922,7 @@ function ModifierModal({
             optionId: `${mod.id}_qty_${qty}`,
             optionName: `${qty}un`,
             price: unitPrice * qty,
+            price_mode: mod.price_mode ?? 'add',
           })
         }
       } else {
@@ -932,6 +936,7 @@ function ModifierModal({
               optionId: opt.id,
               optionName: opt.name,
               price: opt.price,
+              price_mode: mod.price_mode ?? 'add',
             })
           }
         }
@@ -940,9 +945,12 @@ function ModifierModal({
     onConfirm(result)
   }
 
+  const hasReplace = modifiers.some((m) => m.price_mode === 'replace')
+
   const extraTotal =
     Object.entries(selections).reduce((sum, [modId, optIds]) => {
       const mod = modifiers.find((m) => m.id === modId)
+      if (mod?.price_mode === 'replace') return sum
       return sum + (optIds as string[]).reduce((s, optId) => {
         const opt = mod?.options.find((o) => o.id === optId)
         return s + (opt?.price ?? 0)
@@ -950,6 +958,22 @@ function ModifierModal({
     }, 0) +
     Object.entries(qtySelections).reduce((sum, [modId, qty]) => {
       const mod = modifiers.find((m) => m.id === modId)
+      if (mod?.price_mode === 'replace') return sum
+      return sum + (mod?.unit_price ?? 0) * qty
+    }, 0)
+
+  const replaceTotal =
+    Object.entries(selections).reduce((sum, [modId, optIds]) => {
+      const mod = modifiers.find((m) => m.id === modId)
+      if (mod?.price_mode !== 'replace') return sum
+      return sum + (optIds as string[]).reduce((s, optId) => {
+        const opt = mod?.options.find((o) => o.id === optId)
+        return s + (opt?.price ?? 0)
+      }, 0)
+    }, 0) +
+    Object.entries(qtySelections).reduce((sum, [modId, qty]) => {
+      const mod = modifiers.find((m) => m.id === modId)
+      if (mod?.price_mode !== 'replace') return sum
       return sum + (mod?.unit_price ?? 0) * qty
     }, 0)
 
@@ -1022,9 +1046,19 @@ function ModifierModal({
 
         {/* Footer */}
         <div className="px-5 pb-5 pt-3 border-t border-gray-100 shrink-0">
-          {extraTotal > 0 && (
+          {hasReplace && replaceTotal > 0 && (
+            <p className="text-xs text-orange-600 mb-1 text-right">
+              Precio base reemplazado → <span className="font-bold">{formatARS(replaceTotal + extraTotal)}</span>
+            </p>
+          )}
+          {!hasReplace && extraTotal > 0 && (
             <p className="text-xs text-gray-500 mb-2 text-right">
               Extras: <span className="font-bold text-teal-600">+{formatARS(extraTotal)}</span>
+            </p>
+          )}
+          {hasReplace && extraTotal > 0 && (
+            <p className="text-xs text-teal-600 mb-2 text-right">
+              + extras: <span className="font-bold">+{formatARS(extraTotal)}</span>
             </p>
           )}
           <div className="flex gap-3">
@@ -2870,7 +2904,7 @@ function TicketItemRow({
   onUnbonus?: (uid: string) => void
 }) {
   const [noteOpen, setNoteOpen] = useState(false)
-  const modExtra = (item.modifiers ?? []).reduce((ms, m) => ms + m.price, 0)
+  const modExtra = item.price_replaced ? 0 : (item.modifiers ?? []).reduce((ms, m) => ms + m.price, 0)
   const unitTotal = item.price + modExtra   // always the actual price (0 if bonus)
   const displayUnitTotal = item.is_bonus ? 0 : unitTotal
 
@@ -3230,7 +3264,7 @@ function TicketPanel({
 }) {
   const total = items.reduce((s, i) => {
     if (i.is_bonus) return s
-    const modExtra = (i.modifiers ?? []).reduce((ms, m) => ms + m.price, 0)
+    const modExtra = i.price_replaced ? 0 : (i.modifiers ?? []).reduce((ms, m) => ms + m.price, 0)
     return s + (i.price + modExtra) * i.quantity
   }, 0)
   const bonusCount = items.filter((i) => i.is_bonus).length
@@ -3477,7 +3511,7 @@ function TicketPanel({
                 if (personItems.length === 0) return null
                 const personTotal = personItems.reduce((s, it) => {
                   if (it.is_bonus) return s
-                  const modExtra = (it.modifiers ?? []).reduce((ms, m) => ms + m.price, 0)
+                  const modExtra = it.price_replaced ? 0 : (it.modifiers ?? []).reduce((ms, m) => ms + m.price, 0)
                   return s + (it.price + modExtra) * it.quantity
                 }, 0)
                 return (
@@ -4630,17 +4664,29 @@ export default function POSPage() {
       // With modifiers: always new entry (unique modifier combination)
       const modHash = (modifiers ?? []).map((m) => m.optionId).sort().join(',')
       const uid = `${item.id}__p${personNum ?? 0}__m${modHash}__${Date.now()}`
+
+      // ── Price calculation: replace vs add ───────────────────────────────────
+      const replaceMods = (modifiers ?? []).filter((m) => m.price_mode === 'replace')
+      const addMods = (modifiers ?? []).filter((m) => m.price_mode !== 'replace')
+      const hasReplace = replaceMods.length > 0
+      const replaceTotal = replaceMods.reduce((s, m) => s + m.price, 0)
+      const addTotal = addMods.reduce((s, m) => s + m.price, 0)
+      const finalPrice = hasReplace
+        ? replaceTotal + addTotal
+        : item.price + addTotal
+
       return [
         ...prev,
         {
           uid,
           menu_item_id: item.id,
           name: item.name,
-          price: item.price,
+          price: finalPrice,
           quantity: 1,
           image_url: item.image_url,
           modifiers,
           person_number: personNum,
+          ...(hasReplace ? { price_replaced: true } : {}),
         },
       ]
     })
@@ -4834,7 +4880,7 @@ export default function POSPage() {
   const handleBonusSelect = useCallback((reason: BonusReason) => {
     setTicketItems((prev) => prev.map((item) => {
       if (item.uid !== bonusModalUid) return item
-      const modExtra = (item.modifiers ?? []).reduce((ms, m) => ms + m.price, 0)
+      const modExtra = item.price_replaced ? 0 : (item.modifiers ?? []).reduce((ms, m) => ms + m.price, 0)
       return {
         ...item,
         is_bonus: true,
@@ -5183,7 +5229,7 @@ export default function POSPage() {
           : 'efectivo'
         const totalVal = ticketItems.reduce((s, i) => {
           if (i.is_bonus) return s
-          const modExtra = (i.modifiers ?? []).reduce((ms: number, m: { price: number }) => ms + m.price, 0)
+          const modExtra = i.price_replaced ? 0 : (i.modifiers ?? []).reduce((ms: number, m: { price: number }) => ms + m.price, 0)
           return s + (i.price + modExtra) * i.quantity
         }, 0)
         const cashVal = paymentMethod === 'Mixto'
@@ -5276,7 +5322,7 @@ export default function POSPage() {
       // ── COBRAR PEDIDO NORMAL (sin mesa abierta) ───────────────────────────────
       const total = ticketItems.reduce((s, i) => {
         if (i.is_bonus) return s
-        const modExtra = (i.modifiers ?? []).reduce((ms, m) => ms + m.price, 0)
+        const modExtra = i.price_replaced ? 0 : (i.modifiers ?? []).reduce((ms, m) => ms + m.price, 0)
         return s + (i.price + modExtra) * i.quantity
       }, 0)
 
@@ -5287,7 +5333,7 @@ export default function POSPage() {
         const line_note = modNote && customNote
           ? `${modNote} · ${customNote}`
           : modNote ?? customNote
-        const modExtra = (item.modifiers ?? []).reduce((s, m) => s + m.price, 0)
+        const modExtra = item.price_replaced ? 0 : (item.modifiers ?? []).reduce((s, m) => s + m.price, 0)
         return {
           menu_item_id: item.menu_item_id,
           name: item.name,
@@ -5922,7 +5968,7 @@ export default function POSPage() {
         <MixedPaymentModal
           total={ticketItems.reduce((s, i) => {
             if (i.is_bonus) return s
-            const modExtra = (i.modifiers ?? []).reduce((ms, m) => ms + m.price, 0)
+            const modExtra = i.price_replaced ? 0 : (i.modifiers ?? []).reduce((ms, m) => ms + m.price, 0)
             return s + (i.price + modExtra) * i.quantity
           }, 0)}
           cashAmount={cashAmount}
