@@ -563,7 +563,7 @@ function ComboOverlay({
           color: '#fff',
           border: '2px solid rgba(255,255,255,0.35)',
           borderRadius: 9999,
-          padding: '3px 8px',
+          padding: '2px 6px',
           fontWeight: 900,
           fontSize: '0.72rem',
           lineHeight: 1,
@@ -579,7 +579,7 @@ function ComboOverlay({
         onTouchEnd={(e) => (e.currentTarget.style.transform = 'translate(-50%, -50%) scale(1)')}
         title={`Combo ${combo.name} — ${priceLabel}`}
       >
-        <span style={{ fontSize: '2rem', fontWeight: 900, color: '#ffffff', textShadow: '0 0 4px rgba(0,0,0,0.8)' }}>+</span>
+        <span style={{ fontSize: '1.5rem', fontWeight: 900, color: '#ffffff', textShadow: '0 0 4px rgba(0,0,0,0.8)' }}>+</span>
         <span> $ {priceLabel}</span>
         {isActive && <span style={{ fontSize: '0.65rem', opacity: 0.9 }}>✓</span>}
       </button>
