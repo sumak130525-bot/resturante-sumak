@@ -2904,7 +2904,9 @@ function TicketItemRow({
   onUnbonus?: (uid: string) => void
 }) {
   const [noteOpen, setNoteOpen] = useState(false)
-  const modExtra = item.price_replaced ? 0 : (item.modifiers ?? []).reduce((ms, m) => ms + m.price, 0)
+  const modExtra = item.price_replaced
+    ? (item.modifiers ?? []).filter((m) => m.price_mode !== 'replace').reduce((ms, m) => ms + m.price, 0)
+    : (item.modifiers ?? []).reduce((ms, m) => ms + m.price, 0)
   const unitTotal = item.price + modExtra   // always the actual price (0 if bonus)
   const displayUnitTotal = item.is_bonus ? 0 : unitTotal
 
@@ -3264,7 +3266,9 @@ function TicketPanel({
 }) {
   const total = items.reduce((s, i) => {
     if (i.is_bonus) return s
-    const modExtra = i.price_replaced ? 0 : (i.modifiers ?? []).reduce((ms, m) => ms + m.price, 0)
+    const modExtra = i.price_replaced
+      ? (i.modifiers ?? []).filter((m) => m.price_mode !== 'replace').reduce((ms, m) => ms + m.price, 0)
+      : (i.modifiers ?? []).reduce((ms, m) => ms + m.price, 0)
     return s + (i.price + modExtra) * i.quantity
   }, 0)
   const bonusCount = items.filter((i) => i.is_bonus).length
@@ -3511,7 +3515,9 @@ function TicketPanel({
                 if (personItems.length === 0) return null
                 const personTotal = personItems.reduce((s, it) => {
                   if (it.is_bonus) return s
-                  const modExtra = it.price_replaced ? 0 : (it.modifiers ?? []).reduce((ms, m) => ms + m.price, 0)
+                  const modExtra = it.price_replaced
+                    ? (it.modifiers ?? []).filter((m) => m.price_mode !== 'replace').reduce((ms, m) => ms + m.price, 0)
+                    : (it.modifiers ?? []).reduce((ms, m) => ms + m.price, 0)
                   return s + (it.price + modExtra) * it.quantity
                 }, 0)
                 return (
@@ -4672,8 +4678,8 @@ export default function POSPage() {
       const replaceTotal = replaceMods.reduce((s, m) => s + m.price, 0)
       const addTotal = addMods.reduce((s, m) => s + m.price, 0)
       const finalPrice = hasReplace
-        ? replaceTotal + addTotal
-        : item.price + addTotal
+        ? replaceTotal
+        : item.price
 
       return [
         ...prev,
@@ -4880,7 +4886,9 @@ export default function POSPage() {
   const handleBonusSelect = useCallback((reason: BonusReason) => {
     setTicketItems((prev) => prev.map((item) => {
       if (item.uid !== bonusModalUid) return item
-      const modExtra = item.price_replaced ? 0 : (item.modifiers ?? []).reduce((ms, m) => ms + m.price, 0)
+      const modExtra = item.price_replaced
+        ? (item.modifiers ?? []).filter((m) => m.price_mode !== 'replace').reduce((ms, m) => ms + m.price, 0)
+        : (item.modifiers ?? []).reduce((ms, m) => ms + m.price, 0)
       return {
         ...item,
         is_bonus: true,
@@ -5229,7 +5237,9 @@ export default function POSPage() {
           : 'efectivo'
         const totalVal = ticketItems.reduce((s, i) => {
           if (i.is_bonus) return s
-          const modExtra = i.price_replaced ? 0 : (i.modifiers ?? []).reduce((ms: number, m: { price: number }) => ms + m.price, 0)
+          const modExtra = i.price_replaced
+            ? (i.modifiers ?? []).filter((m) => m.price_mode !== 'replace').reduce((ms: number, m: { price: number; price_mode?: string }) => ms + m.price, 0)
+            : (i.modifiers ?? []).reduce((ms: number, m: { price: number }) => ms + m.price, 0)
           return s + (i.price + modExtra) * i.quantity
         }, 0)
         const cashVal = paymentMethod === 'Mixto'
@@ -5322,7 +5332,9 @@ export default function POSPage() {
       // ── COBRAR PEDIDO NORMAL (sin mesa abierta) ───────────────────────────────
       const total = ticketItems.reduce((s, i) => {
         if (i.is_bonus) return s
-        const modExtra = i.price_replaced ? 0 : (i.modifiers ?? []).reduce((ms, m) => ms + m.price, 0)
+        const modExtra = i.price_replaced
+          ? (i.modifiers ?? []).filter((m) => m.price_mode !== 'replace').reduce((ms, m) => ms + m.price, 0)
+          : (i.modifiers ?? []).reduce((ms, m) => ms + m.price, 0)
         return s + (i.price + modExtra) * i.quantity
       }, 0)
 
@@ -5333,7 +5345,9 @@ export default function POSPage() {
         const line_note = modNote && customNote
           ? `${modNote} · ${customNote}`
           : modNote ?? customNote
-        const modExtra = item.price_replaced ? 0 : (item.modifiers ?? []).reduce((s, m) => s + m.price, 0)
+        const modExtra = item.price_replaced
+          ? (item.modifiers ?? []).filter((m) => m.price_mode !== 'replace').reduce((s, m) => s + m.price, 0)
+          : (item.modifiers ?? []).reduce((s, m) => s + m.price, 0)
         return {
           menu_item_id: item.menu_item_id,
           name: item.name,
@@ -5968,7 +5982,9 @@ export default function POSPage() {
         <MixedPaymentModal
           total={ticketItems.reduce((s, i) => {
             if (i.is_bonus) return s
-            const modExtra = i.price_replaced ? 0 : (i.modifiers ?? []).reduce((ms, m) => ms + m.price, 0)
+            const modExtra = i.price_replaced
+              ? (i.modifiers ?? []).filter((m) => m.price_mode !== 'replace').reduce((ms, m) => ms + m.price, 0)
+              : (i.modifiers ?? []).reduce((ms, m) => ms + m.price, 0)
             return s + (i.price + modExtra) * i.quantity
           }, 0)}
           cashAmount={cashAmount}
