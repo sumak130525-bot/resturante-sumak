@@ -4989,19 +4989,24 @@ export default function POSPage() {
           setToast('Indica número de mesa antes de enviar a cocina')
           return
         }
-        const newItemsPayload = ticketItems.map((item) => ({
-          menu_item_id: item.menu_item_id,
-          name: item.name,
-          price: item.is_bonus ? 0 : item.price,
-          quantity: item.quantity,
-          line_note: item.customNote ?? buildLineNote(item.modifiers ?? []),
-          person_number: item.person_number ?? null,
-          is_bonus: item.is_bonus ?? false,
-          bonus_reason: item.bonus_reason ?? null,
-          original_price: item.original_price ?? null,
-          ...(item.is_combo_header ? { is_combo_header: true, combo_id: item.combo_id } : {}),
-          ...(item.combo_slot_label ? { combo_slot_label: item.combo_slot_label, combo_id: item.combo_id } : {}),
-        }))
+        const newItemsPayload = ticketItems.map((item) => {
+          const modNote = buildLineNote(item.modifiers ?? [])
+          const customNote = item.customNote?.trim() || null
+          const line_note = modNote && customNote ? `${modNote} · ${customNote}` : modNote ?? customNote
+          return {
+            menu_item_id: item.menu_item_id,
+            name: item.name,
+            price: item.is_bonus ? 0 : item.price,
+            quantity: item.quantity,
+            line_note,
+            person_number: item.person_number ?? null,
+            is_bonus: item.is_bonus ?? false,
+            bonus_reason: item.bonus_reason ?? null,
+            original_price: item.original_price ?? null,
+            ...(item.is_combo_header ? { is_combo_header: true, combo_id: item.combo_id } : {}),
+            ...(item.combo_slot_label ? { combo_slot_label: item.combo_slot_label, combo_id: item.combo_id } : {}),
+          }
+        })
         const total = ticketItems.reduce((s, i) => s + (i.is_bonus ? 0 : i.price) * i.quantity, 0)
         const createRes = await fetch('/api/pos/orders', {
           method: 'POST',
@@ -5035,19 +5040,24 @@ export default function POSPage() {
         setActiveOpenOrder({ id: targetOrderId, table_number: targetTableNumber!, existingItems: [] })
       } else {
         // Mesa ya existe: agregar items
-        const newItemsPayload = ticketItems.map((item) => ({
-          menu_item_id: item.menu_item_id,
-          name: item.name,
-          quantity: item.quantity,
-          unit_price: item.is_bonus ? 0 : item.price,
-          line_note: item.customNote ?? buildLineNote(item.modifiers ?? []),
-          person_number: item.person_number ?? null,
-          is_bonus: item.is_bonus ?? false,
-          bonus_reason: item.bonus_reason ?? null,
-          original_price: item.original_price ?? null,
-          ...(item.is_combo_header ? { is_combo_header: true, combo_id: item.combo_id } : {}),
-          ...(item.combo_slot_label ? { combo_slot_label: item.combo_slot_label, combo_id: item.combo_id } : {}),
-        }))
+        const newItemsPayload = ticketItems.map((item) => {
+          const modNote = buildLineNote(item.modifiers ?? [])
+          const customNote = item.customNote?.trim() || null
+          const line_note = modNote && customNote ? `${modNote} · ${customNote}` : modNote ?? customNote
+          return {
+            menu_item_id: item.menu_item_id,
+            name: item.name,
+            quantity: item.quantity,
+            unit_price: item.is_bonus ? 0 : item.price,
+            line_note,
+            person_number: item.person_number ?? null,
+            is_bonus: item.is_bonus ?? false,
+            bonus_reason: item.bonus_reason ?? null,
+            original_price: item.original_price ?? null,
+            ...(item.is_combo_header ? { is_combo_header: true, combo_id: item.combo_id } : {}),
+            ...(item.combo_slot_label ? { combo_slot_label: item.combo_slot_label, combo_id: item.combo_id } : {}),
+          }
+        })
 
         const addRes = await fetch(`/api/pos/orders/${targetOrderId}/items`, {
           method: 'POST',
