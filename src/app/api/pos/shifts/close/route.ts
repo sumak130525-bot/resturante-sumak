@@ -42,7 +42,7 @@ export async function POST(request: NextRequest) {
     // Get all non-cancelled orders in this shift period (from opened_at to now)
     // Use direct PostgREST fetch to bypass Supabase JS schema cache
     const ordersRes = await fetch(
-      `${process.env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1/orders?created_at=gte.${encodeURIComponent(openedAt)}&status=neq.cancelled&select=total,payment_method,cash_amount,transfer_amount,status`,
+      `${process.env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1/orders?shift_id=eq.${shiftId}&status=neq.cancelled&select=total,payment_method,cash_amount,transfer_amount,status`,
       {
         headers: {
           apikey: process.env.SUPABASE_SERVICE_ROLE_KEY!,
@@ -89,7 +89,7 @@ export async function POST(request: NextRequest) {
 
     // Get refunds from cancelled orders (cash portion only affects physical drawer)
     const cancelledRes = await fetch(
-      `${process.env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1/orders?created_at=gte.${encodeURIComponent(openedAt)}&status=eq.cancelled&select=total,payment_method,cash_amount`,
+      `${process.env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1/orders?shift_id=eq.${shiftId}&status=eq.cancelled&select=total,payment_method,cash_amount`,
       {
         headers: {
           apikey: process.env.SUPABASE_SERVICE_ROLE_KEY!,
