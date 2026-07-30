@@ -70,6 +70,7 @@ export async function GET() {
 
     let totalIncome = 0
     let totalExpense = 0
+    let totalRetiros = 0
 
     for (const mov of (movements ?? [])) {
       const amount = Number(mov.amount ?? 0)
@@ -77,6 +78,8 @@ export async function GET() {
         totalIncome += amount
       } else if (mov.type === 'egreso') {
         totalExpense += amount
+      } else if (mov.type === 'retiro') {
+        totalRetiros += amount
       }
     }
 
@@ -98,7 +101,7 @@ export async function GET() {
     }
 
     const opening = Number(shift.opening_amount ?? 0)
-    const expectedAmount = opening + totalCashSales + mixedCashTotal + totalIncome - totalExpense - totalRefunds
+    const expectedAmount = opening + totalCashSales + mixedCashTotal + totalIncome - totalExpense - totalRefunds - totalRetiros
 
     return NextResponse.json({
       opening_amount: opening,
@@ -108,6 +111,7 @@ export async function GET() {
       total_mixed_sales: totalMixedSales,
       total_income: totalIncome,
       total_expense: totalExpense,
+      total_retiros: totalRetiros,
       total_refunds: totalRefunds,
       opened_at: openedAt,
     })

@@ -1097,7 +1097,7 @@ function formatCashARS(amount: number): string {
 
 type CashMovement = {
   id: string
-  type: 'ingreso' | 'egreso' | 'venta_efectivo' | 'venta_transferencia'
+  type: 'ingreso' | 'egreso' | 'venta_efectivo' | 'venta_transferencia' | 'retiro'
   amount: number
   description: string | null
   created_at: string
@@ -1339,6 +1339,7 @@ type ShiftSummary = {
   total_mixed_sales: number
   total_income: number
   total_expense: number
+  total_retiros: number
   total_refunds: number
   opened_at: string
   closed_at: string
@@ -1416,6 +1417,115 @@ function OpenShiftModal({ onOpen }: { onOpen: (shift: Shift) => void }) {
   )
 }
 
+// ─── Cash Drop Modal ─────────────────────────────────────────────────────────
+
+function CashDropModal({ onClose, onSuccess, printServerUrl }: { onClose: () => void; onSuccess: () => void; printServerUrl?: string | null }) {
+  const [amount, setAmount] = useState('')
+  const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const handleSubmit = async () => {
+    const parsed = parseFloat(amount.replace(',', '.'))
+    if (!parsed || parsed <= 0) { setError('Ingresá un monto válido'); return }
+    setSubmitting(true)
+    setError(null)
+    try {
+      const res = await fetch('/api/pos/cash-movements', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ type: 'retiro', amount: parsed }),
+      })
+      const data = await res.json()
+      if (!res.ok) throw new Error(data.error ?? 'Error')
+
+      // Print receipt and open cash drawer
+      const now = new Date()
+      const dateStr = now.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: 'numeric' })
+      const timeStr = now.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false })
+      const receiptText = [
+        '----------------------',
+        '   RETIRO DE EFECTIVO',
+        '----------------------',
+        `${dateStr}  ${timeStr}`,
+        '',
+        `Monto: $${parsed.toLocaleString('es-AR')}`,
+        '',
+        '----------------------',
+      ].join('\n')
+
+      if (printServerUrl) {
+        const printed = await tryPrintServer(receiptText, printServerUrl)
+        if (printed) void tryOpenDrawer(printServerUrl)
+      } else {
+        sessionStorage.setItem('pos_ticket', receiptText)
+        sessionStorage.setItem('pos_ticket_payment', 'Efectivo')
+      }
+
+      onSuccess()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Error')
+      setSubmitting(false)
+    }
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60"
+      onClick={(e) => { if (e.target === e.currentTarget) onClose() }}
+    >
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm mx-4 flex flex-col overflow-hidden">
+        {/* Header */}
+        <div className="px-5 py-4 bg-amber-500 flex items-center justify-between">
+          <div>
+            <h3 className="text-white font-black text-xl leading-none">Retiro de Caja</h3>
+            <p className="text-amber-100 text-xs mt-1">Retirá efectivo de la caja registradora</p>
+          </div>
+          <button onClick={onClose} className="text-white/70 hover:text-white text-xl leading-none">✕</button>
+        </div>
+
+        {/* Body */}
+        <div className="px-5 py-5 flex flex-col gap-4">
+          <div>
+            <p className="text-xs font-bold text-gray-500 mb-1">Monto a retirar</p>
+            <input
+              type="number"
+              inputMode="numeric"
+              min={0}
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Enter') handleSubmit() }}
+              placeholder="$ 0"
+              autoFocus
+              className="w-full rounded-xl border border-gray-200 px-3 py-3 text-2xl font-bold text-gray-900 bg-gray-50 focus:outline-none focus:ring-2 focus:ring-amber-400 tabular-nums"
+            />
+          </div>
+          {error && <p className="text-red-600 text-sm font-semibold">{error}</p>}
+        </div>
+
+        {/* Footer */}
+        <div className="px-5 pb-5 flex gap-2">
+          <button
+            onClick={onClose}
+            disabled={submitting}
+            className="flex-1 py-3 rounded-xl font-bold text-sm bg-gray-100 text-gray-700 hover:bg-gray-200 active:scale-95 transition-all"
+          >
+            Cancelar
+          </button>
+          <button
+            onClick={handleSubmit}
+            disabled={submitting}
+            className={`flex-1 py-3 rounded-xl font-bold text-sm transition-all active:scale-95 shadow-md text-white ${
+              submitting ? 'bg-gray-300 cursor-not-allowed' : 'bg-amber-500 hover:bg-amber-600'
+            }`}
+          >
+            {submitting ? 'Registrando...' : 'Registrar Retiro'}
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ─── Close Shift Modal ────────────────────────────────────────────────────────
 
 function CloseShiftModal({
@@ -1458,6 +1568,7 @@ function CloseShiftModal({
           total_mixed_sales: data.total_mixed_sales,
           total_income: data.total_income,
           total_expense: data.total_expense,
+          total_retiros: data.total_retiros ?? 0,
           total_refunds: data.total_refunds,
           opened_at: data.opened_at,
           closed_at: new Date().toISOString(),
@@ -1569,6 +1680,14 @@ function CloseShiftModal({
                   <p className="font-black text-red-700 tabular-nums text-sm">{formatCashARS(summary.total_expense)}</p>
                 </div>
               </div>
+
+              {/* Retiros summary */}
+              {summary.total_retiros > 0 && (
+                <div className="rounded-xl bg-amber-50 border border-amber-100 p-3 flex items-center justify-between">
+                  <p className="text-xs font-bold text-amber-700">Retiros de caja</p>
+                  <p className="font-black text-amber-700 tabular-nums text-sm">-{formatCashARS(summary.total_retiros)}</p>
+                </div>
+              )}
 
               {/* Expected amount */}
               <div className="rounded-xl bg-blue-50 border border-blue-100 p-3">
@@ -1687,6 +1806,7 @@ function buildShiftCloseTicket(summary: ShiftSummary): string {
     SEP,
     `Ingresos:     ${fmtNum(summary.total_income)}`,
     `Egresos:      ${fmtNum(summary.total_expense)}`,
+    summary.total_retiros > 0 ? `Retiros:      ${fmtNum(summary.total_retiros)}` : '',
     SEP,
     `Apertura:     ${fmtNum(summary.opening_amount)}`,
     `Esperado:     ${fmtNum(summary.expected_amount)}`,
@@ -4381,6 +4501,21 @@ export default function POSPage() {
   const [showCashModal, setShowCashModal] = useState(false)
   const [cashModalPrefill, setCashModalPrefill] = useState<PrefillEgreso | undefined>(undefined)
 
+  // ─── Cash drop modal ──────────────────────────────────────────────────────────
+  const [showCashDropModal, setShowCashDropModal] = useState(false)
+  const [expectedCash, setExpectedCash] = useState(0)
+  const CASH_DROP_THRESHOLD = 50000
+
+  const refreshExpectedCash = useCallback(async () => {
+    try {
+      const res = await fetch('/api/pos/shifts/preview')
+      if (res.ok) {
+        const d = await res.json()
+        setExpectedCash(d.expected_amount ?? 0)
+      }
+    } catch { /* non-blocking */ }
+  }, [])
+
   // ─── Employee payments modal ──────────────────────────────────────────────────
   const [showEmpPayModal, setShowEmpPayModal] = useState(false)
 
@@ -4395,10 +4530,11 @@ export default function POSPage() {
       .then((r) => r.ok ? r.json() : { shift: null })
       .then((data) => {
         setCurrentShift(data.shift ?? null)
-        if (!data.shift) setShowOpenShiftModal(true)
+        if (data.shift) refreshExpectedCash()
+        else setShowOpenShiftModal(true)
       })
       .catch(() => setCurrentShift(null))
-  }, [])
+  }, [refreshExpectedCash])
 
   // Polling: re-verify shift every 30s to detect external closes (e.g. from admin)
   useEffect(() => {
@@ -5590,6 +5726,19 @@ export default function POSPage() {
         >
           $
         </button>
+        {/* Cash drop button — only when shift is open */}
+        {currentShift && (
+          <button
+            onClick={() => setShowCashDropModal(true)}
+            title="Retiro de caja"
+            className="relative flex items-center justify-center w-8 h-8 rounded-lg bg-sumak-brown-mid text-amber-400 hover:bg-sumak-brown-light active:scale-95 transition-all shrink-0 font-bold text-sm"
+          >
+            ↑$
+            {expectedCash > CASH_DROP_THRESHOLD && (
+              <span className="absolute -top-1 -right-1 w-3 h-3 rounded-full bg-orange-500 border border-sumak-brown animate-pulse" />
+            )}
+          </button>
+        )}
         {/* Sent orders button (change payment) */}
         <button
           onClick={() => setShowSentOrders(true)}
@@ -6012,6 +6161,18 @@ export default function POSPage() {
         <CashMovementsModal
           onClose={() => { setShowCashModal(false); setCashModalPrefill(undefined) }}
           prefillEgreso={cashModalPrefill}
+          printServerUrl={printServerUrl}
+        />
+      )}
+
+      {/* ── Cash Drop Modal ── */}
+      {showCashDropModal && (
+        <CashDropModal
+          onClose={() => setShowCashDropModal(false)}
+          onSuccess={() => {
+            setShowCashDropModal(false)
+            refreshExpectedCash()
+          }}
           printServerUrl={printServerUrl}
         />
       )}

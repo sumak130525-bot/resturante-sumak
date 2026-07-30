@@ -77,6 +77,7 @@ export async function POST(request: NextRequest) {
 
     let totalIncome = 0
     let totalExpense = 0
+    let totalRetiros = 0
 
     for (const mov of (movements ?? [])) {
       const amount = Number(mov.amount ?? 0)
@@ -84,6 +85,8 @@ export async function POST(request: NextRequest) {
         totalIncome += amount
       } else if (mov.type === 'egreso') {
         totalExpense += amount
+      } else if (mov.type === 'retiro') {
+        totalRetiros += amount
       }
     }
 
@@ -118,13 +121,14 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // expected = opening_amount + cash_sales + mixed_cash_portion + income - expense - refunds
+    // expected = opening_amount + cash_sales + mixed_cash_portion + income - expense - refunds - retiros
     const expectedAmount = Number(shift.opening_amount)
       + totalCashSales
       + mixedCashTotal
       + totalIncome
       - totalExpense
       - totalRefunds
+      - totalRetiros
 
     const difference = closing_amount - expectedAmount
 
@@ -175,6 +179,7 @@ export async function POST(request: NextRequest) {
         total_mixed_sales: totalMixedSales,
         total_income: totalIncome,
         total_expense: totalExpense,
+        total_retiros: totalRetiros,
         total_refunds: totalRefunds,
         opened_at: openedAt,
         closed_at: closedAt,

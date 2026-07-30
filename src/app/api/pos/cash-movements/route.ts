@@ -19,12 +19,20 @@ export const dynamic = 'force-dynamic'
 
   CREATE TABLE IF NOT EXISTS cash_movements (
     id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
-    type text NOT NULL CHECK (type IN ('ingreso', 'egreso', 'venta_efectivo', 'venta_transferencia')),
+    type text NOT NULL CHECK (type IN ('ingreso', 'egreso', 'venta_efectivo', 'venta_transferencia', 'retiro')),
     amount numeric NOT NULL,
     description text,
     shift_id uuid REFERENCES cash_shifts(id),
     created_at timestamptz DEFAULT now()
   );
+
+  -- If the table already exists, update the CHECK constraint to include 'retiro':
+  -- ALTER TABLE cash_movements DROP CONSTRAINT IF EXISTS cash_movements_type_check;
+  -- ALTER TABLE cash_movements ADD CONSTRAINT cash_movements_type_check
+  --   CHECK (type IN ('ingreso', 'egreso', 'venta_efectivo', 'venta_transferencia', 'retiro'));
+  --
+  -- Optional: track retiros in shifts table:
+  -- ALTER TABLE shifts ADD COLUMN IF NOT EXISTS total_retiros numeric NOT NULL DEFAULT 0;
 */
 
 function getAdminClient() {
@@ -80,7 +88,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const { type, amount, description } = body
 
-    if (!type || !['ingreso', 'egreso', 'venta_efectivo', 'venta_transferencia'].includes(type)) {
+    if (!type || !['ingreso', 'egreso', 'venta_efectivo', 'venta_transferencia', 'retiro'].includes(type)) {
       return NextResponse.json({ error: 'Tipo inválido' }, { status: 400 })
     }
     if (typeof amount !== 'number' || amount <= 0) {
