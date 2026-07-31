@@ -57,8 +57,10 @@ async function getWebOrders(): Promise<KdsOrder[]> {
     }
   )
 
-  // Últimas 6 horas
-  const since = new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString()
+  // Solo pedidos del día actual
+  const todayStart = new Date()
+  todayStart.setHours(0, 0, 0, 0)
+  const since = todayStart.toISOString()
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data, error } = await (supabase as any)
@@ -264,8 +266,10 @@ async function getLocalOrders(): Promise<KdsOrder[]> {
 
   if (!token) return []
 
-  // Últimas 6 horas
-  const since = new Date(Date.now() - 6 * 60 * 60 * 1000).toISOString()
+  // Solo pedidos del día actual
+  const todayStart = new Date()
+  todayStart.setHours(0, 0, 0, 0)
+  const since = todayStart.toISOString()
 
   try {
     // Obtener IDs de items de bebidas en paralelo con los receipts

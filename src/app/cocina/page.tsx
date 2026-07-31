@@ -22,7 +22,10 @@ function loadDismissed(): Set<string> {
     if (!raw) return new Set()
     const entries: DismissedEntry[] = JSON.parse(raw)
     const now = Date.now()
-    const valid = entries.filter((e) => now - e.timestamp < MAX_AGE_MS)
+    // Solo mantener dismissed del día actual
+    const todayStart = new Date()
+    todayStart.setHours(0, 0, 0, 0)
+    const valid = entries.filter((e) => e.timestamp >= todayStart.getTime())
     if (valid.length !== entries.length) saveDismissed(valid)
     return new Set(valid.map((e) => e.id))
   } catch {
@@ -41,7 +44,10 @@ function addDismissed(id: string) {
     const raw = localStorage.getItem(LS_KEY)
     const entries: DismissedEntry[] = raw ? JSON.parse(raw) : []
     const now = Date.now()
-    const clean = entries.filter((e) => now - e.timestamp < MAX_AGE_MS && e.id !== id)
+    const clean = entries.filter((e) => {
+      const todayStart = new Date(); todayStart.setHours(0, 0, 0, 0)
+      return e.timestamp >= todayStart.getTime() && e.id !== id
+    })
     clean.push({ id, timestamp: now })
     saveDismissed(clean)
   } catch {}
