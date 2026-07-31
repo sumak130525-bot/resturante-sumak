@@ -57,9 +57,9 @@ async function getWebOrders(): Promise<KdsOrder[]> {
     }
   )
 
-  // Solo pedidos del día actual
-  const todayStart = new Date()
-  todayStart.setHours(0, 0, 0, 0)
+  // Solo pedidos del día actual (hora Argentina UTC-3)
+  const nowAR = new Date(Date.now() - 3 * 60 * 60 * 1000)
+  const todayStart = new Date(Date.UTC(nowAR.getUTCFullYear(), nowAR.getUTCMonth(), nowAR.getUTCDate(), 3, 0, 0))
   const since = todayStart.toISOString()
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -266,9 +266,9 @@ async function getLocalOrders(): Promise<KdsOrder[]> {
 
   if (!token) return []
 
-  // Solo pedidos del día actual
-  const todayStart = new Date()
-  todayStart.setHours(0, 0, 0, 0)
+  // Solo pedidos del día actual (hora Argentina UTC-3)
+  const nowAR = new Date(Date.now() - 3 * 60 * 60 * 1000)
+  const todayStart = new Date(Date.UTC(nowAR.getUTCFullYear(), nowAR.getUTCMonth(), nowAR.getUTCDate(), 3, 0, 0))
   const since = todayStart.toISOString()
 
   try {
@@ -364,15 +364,15 @@ async function getDeliveredOrdersToday(): Promise<KdsOrder[]> {
   )
 
   // Desde las 00:00 del día de hoy (hora local del servidor)
-  const todayStart = new Date()
-  todayStart.setHours(0, 0, 0, 0)
+  const nowAR2 = new Date(Date.now() - 3 * 60 * 60 * 1000)
+  const todayStartDel = new Date(Date.UTC(nowAR2.getUTCFullYear(), nowAR2.getUTCMonth(), nowAR2.getUTCDate(), 3, 0, 0))
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const { data, error } = await (supabase as any)
     .from('orders')
     .select('*, order_items(id, name, quantity, unit_price, line_note, person_number, is_bonus, bonus_reason, sent_to_kitchen_at, delivered_at, menu_items(name, subcategory))')
     .eq('status', 'delivered')
-    .gte('created_at', todayStart.toISOString())
+    .gte('created_at', todayStartDel.toISOString())
     .order('created_at', { ascending: false })
 
   if (error || !data) return []
