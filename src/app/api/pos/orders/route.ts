@@ -57,6 +57,22 @@ export async function POST(request: NextRequest) {
     // Usar nota personalizada del usuario tal cual viene del POS
     const orderNotes = customNotes && String(customNotes).trim() ? String(customNotes).trim() : null
 
+    // ── Get current open shift (for linking order + cash movement) ───────────
+    let shiftId: string | null = null
+    try {
+      const { data: openShift } = await supabase
+        .from('shifts')
+        .select('id')
+        .eq('status', 'open')
+        .order('opened_at', { ascending: false })
+        .limit(1)
+        .single()
+
+      if (openShift) {
+        shiftId = openShift.id
+      }
+    } catch { /* non-fatal */ }
+
     // Crear el pedido en la tabla orders
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const orderInsert: Record<string, any> = {
@@ -72,6 +88,7 @@ export async function POST(request: NextRequest) {
       transfer_amount: is_open ? null : (transfer_amount ?? null),
       persons: persons && Number(persons) > 1 ? Number(persons) : 1,
       table_number: table_number ?? null,
+      shift_id: shiftId,
     }
     // Only include open table columns if migration has run
     if (is_open) {
@@ -171,38 +188,14 @@ export async function POST(request: NextRequest) {
         : (payment_method === 'mixed') ? 'venta_efectivo'
         : 'venta_transferencia'
 
-      // Get current open shift (if any)
-      let shiftId: string | null = null
-      const { data: openShift } = await supabase
-        .from('shifts')
-        .select('id')
-        .eq('status', 'open')
-        .order('opened_at', { ascending: false })
-        .limit(1)
-        .single()
-
-      if (openShift) {
-        shiftId = openShift.id
-        await supabase.from('cash_shifts').upsert({ id: openShift.id, opening_amount: 0, status: 'open' }, { onConflict: 'id' })
-      } else {
-        // Auto-create shift so sales are always tracked
-        const { data: newShift } = await supabase
-          .from('shifts')
-          .insert({ opening_amount: 0, status: 'open' })
-          .select('id, opened_at')
-          .single()
-        shiftId = newShift?.id ?? null
-        if (newShift) {
-          await supabase.from('cash_shifts').insert({ id: newShift.id, opening_amount: 0, status: 'open', opened_at: newShift.opened_at })
-        }
+      if (shiftId) {
+        await supabase.from('cash_movements').insert({
+          type: movementType,
+          amount: total ?? 0,
+          description: `Pedido POS #${order.id.slice(-6)}`,
+          shift_id: shiftId,
+        })
       }
-
-      await supabase.from('cash_movements').insert({
-        type: movementType,
-        amount: total ?? 0,
-        description: `Pedido POS #${order.id.slice(-6)}`,
-        shift_id: shiftId,
-      })
     } catch (cashErr) {
       // Non-fatal: don't fail the order if cash movement fails
       void cashErr

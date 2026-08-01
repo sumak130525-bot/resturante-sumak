@@ -31,9 +31,10 @@ export async function GET() {
     const openedAt = shift.opened_at
 
     // Get all non-cancelled orders in this shift period
+    // Match by shift_id OR by created_at >= opened_at for legacy orders without shift_id
     // Use direct PostgREST fetch to bypass Supabase JS schema cache
     const ordersRes = await fetch(
-      `${process.env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1/orders?shift_id=eq.${shiftId}&status=neq.cancelled&select=total,payment_method,cash_amount,transfer_amount,status`,
+      `${process.env.NEXT_PUBLIC_SUPABASE_URL}/rest/v1/orders?or=(shift_id.eq.${shiftId},and(shift_id.is.null,created_at.gte.${encodeURIComponent(openedAt)}))&status=neq.cancelled&select=total,payment_method,cash_amount,transfer_amount,status`,
       {
         headers: {
           apikey: process.env.SUPABASE_SERVICE_ROLE_KEY!,
@@ -87,7 +88,7 @@ export async function GET() {
     const { data: cancelledOrders } = await supabase
       .from('orders')
       .select('total, payment_method, cash_amount')
-      .eq('shift_id', shiftId)
+      .or(`shift_id.eq.${shiftId},and(shift_id.is.null,created_at.gte.${openedAt})`)
       .eq('status', 'cancelled')
 
     let totalRefunds = 0
