@@ -1553,7 +1553,7 @@ function CloseShiftModal({
 
     async function loadPreview() {
       try {
-        const res = await fetch('/api/pos/shifts/preview')
+        const res = await fetch('/api/pos/shifts/preview', { cache: 'no-store' })
         if (!res.ok) throw new Error('Error loading preview')
         const data = await res.json()
         if (cancelled) return
@@ -4508,7 +4508,7 @@ export default function POSPage() {
 
   const refreshExpectedCash = useCallback(async () => {
     try {
-      const res = await fetch('/api/pos/shifts/preview')
+      const res = await fetch('/api/pos/shifts/preview', { cache: 'no-store' })
       if (res.ok) {
         const d = await res.json()
         setExpectedCash(d.expected_amount ?? 0)
