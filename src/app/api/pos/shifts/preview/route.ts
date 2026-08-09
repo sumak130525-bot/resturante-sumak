@@ -115,6 +115,11 @@ export async function GET() {
       total_retiros: totalRetiros,
       total_refunds: totalRefunds,
       opened_at: openedAt,
+    }, {
+      headers: {
+        'Cache-Control': 'no-store, no-cache, must-revalidate',
+        'Pragma': 'no-cache',
+      },
     })
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Error interno'

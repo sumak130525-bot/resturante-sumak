@@ -184,6 +184,11 @@ export async function POST(request: NextRequest) {
         opened_at: openedAt,
         closed_at: closedAt,
       }
+    }, {
+      headers: {
+        'Cache-Control': 'no-store, no-cache, must-revalidate',
+        'Pragma': 'no-cache',
+      },
     })
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Error interno'
