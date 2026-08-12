@@ -4580,6 +4580,49 @@ export default function POSPage() {
     if (showSentOrders) loadSentOrders()
   }, [showSentOrders, loadSentOrders])
 
+  const handleReprintOrder = useCallback(async (order: SentOrder) => {
+    const items: TicketItem[] = (order.order_items ?? []).map((item) => ({
+      uid: item.id,
+      menu_item_id: item.menu_item_id,
+      name: item.name,
+      price: item.price,
+      quantity: item.quantity,
+    }))
+    const createdAt = new Date(order.created_at)
+    const dateStr = createdAt.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit', year: '2-digit' })
+    const timeStr = createdAt.toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit', hour12: false })
+    const tableNum = order.table_number ? String(order.table_number) : (() => {
+      const m = order.notes?.match(/[Mm]esa\s*(\d+)/)
+      return m ? m[1] : ''
+    })()
+    const paymentMethod: PaymentMethod =
+      order.payment_method === 'mixed' ? 'Mixto'
+      : order.payment_method === 'transfer' ? 'Transferencia'
+      : 'Efectivo'
+    const diningOption: DiningOption = tableNum ? 'Comer dentro' : 'Para llevar'
+    const printData: PrintData = {
+      orderNumber: Date.now() % 1000,
+      dateStr,
+      timeStr,
+      items,
+      total: order.total,
+      diningOption,
+      tableNumber: tableNum,
+      paymentMethod,
+      customerName: order.customer_name,
+      ...(paymentMethod === 'Mixto' && order.cash_amount != null ? { cashAmount: order.cash_amount } : {}),
+      ...(paymentMethod === 'Mixto' && order.transfer_amount != null ? { transferAmount: order.transfer_amount } : {}),
+    }
+    const { cfg, logoUrl } = await fetchFreshPrintConfig()
+    const ticketText = buildTicketText(printData, cfg, !!printServerUrl)
+    if (printServerUrl) {
+      const ok = await tryPrintServer(ticketText, printServerUrl, cfg, logoUrl)
+      if (ok) return
+    }
+    const fallbackText = buildTicketText(printData, cfg, false)
+    triggerPrintFallback(fallbackText, logoUrl, cfg)
+  }, [fetchFreshPrintConfig, printServerUrl])
+
   // Ticket panel open/close
   const [ticketOpen, setTicketOpen] = useState(false)
 
@@ -6279,6 +6322,17 @@ export default function POSPage() {
                               title="Cambiar método de pago"
                             >
                               ✎ Pago
+                            </button>
+                            <button
+                              onClick={() => { void handleReprintOrder(order) }}
+                              className="p-1.5 rounded-lg bg-gray-100 hover:bg-gray-200 text-gray-600 active:scale-95 transition-all"
+                              title="Reimprimir ticket"
+                            >
+                              <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                <polyline points="6 9 6 2 18 2 18 9"/>
+                                <path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/>
+                                <rect x="6" y="14" width="12" height="8"/>
+                              </svg>
                             </button>
                           </div>
                         )}
